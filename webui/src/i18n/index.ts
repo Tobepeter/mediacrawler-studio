@@ -18,8 +18,12 @@ import enData from './locales/en-US/data.json'
 import enEnv from './locales/en-US/env.json'
 import enLicense from './locales/en-US/license.json'
 
+import zhStudio from './locales/zh-CN/studio.json'
+import enStudio from './locales/en-US/studio.json'
+
 const resources = {
   'zh-CN': {
+    studio: zhStudio,
     common: zhCommon,
     config: zhConfig,
     terminal: zhTerminal,
@@ -28,6 +32,7 @@ const resources = {
     license: zhLicense,
   },
   'en-US': {
+    studio: enStudio,
     common: enCommon,
     config: enConfig,
     terminal: enTerminal,
@@ -43,15 +48,23 @@ i18n
   .init({
     resources,
     fallbackLng: 'zh-CN',
+    supportedLngs: ['zh-CN', 'en-US'],
+    initImmediate: false,
     defaultNS: 'common',
     interpolation: {
       escapeValue: false,
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
-      lookupLocalStorage: 'mediacrawler_language',
+      lookupLocalStorage: 'studio-language',
     },
   })
+
+const updateLang = () => {
+  document.documentElement.lang = i18n.resolvedLanguage || 'zh-CN'
+}
+updateLang()
+i18n.on('languageChanged', updateLang)
 
 export default i18n

@@ -64,76 +64,84 @@ export function LicenseDisclaimer({ onAccept }: LicenseDisclaimerProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-[100] overflow-y-auto py-8">
-      <div className="bg-cyber-bg-panel border-2 border-cyber-neon-pink rounded-lg shadow-cyber-card p-6 max-w-2xl w-full mx-4 relative">
+    <div className='fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/95 py-8 backdrop-blur-sm'>
+      <div className='bg-cyber-bg-panel border-cyber-neon-pink shadow-cyber-card relative mx-4 w-full max-w-2xl rounded-lg border-2 p-6'>
         {/* Corner decorations - Pink/Red theme for seriousness */}
-        <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-cyber-neon-pink" />
-        <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-cyber-neon-pink" />
-        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-cyber-neon-pink" />
-        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-cyber-neon-pink" />
+        <div className='border-cyber-neon-pink absolute left-0 top-0 h-6 w-6 border-l-2 border-t-2' />
+        <div className='border-cyber-neon-pink absolute right-0 top-0 h-6 w-6 border-r-2 border-t-2' />
+        <div className='border-cyber-neon-pink absolute bottom-0 left-0 h-6 w-6 border-b-2 border-l-2' />
+        <div className='border-cyber-neon-pink absolute bottom-0 right-0 h-6 w-6 border-b-2 border-r-2' />
 
         {/* Header with warning icon */}
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <ShieldAlert className="w-8 h-8 text-cyber-neon-pink animate-pulse" />
-          <h2 className="text-xl font-mono font-bold text-cyber-neon-pink">
+        <div className='mb-4 flex items-center justify-center gap-3'>
+          <ShieldAlert className='text-cyber-neon-pink h-8 w-8 animate-pulse' />
+          <h2 className='text-cyber-neon-pink font-mono text-xl font-bold'>
             {t('title')}
           </h2>
         </div>
 
         {/* Warning subtitle */}
-        <div className="text-center mb-4">
-          <span className="text-base font-mono text-cyber-neon-orange">
+        <div className='mb-4 text-center'>
+          <span className='text-cyber-neon-orange font-mono text-base'>
             {t('warning')}
           </span>
         </div>
 
         {/* Content box */}
-        <div className="bg-black/50 border border-cyber-neon-pink/30 rounded-lg p-4 mb-4">
-          <ul className="space-y-2 text-sm font-mono">
-            <li className="flex items-start gap-2">
-              <span className="text-cyber-neon-pink font-bold">1.</span>
-              <span className="text-cyber-text-primary">{t('content.line1')}</span>
+        <div className='border-cyber-neon-pink/30 mb-4 rounded-lg border bg-black/50 p-4'>
+          <ul className='space-y-2 font-mono text-sm'>
+            <li className='flex items-start gap-2'>
+              <span className='text-cyber-neon-pink font-bold'>1.</span>
+              <span className='text-cyber-text-primary'>
+                {t('content.line1')}
+              </span>
             </li>
-            <li className="flex items-start gap-2">
-              <span className="text-cyber-neon-pink font-bold">2.</span>
-              <span className="text-cyber-text-primary">{t('content.line2')}</span>
+            <li className='flex items-start gap-2'>
+              <span className='text-cyber-neon-pink font-bold'>2.</span>
+              <span className='text-cyber-text-primary'>
+                {t('content.line2')}
+              </span>
             </li>
-            <li className="flex items-start gap-2">
-              <span className="text-cyber-neon-pink font-bold">3.</span>
-              <span className="text-cyber-text-primary">{t('content.line3')}</span>
+            <li className='flex items-start gap-2'>
+              <span className='text-cyber-neon-pink font-bold'>3.</span>
+              <span className='text-cyber-text-primary'>
+                {t('content.line3')}
+              </span>
             </li>
-            <li className="flex items-start gap-2">
-              <span className="text-cyber-neon-pink font-bold">4.</span>
-              <span className="text-cyber-text-primary">{t('content.line4')}</span>
+            <li className='flex items-start gap-2'>
+              <span className='text-cyber-neon-pink font-bold'>4.</span>
+              <span className='text-cyber-text-primary'>
+                {t('content.line4')}
+              </span>
             </li>
           </ul>
         </div>
 
         {/* License Link */}
-        <div className="flex justify-center mb-6">
+        <div className='mb-6 flex justify-center'>
           <a
-            href="https://github.com/NanmiCoder/MediaCrawler/blob/main/LICENSE"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-cyber-neon-cyan hover:underline text-sm font-mono"
+            href='https://github.com/NanmiCoder/MediaCrawler/blob/main/LICENSE'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='text-cyber-neon-cyan flex items-center gap-1.5 font-mono text-sm hover:underline'
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className='h-4 w-4' />
             {t('license')}
           </a>
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-4">
+        <div className='flex gap-4'>
           <Button
             onClick={handleDecline}
-            variant="outline"
-            className="flex-1 font-mono border-cyber-neon-pink/50 text-cyber-neon-pink hover:bg-cyber-neon-pink/10"
+            variant='outline'
+            className='border-cyber-neon-pink/50 text-cyber-neon-pink hover:bg-cyber-neon-pink/10 flex-1 font-mono'
           >
             {t('decline')}
           </Button>
           <Button
             onClick={handleConfirm}
-            className="flex-1 font-mono bg-cyber-neon-green text-black font-bold hover:bg-cyber-neon-green/90"
+            className='bg-cyber-neon-green hover:bg-cyber-neon-green/90 flex-1 font-mono font-bold text-black'
           >
             {t('confirm')}
           </Button>

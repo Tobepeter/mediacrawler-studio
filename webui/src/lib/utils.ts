@@ -14,7 +14,12 @@ export function formatFileSize(bytes: number): string {
 }
 
 export function formatDateTime(date: string | Date | number): string {
-  const d = typeof date === 'string' ? new Date(date) : typeof date === 'number' ? new Date(date * 1000) : date
+  const d =
+    typeof date === 'string'
+      ? new Date(date)
+      : typeof date === 'number'
+        ? new Date(date * 1000)
+        : date
   return d.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',

@@ -168,6 +168,13 @@ class TieBaExtractor:
         note = TiebaNote(
             note_id=note_id,
             title=self._clean_title(thread.get("title") or first_floor.get("title") or "", tieba_name),
+            # CUSTOM: 桌面详情需要首楼图片，保留原始清晰地址
+            image_list=[
+                part.get('origin_src') or part.get('big_cdn_src') or part.get('src')
+                for part in (first_floor.get('content') or [])
+                if isinstance(part, dict) and str(part.get('type')) == '3'
+                and (part.get('origin_src') or part.get('big_cdn_src') or part.get('src'))
+            ],
             desc=self._extract_api_content_text(
                 first_floor.get("content")
                 or thread.get("origin_thread_info", {}).get("abstract")

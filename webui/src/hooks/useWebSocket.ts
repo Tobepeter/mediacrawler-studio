@@ -5,7 +5,7 @@ import type { LogEntry } from '@/types/crawler'
 // 模块级单例，确保全局只有一个 WebSocket 连接
 let globalWs: WebSocket | null = null
 let globalReconnectTimer: ReturnType<typeof setTimeout> | null = null
-let connectionCount = 0  // 跟踪连接使用者数量
+let connectionCount = 0 // 跟踪连接使用者数量
 
 export function useLogWebSocket() {
   const addLog = useCrawlerStore((state) => state.addLog)
@@ -26,7 +26,11 @@ export function useLogWebSocket() {
       }
 
       // 如果已经连接或正在连接，不重复创建
-      if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) {
+      if (
+        globalWs &&
+        (globalWs.readyState === WebSocket.OPEN ||
+          globalWs.readyState === WebSocket.CONNECTING)
+      ) {
         return
       }
 
@@ -57,7 +61,7 @@ export function useLogWebSocket() {
           if (log.id && log.message) {
             addLogRef.current(log)
           }
-        } catch (e) {
+        } catch {
           console.warn('Failed to parse WebSocket message:', event.data)
         }
       }
@@ -105,7 +109,7 @@ export function useLogWebSocket() {
         }
       }
     }
-  }, [])  // 空依赖数组
+  }, []) // 空依赖数组
 
   return { ws: globalWs }
 }

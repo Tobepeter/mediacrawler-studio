@@ -10,14 +10,18 @@ interface CrawlerState {
 
   // Logs
   logs: LogEntry[]
-  clearedAfterLogId: number | null  // 清除日志后，只显示 id 大于此值的日志
+  clearedAfterLogId: number | null // 清除日志后，只显示 id 大于此值的日志
 
   // Config
   config: CrawlerConfig
 
   // Actions
   setStatus: (status: CrawlerState['status']) => void
-  setRunningInfo: (platform: string | null, crawlerType: string | null, startedAt: string | null) => void
+  setRunningInfo: (
+    platform: string | null,
+    crawlerType: string | null,
+    startedAt: string | null,
+  ) => void
   addLog: (log: LogEntry) => void
   setLogs: (logs: LogEntry[]) => void
   clearLogs: () => void
@@ -116,16 +120,17 @@ export const useCrawlerStore = create<CrawlerState>((set, get) => ({
   setLogs: (logs) => {
     const { clearedAfterLogId } = get()
     // 如果有清除标记，过滤掉 id 小于等于该标记的日志
-    const filteredLogs = clearedAfterLogId !== null
-      ? logs.filter((log) => log.id > clearedAfterLogId)
-      : logs
+    const filteredLogs =
+      clearedAfterLogId !== null
+        ? logs.filter((log) => log.id > clearedAfterLogId)
+        : logs
     set({ logs: filteredLogs })
   },
 
   clearLogs: () => {
     const { logs } = get()
     // 记录当前最大的 log id，清除后只显示比这个 id 大的日志
-    const maxLogId = logs.length > 0 ? Math.max(...logs.map(l => l.id)) : 0
+    const maxLogId = logs.length > 0 ? Math.max(...logs.map((l) => l.id)) : 0
     set({ logs: [], clearedAfterLogId: maxLogId })
     // 持久化到 localStorage
     saveClearedLogIdToStorage(maxLogId)

@@ -1,6 +1,6 @@
 [project]
 name = "mediacrawler"
-author = "程序员阿江-Relakkes <relakkes@gmail.com>"
+authors = [{name = "程序员阿江-Relakkes", email = "relakkes@gmail.com"}]
 version = "0.1.0"
 description = "A social media crawler project, support Xiaohongshu, Weibo, Zhihu, Bilibili, Douyin, BaiduTieBa etc."
 readme = "README.md"
@@ -40,8 +40,39 @@ dependencies = [
     "websockets>=15.0.1",
     "asyncpg>=0.31.0",
     "xhshow>=0.2.0",
+    "filelock>=3.20.0",
+    "psutil>=7.2.2",
+    "qrcode>=8.2",
+    "platformdirs>=4.5.0",
+    "m3u8>=6,<7",
 ]
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.22.3",
+]
+
+[project.scripts]
+mediacrawler = "mediacrawler_cli.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mediacrawler_cli*", "desktop*", "media_platform*", "store*", "config*", "tools*", "model*", "base*", "cache*", "proxy*", "database*", "libs*", "constant*", "cmd_arg*", "media_downloader*"]
+exclude = ["desktop.tests*"]
+
+[tool.setuptools]
+py-modules = ["var"]
+
+[tool.setuptools.package-data]
+"*" = ["*.js", "*.graphql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/cli", "desktop/tests"]
+asyncio_mode = "auto"

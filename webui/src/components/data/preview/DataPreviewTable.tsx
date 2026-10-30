@@ -9,7 +9,10 @@ interface DataPreviewTableProps {
   columns?: string[]
 }
 
-export function DataPreviewTable({ data, columns: propColumns }: DataPreviewTableProps) {
+export function DataPreviewTable({
+  data,
+  columns: propColumns,
+}: DataPreviewTableProps) {
   const { t } = useTranslation('data')
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -24,10 +27,12 @@ export function DataPreviewTable({ data, columns: propColumns }: DataPreviewTabl
   const filteredData = useMemo(() => {
     if (!searchTerm) return data
     const term = searchTerm.toLowerCase()
-    return data.filter(row =>
-      Object.values(row).some(value =>
-        String(value ?? '').toLowerCase().includes(term)
-      )
+    return data.filter((row) =>
+      Object.values(row).some((value) =>
+        String(value ?? '')
+          .toLowerCase()
+          .includes(term),
+      ),
     )
   }, [data, searchTerm])
 
@@ -39,31 +44,33 @@ export function DataPreviewTable({ data, columns: propColumns }: DataPreviewTabl
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className='flex h-full flex-col'>
       {/* 搜索栏 */}
-      <div className="flex-shrink-0 mb-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyber-text-muted" />
+      <div className='mb-3 flex-shrink-0'>
+        <div className='relative'>
+          <Search className='text-cyber-text-muted absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2' />
           <Input
             placeholder={t('preview.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-xs font-mono"
+            className='h-9 pl-9 font-mono text-xs'
           />
         </div>
       </div>
 
       {/* 表格 */}
-      <ScrollArea className="flex-1 border border-cyber-border-DEFAULT rounded-lg">
-        <div className="min-w-full">
-          <table className="w-full text-xs font-mono">
-            <thead className="sticky top-0 bg-cyber-bg-tertiary border-b border-cyber-border-DEFAULT">
+      <ScrollArea className='border-cyber-border-DEFAULT flex-1 rounded-lg border'>
+        <div className='min-w-full'>
+          <table className='w-full font-mono text-xs'>
+            <thead className='bg-cyber-bg-tertiary border-cyber-border-DEFAULT sticky top-0 border-b'>
               <tr>
-                <th className="px-3 py-2 text-left text-cyber-text-muted w-12">#</th>
+                <th className='text-cyber-text-muted w-12 px-3 py-2 text-left'>
+                  #
+                </th>
                 {columns.map((col) => (
                   <th
                     key={col}
-                    className="px-3 py-2 text-left text-cyber-neon-cyan whitespace-nowrap"
+                    className='text-cyber-neon-cyan whitespace-nowrap px-3 py-2 text-left'
                   >
                     {col}
                   </th>
@@ -74,13 +81,13 @@ export function DataPreviewTable({ data, columns: propColumns }: DataPreviewTabl
               {filteredData.map((row, idx) => (
                 <tr
                   key={idx}
-                  className="border-b border-cyber-border-subtle hover:bg-cyber-bg-elevated/50 transition-colors"
+                  className='border-cyber-border-subtle hover:bg-cyber-bg-elevated/50 border-b transition-colors'
                 >
-                  <td className="px-3 py-2 text-cyber-text-muted">{idx + 1}</td>
+                  <td className='text-cyber-text-muted px-3 py-2'>{idx + 1}</td>
                   {columns.map((col) => (
                     <td
                       key={col}
-                      className="px-3 py-2 text-cyber-text-primary max-w-xs truncate"
+                      className='text-cyber-text-primary max-w-xs truncate px-3 py-2'
                       title={formatCellValue(row[col])}
                     >
                       {formatCellValue(row[col])}
@@ -95,8 +102,11 @@ export function DataPreviewTable({ data, columns: propColumns }: DataPreviewTabl
 
       {/* 过滤结果提示 */}
       {searchTerm && (
-        <div className="flex-shrink-0 mt-2 text-xs text-cyber-text-muted font-mono">
-          {t('preview.showing', { filtered: filteredData.length, total: data.length })}
+        <div className='text-cyber-text-muted mt-2 flex-shrink-0 font-mono text-xs'>
+          {t('preview.showing', {
+            filtered: filteredData.length,
+            total: data.length,
+          })}
         </div>
       )}
     </div>

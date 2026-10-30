@@ -30,6 +30,7 @@ class TiebaNote(BaseModel):
     """
     note_id: str = Field(..., description="Post ID")
     title: str = Field(..., description="Post title")
+    image_list: list[str] = Field(default_factory=list, description='Post images')
     desc: str = Field(default="", description="Post description")
     note_url: str = Field(..., description="Post link")
     publish_time: str = Field(default="", description="Publish time")

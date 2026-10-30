@@ -25,14 +25,17 @@ function extractCategory(filename: string): string {
 // 类别显示名称
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    'search_comments': 'Comments',
-    'search_creators': 'Creators',
-    'search_videos': 'Videos',
-    'search_contents': 'Contents',
-    'search_notes': 'Notes',
-    'other': 'Other',
+    search_comments: 'Comments',
+    search_creators: 'Creators',
+    search_videos: 'Videos',
+    search_contents: 'Contents',
+    search_notes: 'Notes',
+    other: 'Other',
   }
-  return labels[category] || category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  return (
+    labels[category] ||
+    category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  )
 }
 
 export function DataExplorer() {
@@ -47,13 +50,13 @@ export function DataExplorer() {
     },
   })
 
-  const files = data || []
+  const files = useMemo(() => data || [], [data])
 
   // 按类别分组文件
   const { categories, groupedFiles } = useMemo(() => {
     const grouped: Record<string, typeof files> = {}
 
-    files.forEach(file => {
+    files.forEach((file) => {
       const category = extractCategory(file.name)
       if (!grouped[category]) {
         grouped[category] = []
@@ -62,61 +65,64 @@ export function DataExplorer() {
     })
 
     // 按文件数量排序类别
-    const sortedCategories = Object.keys(grouped).sort((a, b) =>
-      grouped[b].length - grouped[a].length
+    const sortedCategories = Object.keys(grouped).sort(
+      (a, b) => grouped[b].length - grouped[a].length,
     )
 
     return { categories: sortedCategories, groupedFiles: grouped }
   }, [files])
 
   // 当前显示的文件
-  const displayFiles = activeTab === 'all' ? files : (groupedFiles[activeTab] || [])
+  const displayFiles =
+    activeTab === 'all' ? files : groupedFiles[activeTab] || []
 
   return (
-    <div className="h-full flex flex-col">
+    <div className='flex h-full flex-col'>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-mono font-bold text-cyber-neon-cyan glow-text-cyan tracking-wider">
+      <div className='mb-4 flex items-center justify-between'>
+        <div className='flex items-center gap-3'>
+          <h2 className='text-cyber-neon-cyan glow-text-cyan font-mono text-lg font-bold tracking-wider'>
             {t('explorer.title')}
           </h2>
-          <Badge variant="default" className="font-mono">
+          <Badge variant='default' className='font-mono'>
             {t('explorer.records', { count: files.length })}
           </Badge>
         </div>
         <Button
-          variant="outline"
-          size="sm"
+          variant='outline'
+          size='sm'
           onClick={() => refetch()}
           disabled={isRefetching}
-          className="font-mono"
+          className='font-mono'
         >
-          <RefreshCw className={`w-4 h-4 ${isRefetching ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`}
+          />
           {t('explorer.rescan')}
         </Button>
       </div>
 
       {/* Category Tabs */}
       {files.length > 0 && categories.length > 1 && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className='mb-4 flex flex-wrap items-center gap-2'>
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-md text-xs font-mono transition-all ${
+            className={`rounded-md px-3 py-1.5 font-mono text-xs transition-all ${
               activeTab === 'all'
-                ? 'bg-cyber-neon-cyan text-black font-bold'
-                : 'bg-cyber-bg-tertiary text-cyber-text-secondary hover:text-cyber-text-primary border border-cyber-border-subtle hover:border-cyber-neon-cyan/50'
+                ? 'bg-cyber-neon-cyan font-bold text-black'
+                : 'bg-cyber-bg-tertiary text-cyber-text-secondary hover:text-cyber-text-primary border-cyber-border-subtle hover:border-cyber-neon-cyan/50 border'
             }`}
           >
             {t('explorer.allCategories')} ({files.length})
           </button>
-          {categories.map(category => (
+          {categories.map((category) => (
             <button
               key={category}
               onClick={() => setActiveTab(category)}
-              className={`px-3 py-1.5 rounded-md text-xs font-mono transition-all ${
+              className={`rounded-md px-3 py-1.5 font-mono text-xs transition-all ${
                 activeTab === category
-                  ? 'bg-cyber-neon-cyan text-black font-bold'
-                  : 'bg-cyber-bg-tertiary text-cyber-text-secondary hover:text-cyber-text-primary border border-cyber-border-subtle hover:border-cyber-neon-cyan/50'
+                  ? 'bg-cyber-neon-cyan font-bold text-black'
+                  : 'bg-cyber-bg-tertiary text-cyber-text-secondary hover:text-cyber-text-primary border-cyber-border-subtle hover:border-cyber-neon-cyan/50 border'
               }`}
             >
               {getCategoryLabel(category)} ({groupedFiles[category].length})
@@ -127,26 +133,26 @@ export function DataExplorer() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-cyber-text-muted font-mono animate-pulse">
+        <div className='flex flex-1 items-center justify-center'>
+          <div className='text-cyber-text-muted animate-pulse font-mono'>
             {t('explorer.loading')}
           </div>
         </div>
       ) : files.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center">
-          <div className="relative">
-            <FolderOpen className="w-16 h-16 text-cyber-neon-cyan/30 mb-4" />
-            <div className="absolute inset-0 blur-xl bg-cyber-neon-cyan/10" />
+        <div className='flex flex-1 flex-col items-center justify-center text-center'>
+          <div className='relative'>
+            <FolderOpen className='text-cyber-neon-cyan/30 mb-4 h-16 w-16' />
+            <div className='bg-cyber-neon-cyan/10 absolute inset-0 blur-xl' />
           </div>
-          <h3 className="text-lg font-mono font-medium text-cyber-neon-cyan mb-2">
+          <h3 className='text-cyber-neon-cyan mb-2 font-mono text-lg font-medium'>
             {t('explorer.noData')}
           </h3>
-          <p className="text-sm text-cyber-text-muted max-w-md font-mono">
+          <p className='text-cyber-text-muted max-w-md font-mono text-sm'>
             {t('explorer.noDataHint')}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
           {displayFiles.map((file) => (
             <FileCard key={file.path} file={file} />
           ))}

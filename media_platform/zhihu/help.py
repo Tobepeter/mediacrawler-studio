@@ -109,10 +109,15 @@ class ZhihuExtractor:
         res = ZhihuContent()
         res.content_id = str(answer.get("id") or "")
         res.content_type = answer.get("type")
+        # CUSTOM: 桌面组图优先真实地址，避免保存懒加载占位图
+        res.image_list = Selector(text=answer.get('content') or '').xpath(
+            '//img/@data-original | //img[not(@data-original)]/@data-actualsrc | '
+            '//img[not(@data-original) and not(@data-actualsrc)]/@src'
+        ).getall()
         res.content_text = extract_text_from_html(answer.get("content", ""))
         res.question_id = str(answer.get("question", {}).get("id") or "")
         res.content_url = f"{zhihu_constant.ZHIHU_URL}/question/{res.question_id}/answer/{res.content_id}"
-        res.title = extract_text_from_html(answer.get("title", ""))
+        res.title = extract_text_from_html(answer.get("title") or answer.get("question", {}).get("title") or "")
         res.desc = extract_text_from_html(answer.get("description", "") or answer.get("excerpt", ""))
         res.created_time = answer.get("created_time")
         res.updated_time = answer.get("updated_time")
@@ -137,6 +142,11 @@ class ZhihuExtractor:
         res = ZhihuContent()
         res.content_id = str(article.get("id") or "")
         res.content_type = article.get("type")
+        # CUSTOM: 文章正文同样保留图片，供桌面详情展示
+        res.image_list = Selector(text=article.get('content') or '').xpath(
+            '//img/@data-original | //img[not(@data-original)]/@data-actualsrc | '
+            '//img[not(@data-original) and not(@data-actualsrc)]/@src'
+        ).getall()
         res.content_text = extract_text_from_html(article.get("content"))
         res.content_url = f"{zhihu_constant.ZHIHU_ZHUANLAN_URL}/p/{res.content_id}"
         res.title = extract_text_from_html(article.get("title"))

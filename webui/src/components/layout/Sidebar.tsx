@@ -21,64 +21,70 @@ export function Sidebar({ onShowDisclaimer }: SidebarProps) {
   const isRunning = status === 'running'
 
   return (
-    <header className="h-14 flex-shrink-0 glass-panel border-b border-cyber-border-subtle relative z-10">
-      <div className="h-full px-4 flex items-center justify-between">
+    <header className='glass-panel border-cyber-border-subtle relative z-10 h-14 flex-shrink-0 border-b'>
+      <div className='flex h-full items-center justify-between px-4'>
         {/* Left: Logo and GitHub Star */}
-        <div className="flex items-center gap-3">
-          <Bug className="w-5 h-5 text-cyber-neon-cyan" />
-          <span className="font-mono font-bold text-cyber-text-primary tracking-wider text-sm">
+        <div className='flex items-center gap-3'>
+          <Bug className='text-cyber-neon-cyan h-5 w-5' />
+          <span className='text-cyber-text-primary font-mono text-sm font-bold tracking-wider'>
             MediaCrawler
           </span>
           <a
-            href="https://github.com/NanmiCoder/MediaCrawler"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-cyber-border-subtle hover:border-cyber-neon-cyan hover:shadow-glow-cyan-sm transition-all bg-cyber-bg-tertiary"
+            href='https://github.com/NanmiCoder/MediaCrawler'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='border-cyber-border-subtle hover:border-cyber-neon-cyan hover:shadow-glow-cyan-sm bg-cyber-bg-tertiary flex items-center gap-1.5 rounded-md border px-2 py-1 transition-all'
           >
-            <Github className="w-4 h-4 text-cyber-text-secondary" />
-            <span className="text-xs font-mono text-cyber-text-secondary">Star</span>
+            <Github className='text-cyber-text-secondary h-4 w-4' />
+            <span className='text-cyber-text-secondary font-mono text-xs'>
+              Star
+            </span>
           </a>
           {isRunning && (
-            <Badge variant="running" className="text-[10px]">
+            <Badge variant='secondary' className='text-[10px]'>
               {t('status.active')}
             </Badge>
           )}
           {isRunning && (
-            <span className="w-2 h-2 bg-cyber-neon-green rounded-full shadow-glow-green-sm animate-pulse-fast" />
+            <span className='bg-cyber-neon-green shadow-glow-green-sm animate-pulse-fast h-2 w-2 rounded-full' />
           )}
         </div>
 
         {/* Center: Warning Text */}
         <button
           onClick={onShowDisclaimer}
-          className="flex items-center gap-3 px-4 py-1.5 rounded-lg border border-cyber-neon-orange/50 bg-cyber-neon-orange/10 hover:bg-cyber-neon-orange/20 transition-all cursor-pointer"
+          className='border-cyber-neon-orange/50 bg-cyber-neon-orange/10 hover:bg-cyber-neon-orange/20 flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-1.5 transition-all'
         >
-          <AlertTriangle className="w-4 h-4 text-cyber-neon-orange flex-shrink-0" />
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-cyber-neon-orange">
-              <span className="text-cyber-neon-pink font-bold">1.</span> {tLicense('content.line1')}
+          <AlertTriangle className='text-cyber-neon-orange h-4 w-4 flex-shrink-0' />
+          <div className='flex items-center gap-4 font-mono text-xs'>
+            <span className='text-cyber-neon-orange'>
+              <span className='text-cyber-neon-pink font-bold'>1.</span>{' '}
+              {tLicense('content.line1')}
             </span>
-            <span className="text-cyber-neon-orange">
-              <span className="text-cyber-neon-pink font-bold">2.</span> {tLicense('content.line2')}
+            <span className='text-cyber-neon-orange'>
+              <span className='text-cyber-neon-pink font-bold'>2.</span>{' '}
+              {tLicense('content.line2')}
             </span>
           </div>
         </button>
 
         {/* Right: Actions and Status */}
-        <div className="flex items-center gap-3">
+        <div className='flex items-center gap-3'>
           {/* Theme Toggle */}
           <ThemeToggle />
           {/* Language Switch */}
           <LanguageSwitch />
 
           {/* Status Info */}
-          <div className="hidden lg:flex items-center gap-2 text-xs font-mono">
-            <span className="text-cyber-text-muted">{t('sidebar.api')}:</span>
-            <span className="text-cyber-neon-green">v1.0.0</span>
-            <div className="flex items-center gap-1.5">
-              <Wifi className="w-3 h-3 text-cyber-text-secondary" />
-              <span className="text-cyber-text-secondary">{t('sidebar.local')}</span>
-              <span className="status-dot status-dot-online" />
+          <div className='hidden items-center gap-2 font-mono text-xs lg:flex'>
+            <span className='text-cyber-text-muted'>{t('sidebar.api')}:</span>
+            <span className='text-cyber-neon-green'>v1.0.0</span>
+            <div className='flex items-center gap-1.5'>
+              <Wifi className='text-cyber-text-secondary h-3 w-3' />
+              <span className='text-cyber-text-secondary'>
+                {t('sidebar.local')}
+              </span>
+              <span className='status-dot status-dot-online' />
             </div>
           </div>
         </div>

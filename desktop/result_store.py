@@ -1,0 +1,88 @@
+"""复用上游内容标准化，输出桌面需要的字段"""
+from datetime import datetime, timezone
+from html import unescape
+from urllib.parse import urlparse
+
+
+def normalize(item, platform):
+    content_id = str(item.get("video_id") or item.get("aweme_id") or item.get("note_id") or item.get("content_id") or "")
+    if platform == 'zhihu':
+        content_id = f"{item.get('content_type') or 'answer'}:{content_id}"
+    text = item.get('content_text') or item.get('desc') or item.get('content') or ''
+    images = item.get("image_list") or item.get("note_download_url") or item.get("video_cover_url") or item.get("cover_url") or ""
+    if isinstance(images, str):
+        images = images.split(",")
+    safe_images = []
+    for value in images:
+        if not isinstance(value, str):
+            continue
+        if value.startswith("//"):
+            value = "https:" + value
+        if value.startswith("http://"):
+            value = "https://" + value[7:]
+        if urlparse(value).scheme == "https":
+            if value not in safe_images:
+                safe_images.append(value)
+    return {
+        "id": f"{platform}:{content_id}", "platform": platform,
+        "title": item.get("title") or unescape(text[:80]) or "未命名作品", "text": unescape(text),
+        "author": item.get("nickname") or item.get("user_nickname") or "", "images": safe_images,
+        "url": item.get("note_url") or item.get("aweme_url") or item.get("video_url") or item.get("content_url") or "",
+        "likes": str(item.get("liked_count") or item.get("voteup_count") or "0"),
+        "collectedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+class ResultStore:
+    def __init__(self, platform, limit, emit, comments=False):
+        self.platform = platform
+        self.limit = limit
+        self.emit = emit
+        self.ids = set()
+        self.full_text = {}
+        self.media = {}
+        self.items = {}
+        self.comments = comments
+
+    async def store_content(self, content_item):
+        if self.platform == 'wb':
+            key = f"wb:{content_item.get('note_id')}"
+            content_item = {**content_item, 'image_list': self.media.get(key, [])}
+        item = normalize(content_item, self.platform)
+        item["text"] = self.full_text.get(item["id"], item["text"])
+        if item["id"] in self.ids or len(self.ids) >= self.limit:
+            return
+        from desktop.content.schema import initialize, metadata
+        item.update(metadata(content_item))
+        initialize(item)
+        self.ids.add(item["id"])
+        if self.comments:
+            item.update(comments=[], commentStatus="pending")
+        self.items[item["id"]] = item
+        self.emit("item", item=item)
+
+    def comment_state(self, item, status):
+        item['commentStatus'] = status
+        self.emit('item-update', item=item)
+
+    async def store_comment(self, comment_item):
+        raw = comment_item
+        content_id = raw.get('video_id') or raw.get('aweme_id') or raw.get('note_id') or raw.get('content_id')
+        if self.platform == 'zhihu':
+            content_id = f"{raw.get('content_type') or 'answer'}:{content_id}"
+        item = self.items.get(f'{self.platform}:{content_id}')
+        if not item or not self.comments:
+            return
+        identity = str(raw.get('comment_id') or '')
+        if not identity or any(comment['id'] == identity for comment in item['comments']):
+            return
+        parent = str(raw.get('parent_comment_id') or '')
+        parent = '' if parent == '0' else parent
+        # 主评论与回复各最多20条，独立于上游页大小
+        if sum(bool(comment['parentId']) == bool(parent) for comment in item['comments']) >= 20:
+            return
+        item['comments'].append({
+            'id': identity, 'parentId': parent, 'text': raw.get('content') or '',
+            'author': raw.get('nickname') or raw.get('user_nickname') or '', 'likes': str(raw.get('like_count') or raw.get('comment_like_count') or '0'),
+        })
+        self.emit('item-update', item=item)

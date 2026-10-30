@@ -17,19 +17,19 @@ export function DataExplorerDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <Button
-          variant="outline"
-          size="sm"
-          className="font-mono text-xs text-[#c9d1d9] border-[#30363d] bg-transparent hover:bg-[#21262d] hover:text-[#00ffff] hover:border-[#00ffff]/50"
+          variant='outline'
+          size='sm'
+          className='border-[#30363d] bg-transparent font-mono text-xs text-[#c9d1d9] hover:border-[#00ffff]/50 hover:bg-[#21262d] hover:text-[#00ffff]'
         >
-          <Database className="w-3.5 h-3.5" />
+          <Database className='h-3.5 w-3.5' />
           {t('dialog.button')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden">
+      <DialogContent className='max-h-[85vh] max-w-5xl overflow-hidden'>
         <DialogHeader>
           <DialogTitle>{t('dialog.title')}</DialogTitle>
         </DialogHeader>
-        <div className="overflow-auto max-h-[calc(85vh-100px)] pr-2">
+        <div className='max-h-[calc(85vh-100px)] overflow-auto pr-2'>
           <DataExplorer />
         </div>
       </DialogContent>

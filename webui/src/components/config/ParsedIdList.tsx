@@ -10,7 +10,13 @@ interface ParsedIdListProps {
   disabled?: boolean
 }
 
-export function ParsedIdList({ value, platform, type, onRemove, disabled }: ParsedIdListProps) {
+export function ParsedIdList({
+  value,
+  platform,
+  type,
+  onRemove,
+  disabled,
+}: ParsedIdListProps) {
   const parsed = useMemo(() => {
     return parseMultipleUrls(value, platform)
   }, [value, platform])
@@ -22,7 +28,7 @@ export function ParsedIdList({ value, platform, type, onRemove, disabled }: Pars
 
     const items = value
       .split(/[,\n]+/)
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean)
 
     items.splice(index, 1)
@@ -30,11 +36,11 @@ export function ParsedIdList({ value, platform, type, onRemove, disabled }: Pars
   }
 
   return (
-    <div className="space-y-1.5 mt-2">
-      <div className="text-[10px] text-cyber-text-muted font-mono">
+    <div className='mt-2 space-y-1.5'>
+      <div className='text-cyber-text-muted font-mono text-[10px]'>
         已识别 {parsed.length} 个{type === 'detail' ? '帖子/视频' : '创作者'}:
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className='flex flex-wrap gap-1.5'>
         {parsed.map((item, index) => (
           <ParsedIdTag
             key={`${item.id}-${index}`}
@@ -56,7 +62,8 @@ interface ParsedIdTagProps {
 
 function ParsedIdTag({ item, expectedType, onRemove }: ParsedIdTagProps) {
   // 检查类型是否匹配
-  const typeMatch = item.type === 'unknown' ||
+  const typeMatch =
+    item.type === 'unknown' ||
     (expectedType === 'detail' && item.type === 'video') ||
     (expectedType === 'creator' && item.type === 'creator')
 
@@ -65,30 +72,30 @@ function ParsedIdTag({ item, expectedType, onRemove }: ParsedIdTagProps) {
 
   return (
     <span
-      className={`
-        inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono
-        ${needsWarning
-          ? 'bg-cyber-neon-orange/10 border border-cyber-neon-orange/30 text-cyber-neon-orange'
-          : 'bg-cyber-neon-cyan/10 border border-cyber-neon-cyan/30 text-cyber-neon-cyan'
-        }
-      `}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] ${
+        needsWarning
+          ? 'bg-cyber-neon-orange/10 border-cyber-neon-orange/30 text-cyber-neon-orange border'
+          : 'bg-cyber-neon-cyan/10 border-cyber-neon-cyan/30 text-cyber-neon-cyan border'
+      } `}
       title={item.original}
     >
       {needsWarning ? (
-        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+        <AlertTriangle className='h-3 w-3 flex-shrink-0' />
       ) : (
-        <Check className="w-3 h-3 flex-shrink-0" />
+        <Check className='h-3 w-3 flex-shrink-0' />
       )}
-      <span className="max-w-[120px] truncate">
-        {item.id.length > 20 ? item.id.slice(0, 8) + '...' + item.id.slice(-8) : item.id}
+      <span className='max-w-[120px] truncate'>
+        {item.id.length > 20
+          ? item.id.slice(0, 8) + '...' + item.id.slice(-8)
+          : item.id}
       </span>
       {onRemove && (
         <button
-          type="button"
+          type='button'
           onClick={onRemove}
-          className="hover:text-cyber-neon-pink transition-colors ml-0.5"
+          className='hover:text-cyber-neon-pink ml-0.5 transition-colors'
         >
-          <X className="w-3 h-3" />
+          <X className='h-3 w-3' />
         </button>
       )}
     </span>

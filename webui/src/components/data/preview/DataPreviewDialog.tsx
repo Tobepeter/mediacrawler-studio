@@ -19,7 +19,11 @@ interface DataPreviewDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-export function DataPreviewDialog({ file, open, onOpenChange }: DataPreviewDialogProps) {
+export function DataPreviewDialog({
+  file,
+  open,
+  onOpenChange,
+}: DataPreviewDialogProps) {
   const { t } = useTranslation('data')
 
   const { data, isLoading, error } = useQuery({
@@ -38,53 +42,50 @@ export function DataPreviewDialog({ file, open, onOpenChange }: DataPreviewDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <DialogTitle className="font-mono text-cyber-neon-cyan">
+      <DialogContent className='flex max-h-[85vh] max-w-6xl flex-col'>
+        <DialogHeader className='flex-shrink-0'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-3'>
+              <DialogTitle className='text-cyber-neon-cyan font-mono'>
                 {file.name}
               </DialogTitle>
-              <Badge variant="outline" className="font-mono text-[10px]">
+              <Badge variant='outline' className='font-mono text-[10px]'>
                 .{file.type.toUpperCase()}
               </Badge>
               {data && (
-                <Badge variant="default" className="font-mono text-[10px]">
+                <Badge variant='default' className='font-mono text-[10px]'>
                   {t('preview.records', { count: data.total })}
                 </Badge>
               )}
             </div>
             <Button
-              variant="outline"
-              size="sm"
+              variant='outline'
+              size='sm'
               onClick={handleDownload}
-              className="font-mono text-xs"
+              className='font-mono text-xs'
             >
-              <Download className="w-3 h-3 mr-1" />
+              <Download className='mr-1 h-3 w-3' />
               {t('preview.download')}
             </Button>
           </div>
         </DialogHeader>
 
         {/* 内容区域 */}
-        <div className="flex-1 overflow-hidden min-h-0 mt-4">
+        <div className='mt-4 min-h-0 flex-1 overflow-hidden'>
           {isLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-cyber-text-muted font-mono animate-pulse">
+            <div className='flex h-full items-center justify-center'>
+              <div className='text-cyber-text-muted animate-pulse font-mono'>
                 {t('preview.loading')}
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-cyber-neon-pink font-mono">
+            <div className='flex h-full items-center justify-center'>
+              <div className='text-cyber-neon-pink font-mono'>
                 {t('preview.error')}
               </div>
             </div>
           ) : data ? (
-            <DataPreviewTable
-              data={data.data}
-              columns={data.columns}
-            />
+            <DataPreviewTable data={data.data} columns={data.columns} />
           ) : null}
         </div>
       </DialogContent>

@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import config
 from base.base_crawler import AbstractStore
 from database.models import WeiboNote, WeiboNoteComment
-from tools import utils, words
+from tools import utils
 from tools.async_file_writer import AsyncFileWriter
 from database.db_session import get_session
 from var import crawler_type_var

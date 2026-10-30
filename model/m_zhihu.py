@@ -28,6 +28,7 @@ class ZhihuContent(BaseModel):
     """
     content_id: str = Field(default="", description="Content ID")
     content_type: str = Field(default="", description="Content type (article | answer | zvideo)")
+    image_list: list[str] = Field(default_factory=list, description='Content images')
     content_text: str = Field(default="", description="Content text, empty for video type")
     content_url: str = Field(default="", description="Content landing page URL")
     question_id: str = Field(default="", description="Question ID, has value when type is answer")

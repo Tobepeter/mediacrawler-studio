@@ -1,0 +1,14 @@
+**/node_modules/
+**/dist/
+**/build/
+**/.cache/
+.temp/
+.venv/
+.git/
+api/webui/
+docs/.vitepress/
+**/*lock*
+**/*.min.js
+**/*.tsbuildinfo
+desktop/assets/
+**/src/assets/

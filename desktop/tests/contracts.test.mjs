@@ -1,0 +1,134 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  isPlatformUrl,
+  validateRequest,
+  serializeResults,
+} from '../contracts.mjs'
+
+const request = {
+  platform: 'bili',
+  action: 'collect',
+  mode: 'search',
+  query: '独立开发',
+  limit: 5,
+}
+test('默认应用内登录，允许独立窗口并拒绝无效模式', () => {
+  assert.equal(validateRequest(request).loginMode, 'embedded')
+  assert.equal(
+    validateRequest({ ...request, loginMode: 'window' }).loginMode,
+    'window',
+  )
+  assert.equal(
+    validateRequest({ ...request, loginMode: 'qrcode' }).loginMode,
+    'qrcode',
+  )
+  assert.throws(() => validateRequest({ ...request, loginMode: 'iframe' }))
+})
+test('拒绝跨平台、伪造域名和非 HTTPS 作品地址', () => {
+  assert.equal(
+    isPlatformUrl('https://www.bilibili.com/video/BV123', 'bili'),
+    true,
+  )
+  for (const url of [
+    'https://bilibili.com.evil.test/a',
+    'javascript:alert(1)',
+    'https://www.douyin.com/video/1',
+    'http://bilibili.com/',
+  ]) {
+    assert.throws(() =>
+      validateRequest({ ...request, mode: 'link', query: url }),
+    )
+  }
+  assert.throws(() => validateRequest({ ...request, platform: '__proto__' }))
+})
+test('验证数量、空输入和链接模式', () => {
+  for (const limit of [1, 5, 37, 51, 100])
+    assert.equal(validateRequest({ ...request, limit }).limit, limit)
+  for (const limit of [0, -1, 101, Infinity, NaN, 2.5])
+    assert.throws(() => validateRequest({ ...request, limit }))
+  assert.throws(() => validateRequest({ ...request, query: ' ' }))
+  assert.equal(
+    validateRequest({ ...request, mode: 'link', query: 'https://b23.tv/abc' })
+      .limit,
+    1,
+  )
+  assert.equal(
+    validateRequest({ ...request, action: 'connect', query: '' }).action,
+    'connect',
+  )
+})
+test('CSV 保留正文换行、转义引号、阻止表格公式执行', () => {
+  const item = {
+    title: '=HYPERLINK("bad")',
+    text: '第一行\n第二行',
+    author: '作者',
+    platform: 'bili',
+    url: 'https://bilibili.com/',
+    images: [],
+  }
+  const csv = serializeResults([item], 'csv')
+  assert.ok(csv.startsWith('\ufeff'))
+  assert.ok(csv.includes("'=HYPERLINK"))
+  assert.ok(csv.includes('"第一行\n第二行"'))
+  assert.deepEqual(JSON.parse(serializeResults([item], 'json')), [item])
+})
+
+test('评论默认关闭，回复依赖评论，导出保留评论', () => {
+  assert.equal(validateRequest(request).comments, false)
+  assert.equal(validateRequest({ ...request, replies: true }).replies, false)
+  assert.equal(
+    validateRequest({ ...request, comments: true, replies: true }).replies,
+    true,
+  )
+  assert.throws(() => validateRequest({ ...request, comments: 'true' }))
+  const item = {
+    title: '标题',
+    text: '正文',
+    author: '',
+    platform: 'bili',
+    url: '',
+    images: [],
+    comments: [
+      { id: '1', parentId: '', author: '作者', text: '评论内容', likes: '1' },
+    ],
+    commentStatus: 'completed',
+  }
+  assert.ok(serializeResults([item], 'csv').includes('作者: 评论内容'))
+  assert.deepEqual(
+    JSON.parse(serializeResults([item], 'json'))[0].comments,
+    item.comments,
+  )
+})
+
+test('新增平台支持搜索、作品地址与导出，拒绝跨站伪造链接', () => {
+  const urls = {
+    zhihu: 'https://zhuanlan.zhihu.com/p/123',
+    wb: 'https://m.weibo.cn/detail/123',
+    tieba: 'https://tieba.baidu.com/p/123',
+    ks: 'https://v.kuaishou.com/abc',
+  }
+  for (const [platform, url] of Object.entries(urls)) {
+    assert.equal(validateRequest({ ...request, platform }).platform, platform)
+    assert.equal(
+      validateRequest({ ...request, platform, mode: 'link', query: url }).limit,
+      1,
+    )
+    assert.throws(() =>
+      validateRequest({
+        ...request,
+        platform,
+        mode: 'link',
+        query: url
+          .replace('.com', '.com.evil.test')
+          .replace('.cn', '.cn.evil.test'),
+      }),
+    )
+    assert.ok(
+      serializeResults(
+        [{ title: '作品', text: '正文', platform, images: [] }],
+        'csv',
+      ).includes('作品'),
+    )
+  }
+})

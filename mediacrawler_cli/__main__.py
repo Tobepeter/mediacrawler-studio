@@ -1,0 +1,276 @@
+import json
+import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
+
+import typer
+from mediacrawler_cli.runtime import CLIError, run, recover
+from mediacrawler_cli.state import PLATFORMS
+
+app = typer.Typer(help='独立采集 CLI，结果输出 stdout，登录提示输出 stderr', no_args_is_help=True)
+auth = typer.Typer(no_args_is_help=True)
+session = typer.Typer(no_args_is_help=True)
+app.add_typer(auth, name='auth')
+app.add_typer(session, name='session')
+
+
+def invoke(action, platform, profile='default', data_dir=None, **options):
+    if platform not in PLATFORMS and not (action == 'download' and platform == 'direct'):
+        raise typer.BadParameter('平台：' + ', '.join(PLATFORMS))
+    request = dict(action=action, platform=platform, profile=profile, data_dir=data_dir,
+                   mode='search', query='', limit=5, comments=False, replies=False,
+                   qr='terminal', login_timeout=300, timeout=900,
+                   non_interactive=False, lock_timeout=0, format='jsonl')
+    request.update(options)
+    if request['qr'] not in ('terminal', 'image', 'browser') or request['format'] not in ('json', 'jsonl'):
+        raise typer.BadParameter('login-mode 必须是 terminal/image/browser；format 必须是 json/jsonl')
+    try:
+        run(request)
+    except CLIError as error:
+        messages = {'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
+                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR'), 'run_id': error.run_id}), err=True)
+        raise typer.Exit({'AUTH_REQUIRED': 3, 'PROFILE_BUSY': 4, 'TASK_TIMEOUT': 6, 'CANCELLED': 130}.get(error.code, 5))
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+
+
+@app.command()
+def collect(platform: str = typer.Option(...), query: Optional[str] = None, url: Optional[str] = None,
+            limit: int = typer.Option(5, min=1, max=100), profile: str = 'default', data_dir: Optional[str] = None,
+            non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码 / image 图片二维码 / browser 临时浏览器扫码；始终静音'),
+            login_timeout: int = typer.Option(300, min=1), timeout: int = typer.Option(900, min=1),
+            lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl',
+            save: bool = False, output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
+            quality: str = typer.Option('best', help='推荐画质：best、worst 或具体高度如 720p；保留全部候选，指定档位缺失不静默降级'),
+            media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕、章节等能力；--no-media 保留为旧版兼容开关'),
+            include_source: bool = typer.Option(False, help='附带上游标准化作品字段（不是账号信息或完整 HTTP 响应）'),
+            verbose: bool = typer.Option(False, '--verbose', '-v', help='额外阶段日志写到 stderr，不改变 JSON 结果')):
+    """采集作品，默认返回完整能力与字幕正文，不自动下载视频、音频和图片
+
+    示例：collect --platform bili --query Claude --limit 5 --quality worst
+
+    画质候选取决于作品及账号权限，不保证列出平台所有版本，地址可用性未逐一探测
+    best/worst 按已知分辨率选择；竖屏按短边匹配 720p 等档位
+    B站支持分轨候选；抖音/小红书/快手/微博取详情内候选；知乎视频/贴吧尽力提取
+    默认补查平台字幕、章节、音频资源、预览图、图片规格与分 P；平台特有信息放 extra
+    能力统一包含 status/items；未实现为 not_requested，未返回为 not_provided，失败保留正文
+    """
+    import re
+    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+        raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
+    if bool(query) == bool(url):
+        raise typer.BadParameter('--query 与 --url 必须且只能提供一个')
+    options = dict(locals())
+    options.pop('url')
+    options.pop('re', None)
+    options.update(query=query or url, mode='link' if url else 'search')
+    invoke('collect', **options)
+
+
+@app.command('download')
+def download_command(source: Optional[str] = typer.Option(None, help='作品页面链接，识别平台后获取媒体'),
+                     input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin；同平台最多 100 条'),
+                     media_url: Optional[str] = typer.Option(None, help='具体 MP4/M3U8 直链，不启动浏览器'),
+                     audio_url: Optional[str] = typer.Option(None, help='直链模式的独立音轨'),
+                     referer: Optional[str] = typer.Option(None, help='直链模式需要的 Referer'),
+                     platform: Optional[str] = None, profile: str = 'default', data_dir: Optional[str] = None,
+                     kind: str = typer.Option('auto', help='auto/video/images；图集自动下载图片'),
+                     quality: str = typer.Option('best', help='best/worst/720p 等；普通直链画质固定，HLS 可选择清单内档位'),
+                     variant_id: Optional[str] = typer.Option(None, help='--input 中指定媒体版本 ID'),
+                     output_dir: Optional[str] = typer.Option(None, help='下载目录，每次创建独立子目录；默认 Downloads/MediaCrawler'),
+                     non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码 / image 图片二维码 / browser 临时浏览器扫码；始终静音'),
+                     timeout: int = typer.Option(1800, min=1), verbose: bool = typer.Option(False, '--verbose', '-v')):
+    """下载作品或已有媒体信息，共用桌面下载器，不自动安装 FFmpeg
+
+    download --source '作品链接' --quality worst
+
+    download --input results.json --variant-id video-2
+
+    download --media-url 'https://cdn.example/video.mp4'
+
+    分轨和点播 M3U8 需要系统 FFmpeg；不支持直播或加密 HLS
+    已有媒体信息不会重新登录或刷新地址，过期后重新 collect/source 解析
+    stdout 返回路径及错误 JSON；失败或部分成功退出非零
+    """
+    import re
+    from desktop.links import allowed
+    if sum(bool(v) for v in (source, input, media_url)) != 1:
+        raise typer.BadParameter('--source、--input、--media-url 必须且只能选一个')
+    if kind not in ('auto', 'video', 'images') or (quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality)):
+        raise typer.BadParameter('kind 使用 auto/video/images；quality 使用 best/worst/720p 等')
+    if (audio_url or referer) and not media_url:
+        raise typer.BadParameter('--audio-url/--referer 仅用于 --media-url')
+    if variant_id and not input:
+        raise typer.BadParameter('--variant-id 需要 --input')
+    records = None
+    if source:
+        platform = platform or next((p for p in PLATFORMS if allowed(source, p)), None)
+        if not platform or platform not in PLATFORMS or not allowed(source, platform):
+            raise typer.BadParameter('无法识别作品平台，请检查 HTTPS 作品链接')
+    elif input:
+        try:
+            if input == '-':
+                text = sys.stdin.read(20 * 1024 * 1024 + 1)
+            else:
+                with Path(input).open() as stream:
+                    text = stream.read(20 * 1024 * 1024 + 1)
+            if len(text) > 20 * 1024 * 1024:
+                raise ValueError('输入超过 20 MB')
+            try:
+                records = json.loads(text)
+            except json.JSONDecodeError:
+                records = [json.loads(line) for line in text.splitlines() if line.strip()]
+            records = records if isinstance(records, list) else [records]
+            if not 1 <= len(records) <= 100 or any(not isinstance(r, dict) or not isinstance(r.get('id'), str) for r in records):
+                raise ValueError('需要 1–100 条带 id/platform 的采集结果')
+            platforms = {r.get('platform') for r in records}
+            if len(platforms) != 1 or next(iter(platforms)) not in PLATFORMS:
+                raise ValueError('输入必须属于同一受支持平台')
+            detected = next(iter(platforms))
+            if platform and platform != detected:
+                raise ValueError('指定平台与输入不一致')
+            platform = detected
+            from media_downloader.selection import validate_record
+            for record in records:
+                validate_record(record)
+        except (OSError, ValueError, TypeError) as error:
+            raise typer.BadParameter(str(error)) from None
+    else:
+        from urllib.parse import urlparse
+        if any(urlparse(u).scheme != 'https' for u in (media_url, audio_url) if u):
+            raise typer.BadParameter('媒体直链需要 HTTPS')
+        if quality != 'best' and not urlparse(media_url).path.lower().endswith('.m3u8'):
+            raise typer.BadParameter('普通媒体直链画质固定；只有明确的 .m3u8 清单可指定画质')
+        platform = platform or 'direct'
+        video = {'id': 'video-1', 'kind': 'video', 'url': media_url, 'height': None,
+                 'hasAudio': not bool(audio_url), 'headers': {'Referer': referer} if referer else {}}
+        candidates = [video]
+        if audio_url:
+            candidates.append({'id': 'audio-1', 'kind': 'audio', 'url': audio_url})
+        records = [{'id': 'direct', 'platform': platform, 'contentType': 'video', 'images': [], 'media': {'variants': candidates}}]
+        if kind == 'images':
+            raise typer.BadParameter('--media-url 用于视频；图片请传采集结果')
+    invoke('download', platform, profile, data_dir, query=source or '', mode='link', limit=1,
+           records=records, kind=kind, quality=quality, variant_id=variant_id,
+           output_dir=output_dir, save=True, non_interactive=non_interactive, qr=qr,
+           timeout=timeout, verbose=verbose, format='json')
+
+
+@auth.command('login')
+def auth_login(platform: str = typer.Option(...), profile: str = 'default', data_dir: Optional[str] = None,
+               qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码 / image 图片二维码 / browser 临时浏览器扫码；始终静音'), login_timeout: int = typer.Option(300, min=1)):
+    invoke('login', **locals())
+
+
+@auth.command('status')
+def auth_status(platform: str = typer.Option(...), profile: str = 'default', data_dir: Optional[str] = None):
+    invoke('status', **locals(), non_interactive=True, timeout=90)
+
+
+@auth.command('logout')
+def auth_logout(platform: str = typer.Option(...), profile: str = 'default', data_dir: Optional[str] = None):
+    invoke('logout', **locals(), timeout=120)
+
+
+@session.command('recover')
+def session_recover(platform: str = typer.Option(...), profile: str = 'default', data_dir: Optional[str] = None):
+    try:
+        recover(data_dir, platform, profile)
+        typer.echo(json.dumps({'recovered': True}))
+    except (CLIError, RuntimeError) as error:
+        typer.echo(json.dumps({'code': str(error)}), err=True)
+        raise typer.Exit(4)
+
+
+@app.command('clean')
+def clean_command(platform: Optional[str] = None, profile: Optional[str] = None, data_dir: Optional[str] = None):
+    """清理空闲工作缓存，保留登录态和导出结果"""
+    from mediacrawler_cli.cleanup import clean
+    try:
+        typer.echo(json.dumps(clean(data_dir, platform, profile)))
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+
+
+@app.command()
+def check(platform: Optional[str] = None, all: bool = False):
+    if bool(platform) == all:
+        raise typer.BadParameter('请选择 --platform 或 --all')
+    failed = False
+    for selected in PLATFORMS if all else (platform,):
+        with tempfile.TemporaryDirectory(prefix='mediacrawler-check-') as directory:
+            try:
+                invoke('check', selected, data_dir=directory, timeout=90)
+            except typer.Exit:
+                failed = True
+    if failed:
+        raise typer.Exit(5)
+
+
+@app.command()
+def doctor():
+    from playwright.sync_api import sync_playwright
+    from mediacrawler_cli.browser import options
+    import shutil
+    with sync_playwright() as playwright:
+        browser = Path(options(playwright).get('executable_path', playwright.chromium.executable_path))
+        try:
+            instance = playwright.chromium.launch(headless=True, args=['--mute-audio'], timeout=15000, **options(playwright))
+            instance.close()
+            launch = True
+        except Exception:
+            launch = False
+    result = {'chromium': browser.exists() and launch, 'node': bool(shutil.which('node')), 'python': sys.version.split()[0], 'browser': str(browser)}
+    import contextlib
+    import os
+    previous = Path.cwd()
+    try:
+        os.chdir(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+        with contextlib.redirect_stdout(sys.stderr):
+            import execjs
+            from desktop.native_platforms import create_native
+            from desktop.result_store import ResultStore
+            execjs.eval('1 + 1')
+            for platform in PLATFORMS:
+                create_native(platform, ResultStore(platform, 1, lambda *a, **kw: None))
+        result['platform_modules'] = True
+    except Exception as error:
+        result['platform_modules'] = False
+        result['dependency_error'] = type(error).__name__
+    finally:
+        os.chdir(previous)
+    typer.echo(json.dumps(result))
+    if not all((result['chromium'], result['node'], result['platform_modules'])):
+        raise typer.Exit(1)
+
+
+@app.command('install-browser')
+def install_browser():
+    from playwright.__main__ import main as playwright_main
+    sys.argv = ['playwright', 'install', 'chromium']
+    playwright_main()
+
+
+def main():
+    import os
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    if getattr(sys, 'frozen', False):
+        from platformdirs import user_cache_path
+        os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', str(user_cache_path('ms-playwright', appauthor=False)))
+        os.environ['PATH'] = str(root / 'bin') + os.pathsep + os.environ.get('PATH', '')
+    if sys.argv[1:3] == ['-u', '-m'] and len(sys.argv) == 4 and sys.argv[3] in ('desktop.worker', 'desktop.download_worker'):
+        import runpy
+        os.chdir(root)
+        runpy.run_module(sys.argv[3], run_name='__main__')
+        return
+    if len(sys.argv) == 3 and sys.argv[1] == '_worker':
+        from mediacrawler_cli.worker import main as worker
+        worker(sys.argv[2])
+    else:
+        app()
+
+
+if __name__ == '__main__':
+    main()

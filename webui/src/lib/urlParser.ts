@@ -6,19 +6,20 @@ export interface ParsedId {
 }
 
 // URL patterns for different platforms
-const platformPatterns: Record<string, {
-  video: RegExp[]
-  creator: RegExp[]
-}> = {
+const platformPatterns: Record<
+  string,
+  {
+    video: RegExp[]
+    creator: RegExp[]
+  }
+> = {
   xhs: {
     video: [
       /xiaohongshu\.com\/explore\/([a-zA-Z0-9]+)/,
       /xiaohongshu\.com\/discovery\/item\/([a-zA-Z0-9]+)/,
       /xhslink\.com\/([a-zA-Z0-9]+)/,
     ],
-    creator: [
-      /xiaohongshu\.com\/user\/profile\/([a-zA-Z0-9]+)/,
-    ],
+    creator: [/xiaohongshu\.com\/user\/profile\/([a-zA-Z0-9]+)/],
   },
   dy: {
     video: [
@@ -26,9 +27,7 @@ const platformPatterns: Record<string, {
       /v\.douyin\.com\/([a-zA-Z0-9]+)/,
       /iesdouyin\.com\/share\/video\/(\d+)/,
     ],
-    creator: [
-      /douyin\.com\/user\/([a-zA-Z0-9_-]+)/,
-    ],
+    creator: [/douyin\.com\/user\/([a-zA-Z0-9_-]+)/],
   },
   bili: {
     video: [
@@ -36,28 +35,18 @@ const platformPatterns: Record<string, {
       /bilibili\.com\/video\/(av\d+)/,
       /b23\.tv\/([a-zA-Z0-9]+)/,
     ],
-    creator: [
-      /space\.bilibili\.com\/(\d+)/,
-    ],
+    creator: [/space\.bilibili\.com\/(\d+)/],
   },
   wb: {
-    video: [
-      /weibo\.com\/\d+\/([a-zA-Z0-9]+)/,
-      /m\.weibo\.cn\/status\/(\d+)/,
-    ],
-    creator: [
-      /weibo\.com\/u\/(\d+)/,
-      /weibo\.com\/([a-zA-Z0-9]+)$/,
-    ],
+    video: [/weibo\.com\/\d+\/([a-zA-Z0-9]+)/, /m\.weibo\.cn\/status\/(\d+)/],
+    creator: [/weibo\.com\/u\/(\d+)/, /weibo\.com\/([a-zA-Z0-9]+)$/],
   },
   ks: {
     video: [
       /kuaishou\.com\/short-video\/([a-zA-Z0-9_-]+)/,
       /v\.kuaishou\.com\/([a-zA-Z0-9]+)/,
     ],
-    creator: [
-      /kuaishou\.com\/profile\/([a-zA-Z0-9_-]+)/,
-    ],
+    creator: [/kuaishou\.com\/profile\/([a-zA-Z0-9_-]+)/],
   },
 }
 
@@ -134,8 +123,8 @@ export function parseMultipleUrls(input: string, platform: string): ParsedId[] {
 
   const items = input
     .split(/[,\n]+/)
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean)
 
-  return items.map(item => parseUrl(item, platform))
+  return items.map((item) => parseUrl(item, platform))
 }

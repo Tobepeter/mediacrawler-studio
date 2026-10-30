@@ -12,7 +12,9 @@ const THEME_KEY = 'mediacrawler_theme'
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
 }
 
 function getStoredTheme(): Theme {
@@ -58,12 +60,14 @@ export const useThemeStore = create<ThemeState>((set) => ({
 
 // Listen for system theme changes
 if (typeof window !== 'undefined') {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    const state = useThemeStore.getState()
-    if (state.theme === 'system') {
-      const resolved = e.matches ? 'dark' : 'light'
-      applyTheme(resolved)
-      useThemeStore.setState({ resolvedTheme: resolved })
-    }
-  })
+  window
+    .matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', (e) => {
+      const state = useThemeStore.getState()
+      if (state.theme === 'system') {
+        const resolved = e.matches ? 'dark' : 'light'
+        applyTheme(resolved)
+        useThemeStore.setState({ resolvedTheme: resolved })
+      }
+    })
 }

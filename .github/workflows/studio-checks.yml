@@ -1,0 +1,40 @@
+name: Studio checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            webui/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.3'
+          enable-cache: true
+      - run: uv python install 3.11
+      - run: uv sync --locked --python 3.11
+      - run: uv run --locked playwright install --with-deps chromium
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm --prefix webui ci
+      - run: npm run check:all

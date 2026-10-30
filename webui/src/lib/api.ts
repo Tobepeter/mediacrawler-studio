@@ -69,14 +69,19 @@ export const crawlerApi = {
   start: (config: CrawlerConfig) => api.post('/crawler/start', config),
   stop: () => api.post('/crawler/stop'),
   getStatus: () => api.get<CrawlerStatus>('/crawler/status'),
-  getLogs: (limit = 100) => api.get<{ logs: LogEntry[] }>('/crawler/logs', { params: { limit } }),
+  getLogs: (limit = 100) =>
+    api.get<{ logs: LogEntry[] }>('/crawler/logs', { params: { limit } }),
 }
 
 export const dataApi = {
   getFiles: (platform?: string, fileType?: string) =>
-    api.get<{ files: DataFile[] }>('/data/files', { params: { platform, file_type: fileType } }),
+    api.get<{ files: DataFile[] }>('/data/files', {
+      params: { platform, file_type: fileType },
+    }),
   getFileContent: (path: string, limit = 100) =>
-    api.get<FilePreviewResponse>('/data/files/' + path, { params: { preview: true, limit } }),
+    api.get<FilePreviewResponse>('/data/files/' + path, {
+      params: { preview: true, limit },
+    }),
   getStats: () => api.get('/data/stats'),
   getDownloadUrl: (path: string) => `/api/data/download/${path}`,
 }

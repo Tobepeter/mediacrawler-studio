@@ -1,0 +1,143 @@
+export const platforms = {
+  bili: {
+    name: 'B站',
+    url: 'https://www.bilibili.com',
+    cookie: 'SESSDATA',
+    hosts: ['bilibili.com', 'b23.tv'],
+  },
+  dy: {
+    name: '抖音',
+    url: 'https://www.douyin.com',
+    cookie: 'sessionid',
+    hosts: ['douyin.com', 'iesdouyin.com'],
+  },
+  xhs: {
+    name: '小红书',
+    url: 'https://www.xiaohongshu.com',
+    cookie: 'web_session',
+    hosts: ['xiaohongshu.com', 'xhslink.com'],
+  },
+  zhihu: {
+    name: '知乎',
+    url: 'https://www.zhihu.com',
+    cookie: 'z_c0',
+    hosts: ['zhihu.com'],
+  },
+  wb: {
+    name: '微博',
+    url: 'https://www.weibo.com',
+    cookie: 'SUB',
+    cookieUrls: ['https://www.weibo.com', 'https://m.weibo.cn'],
+    hosts: ['weibo.com', 'weibo.cn'],
+  },
+  tieba: {
+    name: '贴吧',
+    url: 'https://tieba.baidu.com',
+    cookie: 'BDUSS',
+    hosts: ['tieba.baidu.com'],
+  },
+  ks: {
+    name: '快手',
+    url: 'https://www.kuaishou.com',
+    cookie: 'passToken',
+    hosts: ['kuaishou.com', 'gifshow.com'],
+  },
+}
+
+export function isPlatformUrl(value, platform) {
+  try {
+    const url = new URL(value)
+    const hosts = platform
+      ? platforms[platform]?.hosts
+      : Object.values(platforms).flatMap((item) => item.hosts)
+    return (
+      url.protocol === 'https:' &&
+      hosts?.some(
+        (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+      )
+    )
+  } catch {
+    return false
+  }
+}
+
+export function validateRequest(value) {
+  if (!value || !Object.hasOwn(platforms, value.platform))
+    throw new Error('请选择平台')
+  if (!['collect', 'connect'].includes(value.action))
+    throw new Error('不支持的操作')
+  if (
+    value.loginMode !== undefined &&
+    !['embedded', 'window', 'qrcode'].includes(value.loginMode)
+  )
+    throw new Error('不支持的登录方式')
+  const query = typeof value.query === 'string' ? value.query.trim() : ''
+  const mode = value.mode === 'link' ? 'link' : 'search'
+  const limit = Number(value.limit)
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+    throw new Error('采集数量需为 1–100 条')
+  if (value.action === 'collect') {
+    if (!query || query.length > 2000) throw new Error('请输入关键词或作品链接')
+    if (mode === 'link' && !isPlatformUrl(query, value.platform))
+      throw new Error('请粘贴所选平台的 HTTPS 作品链接')
+  }
+  for (const key of ['comments', 'replies']) {
+    if (value[key] !== undefined && typeof value[key] !== 'boolean')
+      throw new Error('采集选项无效')
+  }
+  return {
+    loginMode: value.loginMode || 'embedded',
+    silent: value.action === 'connect' && value.silent === true,
+    comments: value.comments === true,
+    replies: value.comments === true && value.replies === true,
+    platform: value.platform,
+    action: value.action,
+    mode,
+    query,
+    limit: mode === 'link' ? 1 : limit,
+  }
+}
+
+export function serializeResults(items, format) {
+  if (format === 'json') return JSON.stringify(items, null, 2)
+  const columns = [
+    '标题',
+    '正文',
+    '作者',
+    '平台',
+    '来源',
+    '图片',
+    '评论',
+    '评论状态',
+  ]
+  const cell = (value) => {
+    const str = String(value ?? '')
+    const safe = /^[\s]*[=+@-]/.test(str) ? `'${str}` : str
+    return `"${safe.replaceAll('"', '""')}"`
+  }
+  const rows = items.map((item) => [
+    item.title,
+    item.text,
+    item.author,
+    platforms[item.platform].name,
+    item.url,
+    item.images.join('\n'),
+    (item.comments || [])
+      .map(
+        (comment) =>
+          `${comment.parentId ? '↳ ' : ''}${comment.author}: ${comment.text}`,
+      )
+      .join('\n'),
+    {
+      pending: '等待采集',
+      running: '采集中',
+      completed: '已完成',
+      error: '未取全',
+      cancelled: '已取消',
+    }[item.commentStatus] || '未采集',
+  ])
+  return (
+    '\ufeff' +
+    [columns, ...rows].map((row) => row.map(cell).join(',')).join('\r\n')
+  )
+}
