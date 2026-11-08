@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Search, UserSearch } from 'lucide-react'
 import { ClearableInput } from '@/components/common/clearable-input'
@@ -10,10 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useLoadOnVisible } from '@/hooks/useLoadOnVisible'
 import { translateMessage } from '@/i18n/studio'
 import { creatorPlatforms } from './creator-options'
 import { CreatorAvatar, useCreatorStats } from './creator-ui'
 import { useStudio } from './store'
+import { settleCreatorSearch, useCreatorSearch } from './use-creator-search'
 import type { CreatorSummary, Platform } from './types'
 
 const failure = (error: unknown) =>
@@ -74,12 +76,19 @@ export function CreatorSearch(props: {
   const history = useStudio((state) => state.history)
   const [open, setOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
-  const [items, setItems] = useState<CreatorSummary[]>([])
-  const [cursor, setCursor] = useState<string>()
-  const [loading, setLoading] = useState(false)
-  const [searched, setSearched] = useState(false)
-  const [error, setError] = useState('')
-  const request = useRef(0)
+  const [submitted, setSubmitted] = useState('')
+  const search = useCreatorSearch(platform, submitted)
+  const items = search.data?.items ?? []
+  const firstLoading = search.isFetching && !items.length
+  // 同一时间只发一页，失败或整页重复时停下，不自动重试对频率敏感的接口
+  const loadNext = () => void search.fetchNextPage({ cancelRefetch: false })
+  const autoLoad =
+    open &&
+    search.hasNextPage &&
+    !search.isFetching &&
+    !search.isError &&
+    !search.data?.stalled
+  const { rootRef, sentinelRef } = useLoadOnVisible(loadNext, autoLoad)
   // 回看博主直接打开已有记录，不消耗对频率敏感的搜索
   const recent = useMemo(() => {
     const seen = new Set<string>()
@@ -101,65 +110,39 @@ export function CreatorSearch(props: {
   if (!creatorPlatforms.includes(platform) || !window.studio?.searchCreators)
     return null
 
-  const search = async (next?: string) => {
+  const submit = () => {
     const query = keyword.trim()
-    if (!query || loading) return
-    const id = ++request.current
-    setLoading(true)
-    setError('')
-    if (!next) {
-      setItems([])
-      setCursor(undefined)
-      setSearched(false)
-    }
-    try {
-      const page = await window.studio!.searchCreators!(platform, query, next)
-      if (id !== request.current || page.cancelled) return
-      setItems((current) => {
-        const base = next ? current : []
-        const seen = new Set(base.map((item) => item.id))
-        return [...base, ...page.items.filter((item) => !seen.has(item.id))]
-      })
-      setCursor(page.hasMore ? page.nextCursor : undefined)
-      setSearched(true)
-    } catch (reason) {
-      if (id === request.current) setError(failure(reason))
-    } finally {
-      if (id === request.current) setLoading(false)
-    }
-  }
-
-  // 关闭时结束进行中的搜索，释放同平台的采集互斥
-  const stop = () => {
-    if (!loading) return
-    request.current++
-    setLoading(false)
-    void window.studio?.cancel(platform).catch(() => {})
+    if (!query) return
+    if (query === submitted && search.isError && !search.data)
+      void search.refetch()
+    else setSubmitted(query)
   }
 
   const clear = () => {
-    stop()
     setKeyword('')
-    setItems([])
-    setCursor(undefined)
-    setSearched(false)
-    setError('')
+    setSubmitted('')
   }
 
+  // 关闭时结束进行中的搜索，释放同平台的采集互斥
   const toggle = (value: boolean) => {
-    if (!value) stop()
+    if (!value) {
+      // 没拿到结果的词不保留，否则再次打开会自动发起搜索
+      if (!search.data) setSubmitted('')
+      void settleCreatorSearch()
+    }
     if (value && seed.trim() && seed.trim() !== keyword.trim()) {
       // 只带入主输入框的词，由用户回车确认，避免打开弹窗就消耗一次搜索
       setKeyword(seed.trim())
-      setItems([])
-      setCursor(undefined)
-      setSearched(false)
-      setError('')
+      setSubmitted('')
     }
     setOpen(value)
   }
 
-  const empty = !items.length && !loading
+  const leave = async (action: () => void) => {
+    toggle(false)
+    await settleCreatorSearch()
+    action()
+  }
 
   return (
     <Dialog open={open} onOpenChange={toggle}>
@@ -174,7 +157,8 @@ export function CreatorSearch(props: {
         <UserSearch />
         <span className='hidden sm:inline'>{t('找博主')}</span>
       </Button>
-      <DialogContent className='flex max-h-[85dvh] w-[calc(100vw-2rem)] flex-col sm:max-w-xl'>
+      {/* 高度固定，切换搜索状态不跳动；矮窗口按视口收缩 */}
+      <DialogContent className='flex h-[min(34rem,85dvh)] w-[calc(100vw-2rem)] flex-col sm:max-w-xl'>
         <DialogHeader>
           <DialogTitle>{t('找博主')}</DialogTitle>
           <DialogDescription className='sr-only'>
@@ -186,7 +170,7 @@ export function CreatorSearch(props: {
           onSubmit={(event) => {
             event.preventDefault()
             event.stopPropagation()
-            void search()
+            submit()
           }}
         >
           <ClearableInput
@@ -200,12 +184,8 @@ export function CreatorSearch(props: {
             onClear={clear}
             onFocus={(event) => event.target.select()}
           />
-          <Button
-            type='submit'
-            variant='secondary'
-            disabled={loading || !keyword.trim()}
-          >
-            {loading ? (
+          <Button type='submit' variant='secondary' disabled={!keyword.trim()}>
+            {firstLoading ? (
               <Loader2 className='animate-spin motion-reduce:animate-none' />
             ) : (
               <Search />
@@ -213,15 +193,19 @@ export function CreatorSearch(props: {
             {t('搜索')}
           </Button>
         </form>
-        <div className='min-h-64 flex-1 space-y-1 overflow-y-auto'>
+        {/* 换关键词时重建滚动容器，回到顶部 */}
+        <div
+          key={submitted}
+          ref={rootRef}
+          className='min-h-0 flex-1 space-y-1 overflow-y-auto'
+        >
           {items.map((item) => (
             <CreatorRow
               key={item.id}
               name={item.name}
               avatar={item.avatar}
               handle={item.uniqueId}
-              // 加载更多时搜索进程仍占用平台，选中会与采集互斥
-              disabled={item.private || loading}
+              disabled={item.private}
               detail={[
                 ...stats(item),
                 item.private && t('作品不公开'),
@@ -230,13 +214,10 @@ export function CreatorSearch(props: {
               ]
                 .filter(Boolean)
                 .join(' · ')}
-              onClick={() => {
-                onSelect(item)
-                toggle(false)
-              }}
+              onClick={() => void leave(() => onSelect(item))}
             />
           ))}
-          {loading && !items.length && (
+          {firstLoading && (
             <div role='status' aria-label={t('搜索')}>
               {[0, 1, 2, 3].map((index) => (
                 <div key={index} className='flex items-center gap-3 p-2'>
@@ -252,18 +233,23 @@ export function CreatorSearch(props: {
               </Placeholder>
             </div>
           )}
-          {error && (
+          {search.isError && !search.data && (
             <div role='alert' className='p-2 text-sm'>
-              <p className='text-destructive'>{translateMessage(error)}</p>
+              <p className='text-destructive'>
+                {translateMessage(failure(search.error))}
+              </p>
               <p className='mt-1 text-muted-foreground'>
                 {t('也可以直接粘贴博主主页链接')}
               </p>
             </div>
           )}
-          {searched && empty && !error && (
-            <Placeholder>{t('没有找到博主，换个关键词试试')}</Placeholder>
-          )}
-          {empty && !!recent.length && (
+          {search.isSuccess &&
+            !items.length &&
+            !search.isFetching &&
+            !search.hasNextPage && (
+              <Placeholder>{t('没有找到博主，换个关键词试试')}</Placeholder>
+            )}
+          {!items.length && !firstLoading && !!recent.length && (
             <>
               <h3 className='px-2 pb-1 pt-2 text-xs text-muted-foreground'>
                 {t('最近采集')}
@@ -274,24 +260,40 @@ export function CreatorSearch(props: {
                   name={task.creator!.name}
                   avatar={task.creator!.avatar}
                   detail={t('已采 {{count}} 条', { count })}
-                  onClick={() => {
-                    onRestore(id)
-                    toggle(false)
-                  }}
+                  onClick={() => void leave(() => onRestore(id))}
                 />
               ))}
             </>
           )}
-          {cursor && (
-            <Button
-              type='button'
-              variant='ghost'
-              className='w-full'
-              disabled={loading}
-              onClick={() => void search(cursor)}
+          {/* 哨兵常驻列表末尾：正常滚动时已提前加载，滚得快才会看到 */}
+          {search.hasNextPage && !!items.length && (
+            <div
+              ref={sentinelRef}
+              className='flex min-h-12 items-center justify-center gap-2 text-xs text-muted-foreground'
             >
-              {t('加载更多')}
-            </Button>
+              {search.isFetchNextPageError ? (
+                <>
+                  <span className='min-w-0 truncate text-destructive'>
+                    {translateMessage(failure(search.error))}
+                  </span>
+                  <Button type='button' variant='ghost' onClick={loadNext}>
+                    {t('重试')}
+                  </Button>
+                </>
+              ) : search.data?.stalled && !search.isFetching ? (
+                <Button type='button' variant='ghost' onClick={loadNext}>
+                  {t('加载更多')}
+                </Button>
+              ) : (
+                <>
+                  <Loader2
+                    className='size-3 animate-spin motion-reduce:animate-none'
+                    aria-hidden='true'
+                  />
+                  {t('加载更多')}
+                </>
+              )}
+            </div>
           )}
         </div>
       </DialogContent>
