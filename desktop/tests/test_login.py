@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
@@ -97,6 +98,31 @@ async def test_redirect_after_scan_keeps_waiting_until_login_confirmed(monkeypat
     await task.authenticate()
     assert events == ['state', 'account']
     assert task.logged_in.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_slow_session_check_still_confirms_existing_login():
+    async def slow():
+        await asyncio.sleep(5.1)
+        return True
+    events = []
+    click = AsyncMock()
+    task = runner(events, click)
+    task.check_login = slow
+    await task.authenticate()
+    assert events == ['account']
+    click.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_single_check_timeout_does_not_end_scan_wait(monkeypatch):
+    monkeypatch.setattr('desktop.crawler.asyncio.sleep', AsyncMock())
+    events = []
+    task = runner(events, AsyncMock())
+    task.check_login = AsyncMock(side_effect=[TimeoutError(), TimeoutError(), True])
+    await task.authenticate()
+    assert events == ['state', 'account']
+    assert task.check_login.await_count == 3
 
 
 @pytest.mark.asyncio

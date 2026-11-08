@@ -90,13 +90,15 @@ class DesktopCrawler:
                         raise
                     await asyncio.sleep(1)
 
-    async def authenticate(self):
+    async def session_confirmed(self):
+        # 单次检查超时只说明网络慢，不能据此判为未登录或结束扫码等待
         try:
-            async with asyncio.timeout(5):
-                connected = await self.check_login()
+            return await self.check_login()
         except TimeoutError:
-            connected = False
-        if connected:
+            return False
+
+    async def authenticate(self):
+        if await self.session_confirmed():
             await self.publish_account()
             return
         started = perf_counter()
@@ -116,7 +118,7 @@ class DesktopCrawler:
             self.emit("state", status="auth", message="请在平台窗口扫码登录，完成后会自动继续")
         # 不自动处理验证码；用户在平台窗口完成，登录通过后继续
         async with asyncio.timeout(300):
-            while not await self.check_login():
+            while not await self.session_confirmed():
                 await asyncio.sleep(3)
         await self.publish_account()
 
