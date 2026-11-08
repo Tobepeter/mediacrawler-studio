@@ -1,6 +1,7 @@
 import type { Platform } from './types'
 
-export const creatorPlatforms: readonly Platform[] = ['dy']
+export const creatorPlatforms: readonly Platform[] = ['dy', 'xhs']
+export const creatorSearchPlatforms: readonly Platform[] = ['dy']
 export const creatorLimit = 200
 export const creatorPresets = [20, 50, 100, 200] as const
 export const autoBatchSize = 20
@@ -18,8 +19,10 @@ export const isAutoForm = (form: {
 export function isCreatorUrl(value: string) {
   try {
     const url = new URL(value.trim())
+    if (url.protocol !== 'https:') return false
+    if (/(^|\.)xiaohongshu\.com$/.test(url.hostname))
+      return /^\/user\/profile\/[^/]+\/?$/.test(url.pathname)
     return (
-      url.protocol === 'https:' &&
       /(^|\.)douyin\.com$/.test(url.hostname) &&
       url.hostname !== 'v.douyin.com' &&
       /^\/user\/(?!self\/?$)[^/]+\/?$/.test(url.pathname)
@@ -52,10 +55,13 @@ export function platformOfUrl(value: string): Platform | undefined {
   }
 }
 
-export function isDouyinShortLink(value: string) {
+export function isShareShortLink(value: string) {
   try {
     const url = new URL(value.trim())
-    return url.protocol === 'https:' && url.hostname === 'v.douyin.com'
+    return (
+      url.protocol === 'https:' &&
+      ['v.douyin.com', 'xhslink.com', 'www.xhslink.com'].includes(url.hostname)
+    )
   } catch {
     return false
   }

@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  creatorSearchPlatforms,
+  isCreatorUrl,
   isPlatformUrl,
   validateRequest,
   serializeResults,
@@ -180,6 +182,29 @@ test('博主主页模式只接受完整主页链接并放宽数量', () => {
     () => validateRequest({ ...base, mode: 'search', query: 'x', limit: 101 }),
     /1–100/,
   )
+})
+
+test('小红书博主主页走博主模式，搜索博主仍只支持抖音', () => {
+  const url =
+    'https://www.xiaohongshu.com/user/profile/abc?xsec_token=T&xsec_source=pc_note'
+  assert.equal(isCreatorUrl(url, 'xhs'), true)
+  assert.equal(
+    isCreatorUrl('https://www.xiaohongshu.com/explore/abc', 'xhs'),
+    false,
+  )
+  assert.equal(isCreatorUrl(url, 'dy'), false)
+  assert.equal(creatorSearchPlatforms.includes('xhs'), false)
+  const request = validateRequest({
+    platform: 'xhs',
+    action: 'collect',
+    mode: 'creator',
+    query: url,
+    limit: 20,
+    auto: true,
+    cursor: 'c',
+  })
+  assert.equal(request.auto, true)
+  assert.equal(request.cursor, 'c')
 })
 
 test('翻页位置和自动模式只用于抖音博主与关键词', () => {

@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { translateMessage } from '@/i18n/studio'
-import { creatorPlatforms } from './creator-options'
+import { creatorSearchPlatforms } from './creator-options'
 import { CreatorAvatar, useCreatorStats } from './creator-ui'
 import { useStudio } from './store'
 import { settleCreatorSearch, useCreatorSearch } from './use-creator-search'
@@ -146,7 +146,10 @@ export function CreatorSearch(props: {
       })
       .slice(0, 6)
   }, [history, platform])
-  if (!creatorPlatforms.includes(platform) || !window.studio?.searchCreators)
+  if (
+    !creatorSearchPlatforms.includes(platform) ||
+    !window.studio?.searchCreators
+  )
     return null
 
   const submit = () => {

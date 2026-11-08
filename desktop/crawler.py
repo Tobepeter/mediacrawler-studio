@@ -179,8 +179,12 @@ class DesktopCrawler:
             if not self.store.ids:
                 raise RuntimeError("未能获取这条作品，请检查链接是否完整、作品是否可访问")
         elif self.request["mode"] == "creator":
-            from desktop.creators import collect_creator_posts
-            await collect_creator_posts(self, self.request["query"], self.request.get("cursor"))
+            if self.platform == "xhs":
+                from desktop.xhs_paging import collect_creator
+                await collect_creator(self, self.request["query"], self.request.get("cursor"))
+            else:
+                from desktop.creators import collect_creator_posts
+                await collect_creator_posts(self, self.request["query"], self.request.get("cursor"))
         else:
             await self.search()
         if self.request.get('comments') and self.store.items:
@@ -266,31 +270,22 @@ class DesktopCrawler:
             from desktop.creators import collect_search_posts
             await collect_search_posts(self, self.request["query"], self.request.get("cursor"), options)
             return
+        if self.platform == "xhs":
+            from desktop.xhs_paging import collect_search
+            await collect_search(self, self.request["query"], self.request.get("cursor"), options)
+            return
         # 按需取详情，避免原生批次最少 10/20 条超过用户所选数量
         query = self.request["query"]
         semaphore = asyncio.Semaphore(1)
-        search_id = ""
         for page in range(1, 11):
-            if self.platform == "bili":
-                response = await self.client.search_video_by_keyword(query, page=page, **options)
-                posts = response.get("result") or []
-                for post in posts:
-                    item = await self.crawler.get_video_info_task(aid=post.get("aid"), bvid="", semaphore=semaphore)
-                    if item:
-                        await self.save_bilibili(item)
-                    if len(self.store.ids) >= self.request["limit"]:
-                        return
-            else:
-                from media_platform.xhs.help import get_search_id
-                search_id = search_id or get_search_id()
-                response = await self.client.get_note_by_keyword(query, search_id=search_id, page=page, **options)
-                posts = response.get("items") or []
-                for post in posts:
-                    if post.get("model_type") in ("rec_query", "hot_query"):
-                        continue
-                    await self.collect_xhs_note(post.get("id"), post.get("xsec_source"), post.get("xsec_token"), semaphore)
-                    if len(self.store.ids) >= self.request["limit"]:
-                        return
+            response = await self.client.search_video_by_keyword(query, page=page, **options)
+            posts = response.get("result") or []
+            for post in posts:
+                item = await self.crawler.get_video_info_task(aid=post.get("aid"), bvid="", semaphore=semaphore)
+                if item:
+                    await self.save_bilibili(item)
+                if len(self.store.ids) >= self.request["limit"]:
+                    return
             if not posts or response.get("has_more") is False or response.get("has_more") == 0:
                 break
             await asyncio.sleep(2)

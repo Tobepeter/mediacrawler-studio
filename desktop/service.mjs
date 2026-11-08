@@ -9,7 +9,7 @@ import { DownloadJob } from './download-job.mjs'
 import path from 'node:path'
 import {
   creatorLimit,
-  creatorPlatforms,
+  creatorSearchPlatforms,
   isCreatorUrl,
   platforms,
   validateRequest,
@@ -20,8 +20,9 @@ const creatorCount = (value) =>
   Number.isFinite(value) && value >= 0 ? value : null
 
 // 进程事件不可信，只保留展示需要的字段
-function creatorInfo(value) {
-  if (typeof value?.url !== 'string' || !isCreatorUrl(value.url)) return null
+function creatorInfo(value, platform) {
+  if (typeof value?.url !== 'string' || !isCreatorUrl(value.url, platform))
+    return null
   const avatar = typeof value.avatar === 'string' ? value.avatar : ''
   return {
     name: String(value.name || '').slice(0, 100),
@@ -249,7 +250,7 @@ export class StudioService {
 
   // 搜索博主与采集共用平台页面，走同一互斥；结果只回给调用方，不进历史
   async searchCreators(platform, keyword, cursor) {
-    if (!creatorPlatforms.includes(platform))
+    if (!creatorSearchPlatforms.includes(platform))
       throw new Error('该平台暂不支持博主搜索')
     const query = typeof keyword === 'string' ? keyword.trim() : ''
     if (!query || query.length > 100) throw new Error('请输入博主名称或关键词')
@@ -524,7 +525,7 @@ export class StudioService {
                 : undefined
             task.exhausted = event.has_more === false
           } else if (event.type === 'creator') {
-            const creator = creatorInfo(event.creator)
+            const creator = creatorInfo(event.creator, request.platform)
             if (creator) task.creator = creator
           } else if (event.type === 'log') {
             this.logger?.write(

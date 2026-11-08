@@ -65,7 +65,8 @@ export const platforms = {
   },
 }
 
-export const creatorPlatforms = ['dy']
+export const creatorPlatforms = ['dy', 'xhs']
+export const creatorSearchPlatforms = ['dy']
 export const creatorLimit = 200
 
 // 仅完整主页链接；分享短链要解析后才知道是作品还是主页
@@ -74,8 +75,13 @@ export function isCreatorUrl(value, platform = 'dy') {
     return false
   try {
     const url = new URL(value.trim())
+    if (url.protocol !== 'https:') return false
+    if (platform === 'xhs')
+      return (
+        /(^|\.)xiaohongshu\.com$/.test(url.hostname) &&
+        /^\/user\/profile\/[^/]+\/?$/.test(url.pathname)
+      )
     return (
-      url.protocol === 'https:' &&
       /(^|\.)douyin\.com$/.test(url.hostname) &&
       url.hostname !== 'v.douyin.com' &&
       /^\/user\/(?!self\/?$)[^/]+\/?$/.test(url.pathname)

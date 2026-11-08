@@ -15,7 +15,7 @@ import {
   extractShareUrl,
   isAutoForm,
   isCreatorUrl,
-  isDouyinShortLink,
+  isShareShortLink,
   platformOfUrl,
 } from './creator-options'
 import { useState } from 'react'
@@ -98,7 +98,7 @@ export function CollectForm() {
     const mode = !url ? 'search' : isCreatorUrl(query) ? 'creator' : 'link'
     const platform = (url && platformOfUrl(query)) || form.platform
     updateForm({ query, mode, platform, limit: limitFor(mode) })
-    if (isDouyinShortLink(query)) void expandShortLink(query)
+    if (isShareShortLink(query)) void expandShortLink(query)
   }
   // 短链要请求后才知道指向作品还是主页，是主页就原位换成完整链接
   const expandShortLink = async (query: string) => {
@@ -106,12 +106,18 @@ export function CollectForm() {
       ?.resolveCreatorLink?.(query)
       .catch(() => null)
     const state = useStudio.getState()
-    if (!target || state.platform !== 'dy' || state.forms.dy.query !== query)
+    const platform = platformOfUrl(query)
+    if (
+      !target ||
+      !platform ||
+      state.platform !== platform ||
+      state.forms[platform].query !== query
+    )
       return
     state.updateForm({
       query: target,
       mode: 'creator',
-      limit: Math.max(state.forms.dy.limit, 50),
+      limit: Math.max(state.forms[platform].limit, 50),
     })
   }
   const cancel = async () => {

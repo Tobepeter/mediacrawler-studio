@@ -25,7 +25,7 @@ uv run mediacrawler collect --platform bili --url https://www.bilibili.com/video
 - `auth status` 在线检查已有登录；`auth logout` 先在平台页面执行退出并核查登录状态，再关闭浏览器、删除指定 CLI profile，其他账号和 Electron 不受影响
 - stdout 仅输出结果，默认 JSONL；`--format json` 输出数组。stderr 输出进度、二维码及错误
 
-## 关键词分页（当前支持 dy）
+## 关键词分页（当前支持 dy、xhs）
 
 ```sh
 uv run mediacrawler search --query 罗翔
@@ -34,7 +34,7 @@ uv run mediacrawler search --cursor <上次的 next_cursor> --limit 50
 
 `--limit` 是本次要多少条，默认一页 20 条；`--cursor` 是从哪继续，两者独立。输出格式和 `creator posts` 相同，末行给出 `next_cursor`，`has_more=false` 表示已到末尾。只想一次取固定条数时用 `collect`，它的输出不变
 
-## 博主（当前支持 dy）
+## 博主（`posts` 支持 dy、xhs，`search` 仅 dy）
 
 ```sh
 uv run mediacrawler creator search --query 罗翔 --limit 10
@@ -58,6 +58,10 @@ uv run mediacrawler creator posts --cursor <上次的 next_cursor> --limit 50
 | 抖音搜索，新搜索 | 10–15 秒 | 10 分钟 20 次 |
 | 抖音搜索，翻页 | 6–10 秒 | 不计入上限 |
 | 抖音主页作品翻页 | 2–4 秒 | 无 |
+| 小红书新搜索 | 8–12 秒 | 10 分钟 20 次 |
+| 小红书搜索翻页 | 4–7 秒 | 不计入上限 |
+| 小红书主页翻页 | 3–6 秒 | 无 |
+| 小红书笔记详情 | 2–3.5 秒 | 无 |
 
 - 命令会自动等待间隔，单次等待超过 30 秒或达到上限时返回 `RATE_LIMITED`
 - 平台返回验证要求时返回 `SEARCH_VERIFICATION_REQUIRED`，之后 30 分钟内本地直接返回 `RATE_COOLDOWN`，不再请求平台。这些错误都带 `retry_after`（秒）

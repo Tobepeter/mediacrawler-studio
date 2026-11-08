@@ -11,7 +11,7 @@ const source = await readFile(
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: 'ESNext', target: 'ES2022' },
 })
-const { extractShareUrl, isDouyinShortLink, platformOfUrl } = await import(
+const { extractShareUrl, isShareShortLink, platformOfUrl } = await import(
   `data:text/javascript,${encodeURIComponent(outputText)}`
 )
 
@@ -73,6 +73,35 @@ test('分享文案提取已知平台链接，普通输入不变', () => {
     'https://www.douyin.com/video/1 ',
   )
   assert.equal(platformOfUrl('https://b23.tv/x'), 'bili')
-  assert.equal(isDouyinShortLink(short), true)
-  assert.equal(isDouyinShortLink('https://www.douyin.com/user/a'), false)
+  assert.equal(isShareShortLink(short), true)
+  assert.equal(isShareShortLink('https://www.douyin.com/user/a'), false)
+})
+
+test('小红书短链只在跳到主页时返回并保留访问参数', async () => {
+  const hit = (location) => async () => ({
+    headers: new Headers({ location }),
+  })
+  assert.equal(
+    await resolveCreatorLink(
+      'https://xhslink.com/m/a',
+      hit(
+        'https://www.xiaohongshu.com/user/profile/abc?xsec_token=T&xsec_source=app_share',
+      ),
+    ),
+    'https://www.xiaohongshu.com/user/profile/abc?xsec_token=T&xsec_source=app_share',
+  )
+  assert.equal(
+    await resolveCreatorLink(
+      'https://xhslink.com/m/a',
+      hit('https://www.xiaohongshu.com/discovery/item/123?xsec_token=T'),
+    ),
+    null,
+  )
+  assert.equal(
+    await resolveCreatorLink(
+      'https://xhslink.com/m/a',
+      hit('https://evil.example/user/profile/abc'),
+    ),
+    null,
+  )
 })

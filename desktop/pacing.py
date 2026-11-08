@@ -25,6 +25,22 @@ def first_search_page(args, kwargs):
     return not kwargs.get('offset', args[1] if len(args) > 1 else 0)
 
 
+def first_xhs_page(args, kwargs):
+    return kwargs.get('page', 1) == 1
+
+
+def unwrapped(error):
+    attempt = getattr(error, 'last_attempt', None)
+    return (attempt.exception() if attempt else None) or error
+
+
+def xhs_blocked(error):
+    # 上游对这些异常只跳过当前笔记，不拦住的话会继续逐条请求
+    from media_platform.xhs.exception import IPBlockError, PlatformAccessError
+    error = unwrapped(error)
+    return isinstance(error, (IPBlockError, PlatformAccessError)) or 'CAPTCHA appeared' in str(error)
+
+
 @dataclass(frozen=True)
 class Rule:
     key: str
@@ -34,6 +50,8 @@ class Rule:
     window_limit: int = 0
     window_seconds: int = 0
     cooldown_seconds: int = 0
+    name: str = '抖音'
+    is_blocked: Optional[Callable] = None
 
 
 RULES = {
@@ -44,6 +62,14 @@ RULES = {
         window_limit=20, window_seconds=600, cooldown_seconds=1800,
     ),
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),
+    # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
+    ('xhs', 'get_note_by_keyword'): Rule(
+        key='xhs', fresh_gap=(8, 12), page_gap=(4, 7), is_fresh=first_xhs_page,
+        window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked,
+    ),
+    ('xhs', 'get_notes_by_creator'): Rule(key='xhs', page_gap=(3, 6), cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
+    # 上游每条详情后已固定等 2 秒，这里主要防 CLI 和桌面同时采集时叠加
+    ('xhs', 'get_note_by_id'): Rule(key='xhs', page_gap=(2, 3.5), cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
 }
 
 
@@ -112,6 +138,14 @@ def start_cooldown(path, rule, now=None):
 
 
 def paced(original, rule, report=None):
+    def verification(path):
+        # 继续请求只会加重风控，冷却期内直接本地拒绝
+        start_cooldown(path, rule)
+        if report:
+            report('pacing-cooldown', key=rule.key, seconds=rule.cooldown_seconds)
+        minutes = math.ceil(rule.cooldown_seconds / 60)
+        return CreatorError('SEARCH_VERIFICATION_REQUIRED', f'{rule.name}要求验证，访问暂停约 {minutes} 分钟', retry_after=rule.cooldown_seconds)
+
     async def call(*args, **kwargs):
         path = state_path(rule)
         fresh = bool(rule.is_fresh and rule.is_fresh(args, kwargs))
@@ -119,14 +153,14 @@ def paced(original, rule, report=None):
         if report and wait >= 1:
             report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=fresh)
         await asyncio.sleep(wait)
-        response = await original(*args, **kwargs)
+        try:
+            response = await original(*args, **kwargs)
+        except Exception as error:
+            if rule.is_blocked and rule.is_blocked(error):
+                raise verification(path) from None
+            raise
         if rule.cooldown_seconds and isinstance(response, dict) and (response.get('search_nil_info') or {}).get('search_nil_type') == 'verify_check':
-            # 继续请求只会加重风控，冷却期内直接本地拒绝
-            start_cooldown(path, rule)
-            if report:
-                report('pacing-cooldown', key=rule.key, seconds=rule.cooldown_seconds)
-            minutes = math.ceil(rule.cooldown_seconds / 60)
-            raise CreatorError('SEARCH_VERIFICATION_REQUIRED', f'抖音要求验证，搜索暂停约 {minutes} 分钟', retry_after=rule.cooldown_seconds)
+            raise verification(path)
         return response
     return call
 
