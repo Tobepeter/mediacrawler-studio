@@ -1,3 +1,4 @@
+import healthPolicy from './health-policy.json' with { type: 'json' }
 import { logoutPlatform } from './logout-job.mjs'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -6,30 +7,36 @@ import { randomUUID } from 'node:crypto'
 import { StudioLibrary } from './library.mjs'
 import { DownloadJob } from './download-job.mjs'
 import path from 'node:path'
-import { platforms, validateRequest } from './contracts.mjs'
+import { platforms, validateRequest, validateFilters } from './contracts.mjs'
 
-// 一次一个采集进程，状态和结果由主进程持有
 export class StudioService {
-  child = null
-  busy = false
-  stopRequested = false
-  cancellation = null
-  clearingSessions = null
-  downloadJob = null
+  // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
+  operations = new Map()
+  get busy() {
+    return this.operations.size > 0
+  }
+
+  assertAvailable(platform) {
+    if (this.operations.has(platform)) throw new Error('请先结束当前任务')
+  }
+
   persistence = Promise.resolve()
   state = {
+    policy: healthPolicy,
     mode: 'desktop',
     loginView: null,
     busy: false,
     profiles: {},
     accounts: {},
-    task: null,
-    results: [],
+    tasks: {},
+    working: {},
     pages: {},
     history: [],
     drafts: {},
   }
-  runId = null
+  qrReady(platform) {
+    clearTimeout(this.operations.get(platform)?.loginTimer)
+  }
 
   constructor(options) {
     Object.assign(this, options)
@@ -44,38 +51,38 @@ export class StudioService {
     this.state.drafts = {}
     this.state.pages = {}
     this.state.history = this.library.list()
-    this.state.results = []
-    this.state.task = null
+    this.state.tasks = {}
   }
 
   publish() {
     this.state.loginView = this.windows.presentation || null
     this.state.busy = this.busy
+    this.state.working = Object.fromEntries(
+      [...this.operations].map(([platform, op]) => [platform, op.kind]),
+    )
     this.state.history = this.library.list()
     this.onState(this.state)
   }
 
-  trackSave(job) {
+  trackSave(job, task) {
     this.persistence = job
     job.catch((error) => {
       this.logger?.write('error', 'storage', 'save-failed', error)
-      if (this.state.task)
-        this.state.task.warning = '记录暂未保存到磁盘，请先导出'
+      if (task) task.warning = '记录暂未保存到磁盘，请先导出'
       this.publish()
     })
     return job
   }
 
-  save() {
-    if (this.state.task?.action !== 'collect' || !this.runId) return
-    const platform = this.state.task.platform
+  save(run) {
+    if (!run.id) return
     const record = {
-      id: this.runId,
-      task: { ...this.state.task },
-      results: [...this.state.results],
+      id: run.id,
+      task: { ...run.task },
+      results: [...run.results],
     }
-    this.state.pages[platform] = record
-    this.trackSave(this.library.saveRun(record))
+    this.state.pages[run.task.platform] = record
+    this.trackSave(this.library.saveRun(record), run.task)
   }
 
   saveDraft(platform, value) {
@@ -97,34 +104,44 @@ export class StudioService {
       limit: value.limit,
       comments: value.comments === true,
       replies: value.comments === true && value.replies === true,
+      filters: validateFilters(platform, value.filters),
     }
     return this.trackSave(this.library.saveWorkspace())
   }
 
   async openHistory(id) {
-    if (this.busy) throw new Error('请先结束当前任务')
+    const platform = this.library.entries.get(id)?.task.platform
+    this.assertAvailable(platform)
     const record = await this.library.get(id)
-    if (this.busy) throw new Error('请先结束当前任务')
-    this.state.pages[record.task.platform] = record
-    this.state.task = null
+    this.assertAvailable(platform)
+    this.state.pages[platform] = record
+    delete this.state.tasks[platform]
     this.library.workspace.selections[record.task.platform] = id
     await this.trackSave(this.library.saveWorkspace())
     this.publish()
     return record
   }
 
+  clearResults(platform) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
+    this.assertAvailable(platform)
+    delete this.state.pages[platform]
+    delete this.state.tasks[platform]
+    this.publish()
+  }
+
   async clearSessions(platform) {
     if (platform !== undefined && !Object.hasOwn(platforms, platform))
       throw new Error('不支持的平台')
-    if (this.busy) throw new Error('请先结束当前任务')
-    this.busy = true
+    const targets = platform === undefined ? Object.keys(platforms) : [platform]
+    for (const id of targets) this.assertAvailable(id)
+    const op = { kind: 'logout' }
+    for (const id of targets) this.operations.set(id, op)
     this.publish()
-    this.clearingSessions = (async () => {
+    op.done = (async () => {
       if (platform) await this.sessions?.stop(platform)
       else await this.sessions?.stopAll()
       const accounts = await this.windows.accounts()
-      const targets =
-        platform === undefined ? Object.keys(platforms) : [platform]
       const outcomes = await Promise.all(
         targets.map(async (id) => {
           if (
@@ -145,29 +162,28 @@ export class StudioService {
       await this.windows.clearSessions(platform)
       for (const id of targets) {
         delete this.state.accounts[id]
+        if (this.state.logins) this.state.logins[id] = { status: 'paused' }
         delete this.state.profiles[id]
       }
-      if (
-        this.state.task?.action === 'connect' &&
-        targets.includes(this.state.task.platform)
-      )
-        this.state.task = null
+      for (const id of targets) {
+        if (this.state.tasks[id]?.action === 'connect')
+          delete this.state.tasks[id]
+      }
       return {
         localOnly: outcomes.some((item) => item.remote === 'not_confirmed'),
         results: outcomes.map((item) => ({ ...item, localCleared: true })),
       }
     })()
     try {
-      return await this.clearingSessions
+      return await op.done
     } finally {
-      this.clearingSessions = null
-      this.busy = false
+      for (const id of targets) this.operations.delete(id)
       this.publish()
     }
   }
 
   mediaItem(platform, id, kind) {
-    if (this.busy) throw new Error('请先结束当前任务')
+    this.assertAvailable(platform)
     if (!['images', 'video'].includes(kind)) throw new Error('不支持的操作')
     const item = this.state.pages[platform]?.results?.find(
       (item) => item.id === id,
@@ -178,9 +194,14 @@ export class StudioService {
     return item
   }
 
-  async downloadMedia(platform, id, kind, directory) {
+  async downloadMedia(platform, id, kind, directory, quality = 'best') {
+    if (
+      typeof quality !== 'string' ||
+      !/^(best|worst|[1-9]\d{1,4}p)$/.test(quality)
+    )
+      throw new Error('清晰度无效')
     const record = this.mediaItem(platform, id, kind)
-    return this.runMedia(record, { kind, directory })
+    return this.runMedia(record, { kind, directory, quality })
   }
 
   async resolveVideo(platform, id, requestId) {
@@ -196,11 +217,9 @@ export class StudioService {
   }
 
   async cancelVideo(requestId) {
-    if (
-      this.downloadJob?.requestId === requestId &&
-      typeof requestId === 'string'
-    )
-      await this.downloadJob.cancel()
+    const job = this.operations.get('dy')?.downloadJob
+    if (typeof requestId === 'string' && job?.requestId === requestId)
+      await job.cancel()
   }
 
   async runMedia(record, options) {
@@ -218,8 +237,8 @@ export class StudioService {
         total: kind === 'images' ? record.images.length : 1,
         code: 'environment',
       }
-    this.busy = true
     const job = new DownloadJob({
+      platform: record.platform,
       python,
       root: this.root,
       endpoint: this.endpoint,
@@ -228,14 +247,13 @@ export class StudioService {
       requestId: options.requestId,
       logger: this.logger,
     })
-    this.downloadJob = job
+    this.operations.set(record.platform, { kind, downloadJob: job })
     this.publish()
     try {
       if (this.sessions) await this.sessions.stop(record.platform)
       return await job.run({ record, ...options })
     } finally {
-      this.downloadJob = null
-      this.busy = false
+      this.operations.delete(record.platform)
       this.publish()
     }
   }
@@ -247,8 +265,8 @@ export class StudioService {
   }
 
   async start(value) {
-    if (this.busy) throw new Error('请先结束当前任务')
     const request = validateRequest(value)
+    this.assertAvailable(request.platform)
     const python =
       process.env.STUDIO_PYTHON ||
       path.join(
@@ -258,30 +276,71 @@ export class StudioService {
       )
     if (!existsSync(python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
-    this.busy = true
-    this.stopRequested = false
-    this.state.task = {
+    const task = {
       ...request,
       status: 'checking',
       message: '正在检查登录状态',
       startedAt: Date.now(),
     }
+    const run = {
+      kind: request.action,
+      task,
+      results: [],
+      stopRequested: false,
+    }
+    this.operations.set(request.platform, run)
+    this.state.tasks[request.platform] = task
     if (request.action === 'collect') {
-      this.runId = randomUUID()
-      this.state.results = []
-      this.library.workspace.selections[request.platform] = this.runId
-      this.save()
+      run.id = randomUUID()
+      this.library.workspace.selections[request.platform] = run.id
+      this.save(run)
       this.trackSave(this.library.saveWorkspace())
     }
-    this.windows.loginMode = request.loginMode || 'embedded'
+    if (this.online?.() === false) {
+      this.publish()
+      task.failure = {
+        code: 'NETWORK_OFFLINE',
+        stage: 'connection',
+        retryable: true,
+      }
+      this.finish(run, 'error', '网络已断开，请检查网络连接')
+      return
+    }
     if (request.action === 'connect' && !request.silent)
-      this.windows.beginLogin(request.platform)
+      this.windows.beginLogin(request.platform, request.loginMode)
+    if (
+      request.action === 'connect' &&
+      request.loginMode === 'qrcode' &&
+      !request.silent
+    ) {
+      run.loginTimer = setTimeout(() => {
+        run.loginTimer = null
+        void this.cancel(request.platform)
+          .then(() => {
+            if (
+              this.state.tasks[request.platform] === task &&
+              this.state.accounts[request.platform] !== 'connected'
+            ) {
+              task.failure = { code: 'TIMEOUT', stage: 'qr', retryable: true }
+              this.finish(run, 'error', '获取二维码超时，请重试')
+            }
+          })
+          .catch(() => {})
+      }, healthPolicy.qr_timeout_ms)
+      run.loginTimer.unref?.()
+    }
     this.publish()
     try {
       await this.sessions?.stop(request.platform)
+      if (this.operations.get(request.platform) !== run) return
+      if (run.stopRequested) {
+        this.finish(run, 'cancelled', '已取消')
+        return
+      }
       const targetId = await this.windows.prepare(request.platform)
-      if (this.stopRequested) {
-        this.finish('cancelled', '已取消')
+      if (this.operations.get(request.platform) !== run) return
+      if (run.stopRequested) {
+        this.finish(run, 'cancelled', '已取消')
         return
       }
       const child = this.spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
@@ -293,28 +352,36 @@ export class StudioService {
           PYTHONIOENCODING: 'utf-8',
         },
       })
-      this.child = child
+      run.child = child
       let terminal = false
       const lines = createInterface({ input: child.stdout })
       lines.on('line', (line) => {
         try {
           const event = JSON.parse(line)
-          if (this.stopRequested || terminal || this.child !== child) return
+          if (run.stopRequested || terminal || run.child !== child) return
           if (event.type === 'diagnostic') {
             this.logger?.write('error', 'crawler', 'exception', {
               platform: request.platform,
               ...event.detail,
             })
+          } else if (event.type === 'timing') {
+            this.logger?.write('info', 'login', 'stage', {
+              platform: request.platform,
+              stage: event.stage,
+              milliseconds: event.milliseconds,
+              reused: event.reused,
+            })
           } else if (event.type === 'state') {
             if (request.silent && event.status === 'auth') return
-            Object.assign(this.state.task, {
+            Object.assign(task, {
               status: event.status,
               message: event.message,
             })
             if (event.status === 'auth') {
               this.state.accounts[request.platform] = 'expired'
               delete this.state.profiles[request.platform]
-              if (!request.silent) this.windows.show(request.platform)
+              if (!request.silent)
+                this.windows.show(request.platform, request.loginMode)
             }
           } else if (event.type === 'login-required') {
             this.state.accounts[request.platform] = 'expired'
@@ -339,22 +406,24 @@ export class StudioService {
               platform: request.platform,
               message: event.message,
             })
-            this.state.task.warning = event.message
+            task.warning = event.message
           } else if (event.type === 'item-update') {
-            const index = this.state.results.findIndex(
+            const index = run.results.findIndex(
               (item) => item.id === event.item?.id,
             )
             if (index !== -1) {
-              this.state.results[index] = event.item
-              this.save()
+              run.results[index] = event.item
+              this.save(run)
             }
           } else if (event.type === 'item') {
-            if (!this.state.results.some((item) => item.id === event.item.id))
-              this.state.results.push(event.item)
-            this.save()
+            if (!run.results.some((item) => item.id === event.item.id))
+              run.results.push(event.item)
+            this.save(run)
           } else if (event.type === 'done' || event.type === 'error') {
             terminal = true
+            if (event.failure) task.failure = event.failure
             this.finish(
+              run,
               event.type === 'done' ? 'completed' : 'error',
               event.message,
               false,
@@ -369,26 +438,27 @@ export class StudioService {
       child.stderr.resume()
       child.stdin.on('error', () => {})
       child.once('error', (error) => {
-        if (this.stopRequested) {
+        if (run.stopRequested) {
           terminal = true
-          this.finish('cancelled', '已取消', false)
+          this.finish(run, 'cancelled', '已取消', false)
           return
         }
         this.logger?.write('error', 'crawler', 'spawn-failed', error)
         terminal = true
-        this.finish('error', '采集进程无法启动，请检查 Python 环境', false)
+        this.finish(run, 'error', '采集进程无法启动，请检查 Python 环境', false)
       })
       child.once('close', (exitCode, signal) => {
-        if (!terminal && !this.stopRequested)
+        if (!terminal && !run.stopRequested)
           this.logger?.write('error', 'crawler', 'process-ended', {
             exitCode,
             signal,
           })
-        this.child = null
-        this.busy = false
-        if (this.stopRequested)
-          this.finish('cancelled', '已取消，已获取的结果已保留')
-        else if (!terminal) this.finish('error', '采集进程意外结束，请重试')
+        run.child = null
+        this.operations.delete(request.platform)
+        if (run.stopRequested)
+          this.finish(run, 'cancelled', '已取消，已获取的结果已保留')
+        else if (!terminal)
+          this.finish(run, 'error', '采集进程意外结束，请重试')
         else this.publish()
         lines.close()
       })
@@ -397,58 +467,67 @@ export class StudioService {
           '\n',
       )
     } catch (error) {
-      if (this.stopRequested) {
-        this.finish('cancelled', '已取消')
+      if (this.operations.get(request.platform) !== run) return
+      if (run.stopRequested) {
+        this.finish(run, 'cancelled', '已取消')
         return
       }
-      this.finish('error', error.message)
+      this.finish(run, 'error', error.message)
       throw error
     }
   }
 
-  finish(status, message, release = true) {
+  finish(run, status, message, release = true) {
+    const { task } = run
+    clearTimeout(run.loginTimer)
     if (status === 'error')
       this.logger?.write('error', 'crawler', 'failed', {
-        platform: this.state.task?.platform,
+        platform: task?.platform,
         message,
       })
-    if (release) this.busy = false
-    Object.assign(this.state.task, { status, message, finishedAt: Date.now() })
-    this.windows.hide(this.state.task.platform)
+    if (release && this.operations.get(task.platform) === run)
+      this.operations.delete(task.platform)
+    Object.assign(task, { status, message, finishedAt: Date.now() })
+    this.windows.hide(task.platform)
     if (status === 'cancelled' || status === 'error') {
-      for (const item of this.state.results) {
+      for (const item of run.results) {
         if (['pending', 'running'].includes(item.commentStatus))
           item.commentStatus = status
       }
     }
-    this.save()
+    this.save(run)
     this.publish()
   }
 
   dismissLogin() {
-    const task = this.state.task
-    if (
-      this.windows.presentation?.platform !== task?.platform ||
-      !['checking', 'auth'].includes(task?.status)
-    )
-      return
-    return this.cancel()
+    const platform = this.windows.presentation?.platform
+    if (['checking', 'auth'].includes(this.state.tasks[platform]?.status))
+      return this.cancel(platform)
   }
 
-  async cancel() {
-    if (this.downloadJob) return this.downloadJob.cancel()
-    // 退出应用时等会话清理落盘，不把清理当成可停止的采集任务
-    if (this.clearingSessions) return this.clearingSessions.catch(() => {})
-    if (this.cancellation) return this.cancellation
-    if (!this.busy || this.stopRequested) return
-    this.stopRequested = true
-    this.state.task.status = 'stopping'
-    this.state.task.message = '正在停止'
-    this.windows.hide(this.state.task.platform)
+  async stopAll() {
+    await Promise.all(
+      [...this.operations.keys()].map((platform) => this.cancel(platform)),
+    )
+  }
+
+  async cancel(platform) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
+    const run = this.operations.get(platform)
+    if (!run) return
+    if (run.downloadJob) return run.downloadJob.cancel()
+    if (run.kind === 'logout') return run.done?.catch(() => {})
+    clearTimeout(run.loginTimer)
+    if (run.cancellation) return run.cancellation
+    if (run.stopRequested) return
+    run.stopRequested = true
+    run.task.status = 'stopping'
+    run.task.message = '正在停止'
+    this.windows.hide(platform)
     this.publish()
-    const child = this.child
+    const child = run.child
     if (!child) return
-    this.cancellation = new Promise((resolve) => {
+    run.cancellation = new Promise((resolve) => {
       const timer = setTimeout(() => child.kill('SIGKILL'), 2500)
       child.once('close', () => {
         clearTimeout(timer)
@@ -456,10 +535,6 @@ export class StudioService {
       })
       child.kill('SIGTERM')
     })
-    try {
-      await this.cancellation
-    } finally {
-      this.cancellation = null
-    }
+    return run.cancellation
   }
 }

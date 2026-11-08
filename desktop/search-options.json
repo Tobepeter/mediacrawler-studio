@@ -1,0 +1,257 @@
+{
+  "bili": {
+    "sort": {
+      "label": "排序",
+      "default": "default",
+      "options": [
+        {
+          "value": "default",
+          "label": "综合排序"
+        },
+        {
+          "value": "click",
+          "label": "最多播放"
+        },
+        {
+          "value": "pubdate",
+          "label": "最新发布"
+        },
+        {
+          "value": "dm",
+          "label": "最多弹幕"
+        },
+        {
+          "value": "stow",
+          "label": "最多收藏"
+        }
+      ]
+    },
+    "time": {
+      "label": "发布时间",
+      "default": "0",
+      "options": [
+        {
+          "value": "0",
+          "label": "不限"
+        },
+        {
+          "value": "1",
+          "label": "一天内"
+        },
+        {
+          "value": "7",
+          "label": "一周内"
+        },
+        {
+          "value": "30",
+          "label": "一个月内"
+        },
+        {
+          "value": "180",
+          "label": "半年内"
+        }
+      ]
+    }
+  },
+  "dy": {
+    "sort": {
+      "label": "排序",
+      "default": "0",
+      "options": [
+        {
+          "value": "0",
+          "label": "综合排序"
+        },
+        {
+          "value": "1",
+          "label": "最多点赞"
+        },
+        {
+          "value": "2",
+          "label": "最新发布"
+        }
+      ]
+    },
+    "time": {
+      "label": "发布时间",
+      "default": "0",
+      "options": [
+        {
+          "value": "0",
+          "label": "不限"
+        },
+        {
+          "value": "1",
+          "label": "一天内"
+        },
+        {
+          "value": "7",
+          "label": "一周内"
+        },
+        {
+          "value": "180",
+          "label": "半年内"
+        }
+      ]
+    }
+  },
+  "xhs": {
+    "sort": {
+      "label": "排序",
+      "default": "general",
+      "options": [
+        {
+          "value": "general",
+          "label": "综合排序"
+        },
+        {
+          "value": "popularity_descending",
+          "label": "最热"
+        },
+        {
+          "value": "time_descending",
+          "label": "最新发布"
+        }
+      ]
+    },
+    "type": {
+      "label": "内容类型",
+      "default": "0",
+      "options": [
+        {
+          "value": "0",
+          "label": "全部"
+        },
+        {
+          "value": "1",
+          "label": "视频"
+        },
+        {
+          "value": "2",
+          "label": "图文"
+        }
+      ]
+    }
+  },
+  "zhihu": {
+    "sort": {
+      "label": "排序",
+      "default": "default",
+      "options": [
+        {
+          "value": "default",
+          "label": "综合排序"
+        },
+        {
+          "value": "upvoted_count",
+          "label": "最多赞同"
+        },
+        {
+          "value": "created_time",
+          "label": "最新发布"
+        }
+      ]
+    },
+    "type": {
+      "label": "内容类型",
+      "default": "default",
+      "options": [
+        {
+          "value": "default",
+          "label": "全部"
+        },
+        {
+          "value": "answer",
+          "label": "回答"
+        },
+        {
+          "value": "article",
+          "label": "文章"
+        },
+        {
+          "value": "zvideo",
+          "label": "视频"
+        }
+      ]
+    },
+    "time": {
+      "label": "发布时间",
+      "default": "default",
+      "options": [
+        {
+          "value": "default",
+          "label": "不限"
+        },
+        {
+          "value": "a_day",
+          "label": "一天内"
+        },
+        {
+          "value": "a_week",
+          "label": "一周内"
+        },
+        {
+          "value": "a_month",
+          "label": "一个月内"
+        },
+        {
+          "value": "three_months",
+          "label": "三个月内"
+        },
+        {
+          "value": "half_a_year",
+          "label": "半年内"
+        },
+        {
+          "value": "a_year",
+          "label": "一年内"
+        }
+      ]
+    }
+  },
+  "wb": {
+    "type": {
+      "label": "搜索类别",
+      "default": "1",
+      "options": [
+        {
+          "value": "1",
+          "label": "综合"
+        },
+        {
+          "value": "61",
+          "label": "实时"
+        },
+        {
+          "value": "60",
+          "label": "热门"
+        },
+        {
+          "value": "64",
+          "label": "视频"
+        }
+      ]
+    }
+  },
+  "tieba": {
+    "sort": {
+      "label": "排序",
+      "default": "1",
+      "options": [
+        {
+          "value": "1",
+          "label": "最新发布"
+        },
+        {
+          "value": "0",
+          "label": "最早发布"
+        },
+        {
+          "value": "2",
+          "label": "相关度"
+        }
+      ]
+    }
+  },
+  "ks": {}
+}

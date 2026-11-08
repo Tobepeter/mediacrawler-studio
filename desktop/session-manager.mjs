@@ -1,160 +1,375 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { platforms } from './contracts.mjs'
+import policy from './health-policy.json' with { type: 'json' }
 
-// 应用级会话预热，不占用采集 task/busy，也不依赖当前 Tab
+// 平台级登录任务与二维码缓存；与前台 Tab、采集 task/busy 解耦
 export class SessionManager {
   jobs = new Map()
-  stopped = new Set()
+  timers = new Map()
+  retries = new Map()
   closed = false
+  started = false
+  foreground = null
 
   constructor(service, spawnProcess = spawn) {
     this.service = service
     this.spawnProcess = spawnProcess
+    service.state.logins = {}
   }
 
   start() {
-    if (this.queue) return this.queue
-    const pending = Object.keys(platforms)
-    const consume = async () => {
-      while (pending.length && !this.closed) {
-        const platform = pending.shift()
-        if (!this.stopped.has(platform)) await this.check(platform)
+    if (this.started || this.closed) return
+    this.started = true
+    for (const platform of Object.keys(platforms)) {
+      const delay = policy.login_delays_ms[platform]
+      this.service.state.logins[platform] = {
+        status: 'queued',
+        scheduledAt: Date.now() + delay,
       }
+      if (!delay) this.ensure(platform)
+      else
+        this.timers.set(
+          platform,
+          setTimeout(() => this.ensure(platform), delay),
+        )
     }
-    // 限制冷启动负载，所有平台都进入队列，切页面不触发检查
-    this.queue = Promise.all([consume(), consume()])
-    return this.queue
+    this.service.publish()
   }
 
-  check(platform) {
-    const controller = new AbortController()
-    const job = { controller, child: null, done: null }
+  setForeground(platform) {
+    if (platform !== null && !Object.hasOwn(platforms, platform))
+      throw new Error('不支持的平台')
+    if (this.foreground === platform) return
+    const previous = this.jobs.get(this.foreground)
+    this.foreground = platform
+    if (previous) this.schedule(previous)
+    const job = this.jobs.get(platform)
+    if (job?.image && !job.confirming) {
+      clearTimeout(job.refresh)
+      if (Date.now() - (job.checkedAt || 0) >= 2000) void this.capture(job)
+      else this.schedule(job)
+    }
+  }
+
+  schedule(job) {
+    clearTimeout(job.refresh)
+    if (!this.active(job) || job.connected || job.confirming || !job.image)
+      return
+    job.refresh = setTimeout(
+      () => void this.capture(job),
+      this.foreground === job.platform ? 2000 : 60000,
+    )
+  }
+
+  occupied(platform) {
+    return !!this.service.state.working?.[platform]
+  }
+
+  ensure(platform) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
+    if (this.closed || this.occupied(platform)) return
+    clearTimeout(this.timers.get(platform))
+    this.timers.delete(platform)
+    if (this.jobs.has(platform)) return
+    const state = this.service.state.logins[platform]
+    if (['error', 'expired', 'paused'].includes(state?.status)) return
+    if (this.service.state.accounts[platform] === 'connected') {
+      this.service.state.logins[platform] = {
+        ...state,
+        status: 'connected',
+        image: undefined,
+      }
+      this.service.publish()
+      return
+    }
+    const job = {
+      id: randomUUID(),
+      platform,
+      controller: new AbortController(),
+      child: null,
+      image: null,
+    }
     this.jobs.set(platform, job)
-    job.done = this.probe(platform, job)
-      .catch((error) => {
-        if (!controller.signal.aborted)
-          this.service.logger?.write('warn', 'session', 'check-failed', {
-            platform,
-            name: error.name,
-          })
+    this.service.state.logins[platform] = {
+      id: job.id,
+      startedAt: Date.now(),
+      status: 'preparing',
+    }
+    this.service.publish()
+    job.deadline = setTimeout(
+      () => this.fail(job, { code: 'TIMEOUT', stage: 'qr', retryable: true }),
+      policy.qr_timeout_ms,
+    )
+    job.done = this.probe(job)
+      .catch(() => {
+        if (this.active(job))
+          this.fail(job, { code: 'UNKNOWN', stage: 'worker', retryable: true })
       })
       .finally(() => {
-        this.jobs.delete(platform)
-        // 未能确认会话也必须结束检查态，交由用户扫码恢复
-        if (
-          !this.stopped.has(platform) &&
-          this.service.state.accounts[platform] === 'saved'
-        ) {
-          this.service.state.accounts[platform] = 'unknown'
-          this.service.publish()
+        clearTimeout(job.deadline)
+        clearTimeout(job.refresh)
+        if (this.active(job)) {
+          const current = this.service.state.logins[platform]
+          if (!['connected', 'error', 'expired'].includes(current.status))
+            this.fail(job, {
+              code: 'UNKNOWN',
+              stage: 'worker',
+              retryable: true,
+            })
         }
+        if (this.jobs.get(platform) === job) this.jobs.delete(platform)
       })
-    return job.done
   }
 
-  async probe(platform, job) {
+  active(job) {
+    return !job.controller.signal.aborted && this.jobs.get(job.platform) === job
+  }
+
+  update(job, values) {
+    if (!this.active(job)) return
+    Object.assign(this.service.state.logins[job.platform], values)
+    this.service.publish()
+  }
+
+  fail(job, failure) {
+    if (!this.active(job)) return
+    this.service.logger?.write('warn', 'login', 'failed', {
+      platform: job.platform,
+      ...failure,
+    })
+    // 取到码以后等待扫码超时，不计为“取码连续超时”
+    if ((job.image || job.confirming) && failure.code === 'TIMEOUT') {
+      this.update(job, {
+        status: 'expired',
+        image: undefined,
+        failure: undefined,
+      })
+    } else this.update(job, { status: 'error', image: undefined, failure })
+    job.controller.abort()
+    job.child?.kill('SIGKILL')
+  }
+
+  async probe(job) {
     const service = this.service
-    const { signal } = job.controller
-    const timeout = setTimeout(() => {
-      job.controller.abort()
-      job.child?.kill('SIGKILL')
-    }, 45000)
-    try {
-      const targetId = await service.windows.prepare(platform, signal)
-      signal.throwIfAborted()
-      // 没有持久会话时无需访问平台或启动 Python
-      if (service.state.accounts[platform] !== 'saved') return
-      const python =
-        process.env.STUDIO_PYTHON ||
-        path.join(
-          service.root,
-          '.venv',
-          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-        )
-      const child = this.spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
-        cwd: service.root,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: '1',
-          PYTHONIOENCODING: 'utf-8',
-        },
+    if (service.online?.() === false) {
+      this.fail(job, {
+        code: 'NETWORK_OFFLINE',
+        stage: 'connection',
+        retryable: true,
       })
-      job.child = child
-      const lines = createInterface({ input: child.stdout })
-      lines.on('line', (line) => {
-        if (signal.aborted) return
-        try {
-          const event = JSON.parse(line)
-          if (event.type === 'account') {
-            service.state.accounts[platform] = 'connected'
-            service.state.profiles[platform] = {
-              nickname:
-                typeof event.profile?.nickname === 'string'
-                  ? event.profile.nickname.slice(0, 100)
-                  : '',
-              avatar: /^https:\/\//i.test(event.profile?.avatar || '')
-                ? event.profile.avatar
-                : '',
-            }
-            void service.windows.flush(platform).catch(() => {})
-          } else if (event.type === 'login-required') {
-            service.state.accounts[platform] = 'expired'
-            delete service.state.profiles[platform]
-          } else if (event.type === 'error') {
-            service.logger?.write('warn', 'session', 'check-failed', {
-              platform,
-            })
-          } else return
-          service.publish()
-        } catch {
-          /* 非协议输出不进入页面 */
-        }
-      })
-      child.stderr.resume()
-      child.stdin.on('error', () => {})
-      const exited = new Promise((resolve, reject) => {
-        child.once('error', reject)
-        child.once('close', resolve)
-      })
-      child.stdin.end(
-        JSON.stringify({
-          platform,
-          action: 'connect',
-          silent: true,
-          mode: 'search',
-          query: '',
-          limit: 5,
-          endpoint: service.endpoint,
-          targetId,
-        }) + '\n',
-      )
-      try {
-        await exited
-      } finally {
-        lines.close()
-      }
-    } finally {
-      clearTimeout(timeout)
+      return
     }
+    const { signal } = job.controller
+    let onAbort
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(new Error('cancelled'))
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    let targetId
+    try {
+      targetId = await Promise.race([
+        service.windows.prepare(job.platform, signal),
+        aborted,
+      ])
+    } finally {
+      signal.removeEventListener('abort', onAbort)
+    }
+    if (!this.active(job)) return
+    const python =
+      process.env.STUDIO_PYTHON ||
+      path.join(
+        service.root,
+        '.venv',
+        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+      )
+    const child = this.spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
+      cwd: service.root,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
+    })
+    job.child = child
+    const lines = createInterface({ input: child.stdout })
+    lines.on('line', (line) => {
+      if (!this.active(job)) return
+      try {
+        this.event(job, JSON.parse(line))
+      } catch {
+        /* 非协议输出不进入 UI */
+      }
+    })
+    child.stderr.resume()
+    child.stdin.on('error', () => {})
+    const exited = new Promise((resolve, reject) => {
+      child.once('error', reject)
+      child.once('close', resolve)
+    })
+    child.stdin.end(
+      JSON.stringify({
+        platform: job.platform,
+        action: 'connect',
+        loginMode: 'qrcode',
+        mode: 'search',
+        query: '',
+        limit: 5,
+        endpoint: service.endpoint,
+        targetId,
+      }) + '\n',
+    )
+    // 扫码等待有界，防止失联 worker 永久驻留
+    const lifetime = setTimeout(
+      () => this.fail(job, { code: 'TIMEOUT', stage: 'scan', retryable: true }),
+      330000,
+    )
+    try {
+      await exited
+    } finally {
+      clearTimeout(lifetime)
+      lines.close()
+    }
+  }
+
+  event(job, event) {
+    const { platform } = job
+    if (event.type === 'state' && event.status === 'auth') {
+      void this.capture(job)
+    } else if (event.type === 'account') {
+      clearTimeout(job.deadline)
+      clearTimeout(job.refresh)
+      job.connected = true
+      this.service.state.accounts[platform] = 'connected'
+      this.service.state.profiles[platform] = {
+        nickname:
+          typeof event.profile?.nickname === 'string'
+            ? event.profile.nickname.slice(0, 100)
+            : '',
+        avatar: /^https:\/\//i.test(event.profile?.avatar || '')
+          ? event.profile.avatar
+          : '',
+      }
+      this.update(job, {
+        status: 'connected',
+        image: undefined,
+        failure: undefined,
+      })
+      void this.service.windows.flush(platform).catch(() => {})
+    } else if (event.type === 'error' && !job.connected) {
+      this.fail(
+        job,
+        event.failure || { code: 'UNKNOWN', stage: 'login', retryable: true },
+      )
+    }
+  }
+
+  async capture(job) {
+    if (!this.active(job) || job.connected || job.confirming || job.capturing)
+      return
+    clearTimeout(job.refresh)
+    job.capturing = true
+    let refreshing = false
+    const active = () => this.active(job) && !job.connected && !job.confirming
+    try {
+      let result = await this.service.windows.captureBackgroundQr(
+        job.platform,
+        false,
+        active,
+        { passive: !!job.image },
+      )
+      if (result.code === 'expired' && active()) {
+        refreshing = true
+        result = await this.service.windows.captureBackgroundQr(
+          job.platform,
+          true,
+          active,
+          { expiredOnly: true },
+        )
+      }
+      if (!active()) return
+      job.checkedAt = Date.now()
+      if (result.code === 'confirming') {
+        job.confirming = true
+        clearTimeout(job.deadline)
+        this.update(job, { status: 'confirming', failure: undefined })
+      } else if (result.image) {
+        clearTimeout(job.deadline)
+        const changed =
+          job.image !== result.image ||
+          this.service.state.logins[job.platform]?.status !== 'ready'
+        job.image = result.image
+        if (changed)
+          this.update(job, {
+            status: 'ready',
+            image: result.image,
+            updatedAt: Date.now(),
+            failure: undefined,
+          })
+      } else if (
+        result.code !== 'cancelled' &&
+        (!job.image || (refreshing && result.code !== 'pending'))
+      ) {
+        this.fail(job, {
+          code: 'QR_IMAGE_FAILED',
+          stage: 'qr_image',
+          retryable: true,
+        })
+      }
+      // 已有码时，短暂消失/跳转/读图失败不取消扫码，不重开登录页
+    } catch {
+      if (!job.image || refreshing)
+        this.fail(job, {
+          code: 'QR_IMAGE_FAILED',
+          stage: 'qr_image',
+          retryable: true,
+        })
+    } finally {
+      job.capturing = false
+      this.schedule(job)
+    }
+  }
+
+  retry(platform) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
+    if (this.closed || this.occupied(platform))
+      return Promise.reject(new Error('任务进行中，请稍后重试'))
+    if (this.retries.has(platform)) return this.retries.get(platform)
+    const promise = this.stop(platform)
+      .then(() => {
+        if (this.closed || this.occupied(platform))
+          throw new Error('任务进行中，请稍后重试')
+        delete this.service.state.logins[platform]
+        this.ensure(platform)
+      })
+      .finally(() => this.retries.delete(platform))
+    this.retries.set(platform, promise)
+    return promise
   }
 
   async stop(platform) {
-    this.stopped.add(platform)
+    clearTimeout(this.timers.get(platform))
+    this.timers.delete(platform)
     const job = this.jobs.get(platform)
-    if (!job) return
-    job.controller.abort()
-    job.child?.kill('SIGKILL')
-    await job.done
+    if (job) {
+      job.controller.abort()
+      clearTimeout(job.deadline)
+      clearTimeout(job.refresh)
+      job.child?.kill('SIGKILL')
+    }
+    this.service.state.logins[platform] = {
+      status:
+        this.service.state.accounts[platform] === 'connected'
+          ? 'connected'
+          : 'paused',
+    }
+    this.service.publish()
+    if (job) await job.done
   }
 
-  async stopAll() {
-    this.closed = true
+  async stopAll(close = false) {
+    if (close) this.closed = true
     await Promise.all(
       Object.keys(platforms).map((platform) => this.stop(platform)),
     )
-    await this.queue
   }
 }

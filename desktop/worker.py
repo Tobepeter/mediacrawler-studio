@@ -20,10 +20,12 @@ async def main(request):
     async with async_playwright() as playwright:
         try:
             async with asyncio.timeout(20):
-                browser = await playwright.chromium.connect_over_cdp(request["endpoint"], timeout=15000)
+                # 复用 Electron 时保留原生媒体偏好，不能把主界面系统主题模拟为浅色
+                browser = await playwright.chromium.connect_over_cdp(request["endpoint"], timeout=15000, no_defaults=True)
         except (TimeoutError, PlaywrightTimeoutError):
             raise RuntimeError("连接平台页面超时，请重试") from None
         page = None
+        request["reusePage"] = True
         for context in browser.contexts:
             for candidate in context.pages:
                 session = await context.new_cdp_session(candidate)
@@ -33,6 +35,10 @@ async def main(request):
                         page = candidate
                 finally:
                     await session.detach()
+                if page is not None:
+                    break
+            if page is not None:
+                break
         if page is None:
             raise RuntimeError("找不到平台窗口，请重试")
         # 不创建新页面，也不关闭 Electron 所属的浏览器或 context
@@ -45,8 +51,12 @@ async def main(request):
 
 
 if __name__ == "__main__":
+    request = {}
     try:
-        request = json.loads(sys.stdin.readline())
+        value = json.loads(sys.stdin.readline())
+        if not isinstance(value, dict):
+            raise ValueError("请求必须为对象")
+        request = value
         asyncio.run(main(request))
     except KeyboardInterrupt:
         pass
@@ -60,5 +70,6 @@ if __name__ == "__main__":
             message = "等待超时，请重试或打开平台窗口检查登录与网络"
         elif isinstance(error, RuntimeError):
             message = str(error)
-        emit("error", message=message)
+        from desktop.health import classify
+        emit('error', message=message, failure=classify(error, 'login' if request.get('action') == 'connect' else 'collection'))
         sys.exit(1)

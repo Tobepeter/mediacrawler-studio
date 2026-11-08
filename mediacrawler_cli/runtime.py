@@ -160,6 +160,8 @@ def run(request):
             raise CLIError('PARTIAL_RESULT', run_id)
         if not complete or process.returncode:
             raise CLIError('WORKER_FAILED', run_id)
+        if request['action'] == 'check' and any(item.get('status') != 'ok' for item in items.values()):
+            raise CLIError('CHECK_FAILED', run_id)
     except KeyboardInterrupt:
         error = CLIError('CANCELLED', run_id)
     except CLIError as exc:
@@ -213,3 +215,4 @@ def run(request):
             print(json.dumps(item, ensure_ascii=False))
     if error:
         raise error
+    return values

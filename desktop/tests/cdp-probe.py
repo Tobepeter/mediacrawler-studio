@@ -7,7 +7,7 @@ from desktop.page_context import PageContext
 async def main():
     request = json.loads(sys.stdin.readline())
     async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp(request['endpoint'], timeout=5000)
+        browser = await p.chromium.connect_over_cdp(request['endpoint'], timeout=5000, no_defaults=True)
         found = {}
         for context in browser.contexts:
             for page in context.pages:

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { activeStatuses, platformNames, useStudio } from './store'
+import { platformBusy, platformNames, useStudio } from './store'
 import { PlatformIcon } from './platform-icon'
 import type { Platform } from './types'
 
@@ -19,14 +19,13 @@ import type { Platform } from './types'
 export function CollectionHistory() {
   const { t, i18n } = useTranslation('studio')
 
-  const { history, task, pending, busy: workerBusy, restore } = useStudio()
+  const state = useStudio()
+  const { history, restore } = state
   const [platform, setPlatform] = useState<Platform | 'all'>('all')
   const entries = history
     .filter((entry) => platform === 'all' || entry.task.platform === platform)
     .sort((a, b) => b.task.startedAt - a.task.startedAt)
     .slice(0, 50)
-  const busy =
-    workerBusy || pending || activeStatuses.includes(task?.status || '')
   const recovery = useMutation({
     mutationFn: (id: string) => restore(id),
     onSuccess: () => {
@@ -36,7 +35,7 @@ export function CollectionHistory() {
   })
   const loading = recovery.isPending ? recovery.variables : null
   const recover = (id: string) => {
-    if (!recovery.isPending && !busy) recovery.mutate(id)
+    if (!recovery.isPending) recovery.mutate(id)
   }
   return (
     <div className='pr-3'>
@@ -59,11 +58,6 @@ export function CollectionHistory() {
           </SelectContent>
         </Select>
       </div>
-      {busy && (
-        <p className='mb-4 text-muted-foreground' role='status'>
-          {t('任务结束后可打开记录')}
-        </p>
-      )}
       {!entries.length ? (
         <div className='flex flex-col items-center gap-3 py-16 text-muted-foreground'>
           <History className='size-6' aria-hidden='true' />
@@ -76,7 +70,11 @@ export function CollectionHistory() {
               <Button
                 variant='ghost'
                 className='h-auto w-full justify-start gap-3 py-3 text-left'
-                disabled={!window.studio || busy || !!loading}
+                disabled={
+                  !window.studio ||
+                  platformBusy(state, entry.task.platform) ||
+                  !!loading
+                }
                 onClick={() => void recover(entry.id)}
               >
                 <span className='flex min-w-0 flex-1 flex-col gap-1'>

@@ -7,10 +7,10 @@ import { captureLoginQr } from './login-qr.mjs'
 export class PlatformWindows {
   windows = new Map()
   mainWindow = null
-  loginMode = 'embedded'
   presentation = null
   bounds = null
   qrCapture = null
+  backgroundCaptures = new Map()
   onChange = () => {}
   onDismiss = () => {}
 
@@ -49,11 +49,14 @@ export class PlatformWindows {
 
   async prepare(platform, signal) {
     // 上次取码可能仍在释放 debugger，重试不能抢占同一调试会话
-    if (this.qrCapture) await this.qrCapture.promise.catch(() => {})
+    if (this.qrCapture?.presentation.platform === platform)
+      await this.qrCapture.promise.catch(() => {})
+    if (this.backgroundCaptures.has(platform))
+      await this.backgroundCaptures.get(platform).catch(() => {})
     signal?.throwIfAborted()
     let win = this.windows.get(platform)
     if (!win || win.isDestroyed()) {
-      win = new PlatformPage(platform, () => this.dismiss())
+      win = new PlatformPage(platform, () => this.dismiss(platform))
       this.getSession(platform).setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       )
@@ -72,14 +75,14 @@ export class PlatformWindows {
     }
   }
 
-  beginLogin(platform) {
+  beginLogin(platform, mode = 'embedded') {
     if (this.presentation) this.windows.get(this.presentation.platform)?.hide()
-    this.presentation = { platform, mode: this.loginMode, preparing: true }
+    this.presentation = { platform, mode, preparing: true }
     this.bounds = null
     this.onChange()
   }
 
-  show(platform, mode = this.loginMode) {
+  show(platform, mode = 'embedded') {
     const page = this.windows.get(platform)
     if (!page || page.isDestroyed()) return
     if (this.presentation) this.windows.get(this.presentation.platform)?.hide()
@@ -156,6 +159,27 @@ export class PlatformWindows {
     }
   }
 
+  async captureBackgroundQr(platform, refresh, active, options) {
+    if (this.backgroundCaptures.has(platform))
+      return this.backgroundCaptures.get(platform)
+    const page = this.windows.get(platform)
+    if (!page || page.isDestroyed() || !active()) return { code: 'cancelled' }
+    const promise = captureLoginQr(
+      page,
+      platform,
+      refresh,
+      () => active() && !page.isDestroyed(),
+      options,
+    )
+    this.backgroundCaptures.set(platform, promise)
+    try {
+      return await promise
+    } finally {
+      if (this.backgroundCaptures.get(platform) === promise)
+        this.backgroundCaptures.delete(platform)
+    }
+  }
+
   hide(platform) {
     this.windows.get(platform)?.hide()
     if (this.presentation?.platform === platform) {
@@ -167,10 +191,10 @@ export class PlatformWindows {
     }
   }
 
-  dismiss() {
-    if (!this.presentation) return
-    this.hide(this.presentation.platform)
-    this.onDismiss()
+  dismiss(platform = this.presentation?.platform) {
+    if (!platform || this.presentation?.platform !== platform) return
+    this.hide(platform)
+    this.onDismiss(platform)
   }
   async flush(platform) {
     await this.getSession(platform).cookies.flushStore()

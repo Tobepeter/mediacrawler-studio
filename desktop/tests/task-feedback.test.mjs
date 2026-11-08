@@ -91,6 +91,11 @@ test('扫码成功提示一次，自动恢复登录和关闭弹层不提示', ()
 })
 
 test('自动登录检查失败保持静默，手动登录仍提示错误', () => {
+  const inline = { action: 'connect', loginMode: 'qrcode' }
+  assert.equal(
+    taskFeedback(state('auth', inline), state('error', inline)),
+    undefined,
+  )
   const automatic = { action: 'connect', silent: true }
   assert.equal(
     taskFeedback(state('checking', automatic), state('error', automatic)),
@@ -106,5 +111,38 @@ test('自动登录检查失败保持静默，手动登录仍提示错误', () =>
       state('error', { action: 'connect' }),
     ).kind,
     'error',
+  )
+})
+
+test('仅当前平台前台通知；后台和静默诊断保留数据但不通知', () => {
+  const request = { action: 'connect', loginMode: 'qrcode' }
+  const before = state('auth', request)
+  const after = state('error', {
+    ...request,
+    failure: { code: 'NETWORK_OFFLINE', stage: 'qr' },
+  })
+  assert.equal(
+    taskFeedback(before, after, { platform: 'dy', visible: true }),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(before, after, { platform: 'bili', visible: false }),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(before, after, { platform: 'bili', visible: true }).kind,
+    'warning',
+  )
+  assert.equal(
+    taskFeedback(
+      before,
+      { ...after, task: { ...after.task, silent: true } },
+      { platform: 'bili', visible: true },
+    ),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(after, after, { platform: 'bili', visible: true }),
+    undefined,
   )
 })

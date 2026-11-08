@@ -3,6 +3,8 @@ import asyncio
 import re
 from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
+from time import perf_counter
+from desktop.login_flow import open_login, SESSION_COOKIES
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
@@ -19,6 +21,7 @@ class DesktopCrawler:
         self.request, self.page, self.emit = request, page, emit
         self.platform = request["platform"]
         self.account = AccountProfile(self.platform)
+        self.xhs_details = {}  # 本次任务已取得的笔记详情，媒体补全后释放
         self.store = ResultStore(self.platform, request["limit"], emit, request.get("comments", False))
         config.PLATFORM = self.platform
         # 评论统一在正文完成后采集，避免原生 detail 路径重复请求
@@ -45,7 +48,14 @@ class DesktopCrawler:
         self.crawler.context_page = self.page
         self.crawler.user_agent = await self.page.evaluate("() => navigator.userAgent")
         self.page.on("response", self.account.observe)
-        await self.page.goto(self.crawler.index_url, wait_until="domcontentloaded", timeout=60000)
+        started = perf_counter()
+        current = urlparse(self.page.url)
+        destination = urlparse(self.crawler.index_url)
+        reusable = (self.request.get('reusePage') and current.scheme == 'https'
+                    and (current.hostname or '').removeprefix('www.') == (destination.hostname or '').removeprefix('www.'))
+        if not reusable:
+            await self.page.goto(self.crawler.index_url, wait_until="domcontentloaded", timeout=15000)
+        self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
 
@@ -54,6 +64,11 @@ class DesktopCrawler:
             cookies = await self.context.cookies(['https://www.weibo.com'])
             if any(cookie['name'] in ('SUB', 'SSOLoginState') and cookie.get('value') for cookie in cookies):
                 await self.page.goto(self.crawler.mobile_index_url, wait_until='domcontentloaded', timeout=30000)
+        # 无登录 Cookie 时直接进入取码，不等待网络接口判断一个已知结果
+        if self.platform in SESSION_COOKIES:
+            cookies = await self.context.cookies(getattr(self.crawler, 'cookie_urls', None))
+            if not any(cookie.get('name') in SESSION_COOKIES[self.platform] and cookie.get('value') for cookie in cookies):
+                return False
         await self.client.update_cookies(self.context)
         if self.platform in ("dy", "tieba"):
             return await self.client.pong(self.context)
@@ -76,31 +91,29 @@ class DesktopCrawler:
                     await asyncio.sleep(1)
 
     async def authenticate(self):
-        if await self.check_login():
+        try:
+            async with asyncio.timeout(5):
+                connected = await self.check_login()
+        except TimeoutError:
+            connected = False
+        if connected:
             await self.publish_account()
             return
-        selectors = {
-            "bili": ".header-avatar-unlogin-entry, .right-entry__outside.go-login-btn .header-login-entry",
-            "dy": "p:text-is('登录')",
-            "xhs": "button:text-is('登录')",
-            "zhihu": "button:text-is('登录'), button:text-is('登录/注册')",
-            "wb": "a:text-is('登录'), button:text-is('登录')",
-            "tieba": ".user-or-login .login-btn:visible, .u_login:visible",
-            "ks": "p:text-is('登录')",
-        }
+        started = perf_counter()
+        if self.request.get('loginMode') == 'qrcode':
+            # DOM 就绪即允许前端取码，与入口准备并行，不等待点击/网络超时串行叠加
+            self.emit("state", status="auth", message="正在获取二维码")
         try:
-            if self.platform == "tieba":
-                # 新首页登录入口已改版；登录框已出现时不重复点击
-                qr = self.page.locator("img.tang-pass-qrcode-img:visible").first
-                if not await qr.is_visible():
-                    await self.page.locator(selectors[self.platform]).first.click(timeout=6000)
-                await qr.wait_for(state="visible", timeout=4000)
-            else:
-                await self.page.locator(selectors[self.platform]).first.click(timeout=6000)
-        except Exception:
-            pass  # 平台已弹出登录框，或由用户在真实页面操作
-        # 先尝试打开站点登录框，再展示平台页面，减少首页过渡
-        self.emit("state", status="auth", message="请在平台窗口扫码登录，完成后会自动继续")
+            await open_login(self.page, self.platform)
+        except TimeoutError:
+            # 内联取码会再次定位入口；显式完整页面模式仍允许用户操作
+            pass
+        except RuntimeError as error:
+            if str(error) != 'VERIFICATION_REQUIRED' or self.request.get('loginMode') == 'qrcode':
+                raise
+        self.emit('timing', stage='login-dialog', milliseconds=round((perf_counter() - started) * 1000))
+        if self.request.get('loginMode') != 'qrcode':
+            self.emit("state", status="auth", message="请在平台窗口扫码登录，完成后会自动继续")
         # 不自动处理验证码；用户在平台窗口完成，登录通过后继续
         async with asyncio.timeout(300):
             while not await self.check_login():
@@ -158,7 +171,9 @@ class DesktopCrawler:
             self.emit('state', status='running', message='正在获取评论')
             collector = CommentCollector(self.platform, self.client, self.store, self.request.get('replies', False))
             failed = False
-            for item in self.store.items.values():
+            for index, item in enumerate(self.store.items.values()):
+                if index:
+                    await asyncio.sleep(1)
                 self.store.comment_state(item, 'running')
                 try:
                     async with asyncio.timeout(60):
@@ -167,7 +182,6 @@ class DesktopCrawler:
                 except Exception:
                     failed = True
                     self.store.comment_state(item, 'error')
-                await asyncio.sleep(1)
             if failed:
                 self.emit('warning', message='部分评论未取全，正文与已有评论已保留')
         if not self.request.get('_defer_enrichment'):
@@ -196,10 +210,24 @@ class DesktopCrawler:
             config.DY_SPECIFIED_ID_LIST = [query]
             await self.crawler.get_specified_awemes()
         elif self.platform == "xhs":
-            config.XHS_SPECIFIED_NOTE_URL_LIST = [query]
-            await self.crawler.get_specified_notes()
+            from media_platform.xhs.help import parse_note_info_from_note_url
+            note = parse_note_info_from_note_url(query)
+            await self.collect_xhs_note(note.note_id, note.xsec_source, note.xsec_token, asyncio.Semaphore(1))
         else:
             await ExtraCollector(self).detail(query)
+
+    async def collect_xhs_note(self, note_id, source, token, semaphore):
+        from store.xhs import update_xhs_note
+        if f'xhs:{note_id}' in self.store.ids:
+            return
+        note = await self.crawler.get_note_detail_async_task(
+            note_id=note_id, xsec_source=source, xsec_token=token, semaphore=semaphore,
+        )
+        if note:
+            await update_xhs_note(note)
+            key = f"xhs:{note.get('note_id')}"
+            if key in self.store.items:
+                self.xhs_details[key] = note
 
     async def save_bilibili(self, video):
         from store.bilibili import update_bilibili_video
@@ -209,6 +237,8 @@ class DesktopCrawler:
         await update_bilibili_video(video)
 
     async def search(self):
+        from desktop.search_options import search_options
+        options = search_options(self.platform, self.request.get('filters'))
         if self.platform not in ('bili', 'dy', 'xhs'):
             await ExtraCollector(self).search()
             return
@@ -218,7 +248,7 @@ class DesktopCrawler:
         search_id = ""
         for page in range(1, 11):
             if self.platform == "bili":
-                response = await self.client.search_video_by_keyword(query, page=page)
+                response = await self.client.search_video_by_keyword(query, page=page, **options)
                 posts = response.get("result") or []
                 for post in posts:
                     item = await self.crawler.get_video_info_task(aid=post.get("aid"), bvid="", semaphore=semaphore)
@@ -228,7 +258,7 @@ class DesktopCrawler:
                         return
             elif self.platform == "dy":
                 from store.douyin import update_douyin_aweme
-                response = await self.client.search_info_by_keyword(query, offset=(page - 1) * 10, search_id=search_id)
+                response = await self.client.search_info_by_keyword(query, offset=(page - 1) * 10, search_id=search_id, **options)
                 posts = response.get("data") or []
                 search_id = response.get("extra", {}).get("logid", "")
                 for post in posts:
@@ -241,20 +271,14 @@ class DesktopCrawler:
                     if len(self.store.ids) >= self.request["limit"]:
                         return
             else:
-                from store.xhs import update_xhs_note
                 from media_platform.xhs.help import get_search_id
                 search_id = search_id or get_search_id()
-                response = await self.client.get_note_by_keyword(query, search_id=search_id, page=page)
+                response = await self.client.get_note_by_keyword(query, search_id=search_id, page=page, **options)
                 posts = response.get("items") or []
                 for post in posts:
                     if post.get("model_type") in ("rec_query", "hot_query"):
                         continue
-                    item = await self.crawler.get_note_detail_async_task(
-                        note_id=post.get("id"), xsec_source=post.get("xsec_source"),
-                        xsec_token=post.get("xsec_token"), semaphore=semaphore,
-                    )
-                    if item:
-                        await update_xhs_note(item)
+                    await self.collect_xhs_note(post.get("id"), post.get("xsec_source"), post.get("xsec_token"), semaphore)
                     if len(self.store.ids) >= self.request["limit"]:
                         return
             if not posts or response.get("has_more") is False or response.get("has_more") == 0:

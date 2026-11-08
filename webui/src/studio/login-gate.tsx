@@ -1,12 +1,11 @@
 import { useTranslation } from 'react-i18next'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Loader2, LogOut, ScanLine, Square, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { IconButton } from '@/components/common/icon-button'
-import { activeStatuses, useStudio } from './store'
-import type { Platform } from './types'
+import { platformBusy, useStudio } from './store'
 import { useStudioRoute } from './route'
 
 // 仅展示账号和处理用户操作；启动会话检查由主进程管理
@@ -18,35 +17,37 @@ export function LoginGate() {
     platform,
     accounts,
     profiles,
-    task,
-    pending,
-    busy: workerBusy,
+    tasks,
+    requests,
+    pending: clearing,
     ready,
     start,
   } = useStudio()
   const account = accounts[platform] || 'unknown'
-  const blocked =
-    workerBusy || pending || activeStatuses.includes(task?.status || '')
+  const task = tasks[platform]
+  const pending = clearing || !!requests[platform]
+  const blocked = useStudio(platformBusy)
   const busy =
     blocked && task?.platform === platform && task.action === 'connect'
   const auth = task?.platform === platform && task.status === 'auth'
   const stopping = task?.platform === platform && task.status === 'stopping'
   const needsFocus = useRef(false)
   const profile = profiles[platform]
-  const [loggingOut, setLoggingOut] = useState<Platform | null>(null)
+  const loggingOut = requests[platform] === 'logout'
 
   useEffect(() => {
     if (account !== 'connected') {
       needsFocus.current = true
     } else if (collecting && !blocked && needsFocus.current) {
-      document.getElementById('query')?.focus()
+      if (!document.querySelector('[role=dialog]'))
+        document.getElementById('query')?.focus()
       needsFocus.current = false
     }
   }, [collecting, account, blocked])
 
   const login = async () => {
     try {
-      if (auth) await window.studio?.showLogin()
+      if (auth) await window.studio?.showLogin(undefined, platform)
       else await start('connect')
     } catch {
       toast.error(t('打开失败，请重试'))
@@ -54,7 +55,7 @@ export function LoginGate() {
   }
   const cancel = async () => {
     try {
-      await window.studio?.cancel()
+      await useStudio.getState().cancelLogin()
     } catch {
       toast.error(t('停止失败，请重试'))
     }
@@ -62,14 +63,12 @@ export function LoginGate() {
 
   const logout = async () => {
     const state = useStudio.getState()
-    if (!window.studio || blocked || state.pending || state.busy || loggingOut)
-      return
+    if (!window.studio || platformBusy(state, platform)) return
     // 主动退出后不立即自动弹扫码，用户可点击重新登录
+    state.setRequest(platform, 'logout')
     state.patch({
-      pending: true,
       attempted: { ...state.attempted, [platform]: true },
     })
-    setLoggingOut(platform)
     try {
       const result = await window.studio.logout(platform)
       if (result.localOnly)
@@ -78,8 +77,7 @@ export function LoginGate() {
     } catch {
       toast.error(t('退出失败，请重试'))
     } finally {
-      setLoggingOut(null)
-      useStudio.getState().patch({ pending: false })
+      useStudio.getState().setRequest(platform)
     }
   }
 
@@ -107,11 +105,11 @@ export function LoginGate() {
         </span>
         <IconButton
           label={t('退出登录')}
-          disabled={!window.studio || blocked || !!loggingOut}
+          disabled={!window.studio || blocked}
           onClick={() => void logout()}
-          aria-busy={loggingOut === platform}
+          aria-busy={loggingOut}
         >
-          {loggingOut === platform ? (
+          {loggingOut ? (
             <Loader2 className='animate-spin motion-reduce:animate-none' />
           ) : (
             <LogOut />

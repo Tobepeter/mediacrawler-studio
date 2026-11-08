@@ -16,10 +16,6 @@ async def execute(request, emit):
             loop.add_signal_handler(sig, task.cancel)
         except (NotImplementedError, RuntimeError):
             pass
-    from playwright.async_api import async_playwright
-    from mediacrawler_cli.browser import options
-    from desktop.crawler import DesktopCrawler
-    from mediacrawler_cli.auth import login, open_login
 
     run_dir = Path(request['run_dir'])
 
@@ -30,10 +26,19 @@ async def execute(request, emit):
 
     beat = asyncio.create_task(heartbeat())
     try:
+        if request['action'] == 'network-check':
+            from desktop.health_network import diagnose_network
+            emit('initialized')
+            return [await diagnose_network(request.get('probe_urls', []), request.get('speed', True))]
         if request['action'] == 'download' and request.get('records'):
             from mediacrawler_cli.download import download_records
             emit('initialized')
             return await download_records(request, request['records'], emit)
+
+        from playwright.async_api import async_playwright
+        from mediacrawler_cli.browser import options
+        from desktop.crawler import DesktopCrawler
+        from mediacrawler_cli.auth import login
         async with async_playwright() as playwright:
             async def launch(headless=True):
                 return await playwright.chromium.launch_persistent_context(
@@ -59,11 +64,12 @@ async def execute(request, emit):
                     outcome = await logout(crawler)
                     await context.clear_cookies()
                     return [outcome]
+                if request['action'] == 'check':
+                    from desktop.health import check_page
+                    emit('initialized')
+                    return [await check_page(crawler.page, request['platform'], request.get('qr_timeout_ms'))]
                 await crawler.setup()
                 emit('initialized')
-                if request['action'] == 'check':
-                    await open_login(crawler.page, request['platform'])
-                    return [{'platform': request['platform'], 'login_entry': True, 'qr_visible': True}]
                 # 可见窗口只用于显式选择的登录，不把整个采集任务变成有头模式
                 browser_login = (request.get('qr') == 'browser' and not request.get('non_interactive')
                                  and request['action'] != 'status' and not await crawler.check_login())

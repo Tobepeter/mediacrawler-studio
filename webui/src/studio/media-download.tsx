@@ -16,27 +16,40 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
-import { useStudio } from './store'
+import { videoQualities } from './media-options'
+import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
 
 // 一个下载入口：整组图片或视频，失败使用全局弹窗说明，关闭详情后仍能收到结果
 export function MediaDownload({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
-  const busy = useStudio((state) => state.busy || state.pending)
+  const busy = useStudio((state) => platformBusy(state, item.platform))
   const [downloading, setDownloading] = useState(false)
+  const qualities = videoQualities(item)
+  const video =
+    item.contentType === 'video' ||
+    item.media?.variants?.some((variant) => variant.kind === 'video')
+  const coverOnly = video && item.images.length === 1
+  const canDownloadVideo =
+    video || !['available', 'not_provided'].includes(item.media?.status || '')
   const setFailure = (downloadFailure: string) =>
     useStudio.getState().patch({ downloadFailure })
-  const download = async (kind: 'images' | 'video') => {
+  const download = async (kind: 'images' | 'video', quality = 'best') => {
     if (!window.studio || busy || downloading) return
     setDownloading(true)
-    useStudio.getState().patch({ pending: true, downloadPending: true })
+    useStudio.getState().setRequest(item.platform, 'download')
     try {
       const result = await window.studio.downloadMedia(
         item.platform,
         item.id,
         kind,
         useStudio.getState().askBeforeDownload,
+        quality,
       )
       if (result.code && result.code !== 'cancelled') {
         const messages: Record<string, string> = {
@@ -76,7 +89,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
       setFailure('下载失败，请检查网络后重试')
     } finally {
       setDownloading(false)
-      useStudio.getState().patch({ pending: false, downloadPending: false })
+      useStudio.getState().setRequest(item.platform)
     }
   }
   return (
@@ -86,7 +99,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
           variant='outline'
           onClick={() =>
             void window.studio
-              ?.cancel()
+              ?.cancel(item.platform)
               .catch(() => toast.error(t('停止失败，请重试')))
           }
         >
@@ -105,13 +118,38 @@ export function MediaDownload({ item }: { item: ContentItem }) {
             {!!item.images.length && (
               <DropdownMenuItem onSelect={() => void download('images')}>
                 <Images />
-                {t('下载全部图片')}
+                {t(coverOnly ? '下载封面' : '下载全部图片')}
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onSelect={() => void download('video')}>
-              <Film />
-              {t('下载视频')}
-            </DropdownMenuItem>
+            {canDownloadVideo &&
+              (qualities.length > 1 ? (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Film />
+                    {t('下载视频')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent className='max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto'>
+                      <DropdownMenuItem onSelect={() => void download('video')}>
+                        {t('自动（推荐）')}
+                      </DropdownMenuItem>
+                      {qualities.map((quality) => (
+                        <DropdownMenuItem
+                          key={quality}
+                          onSelect={() => void download('video', quality)}
+                        >
+                          {quality.toUpperCase()}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+              ) : (
+                <DropdownMenuItem onSelect={() => void download('video')}>
+                  <Film />
+                  {t('下载视频')}
+                </DropdownMenuItem>
+              ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

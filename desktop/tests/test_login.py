@@ -4,9 +4,16 @@ import pytest
 from desktop.crawler import DesktopCrawler
 
 
+@pytest.fixture(autouse=True)
+def login_entry(monkeypatch):
+    async def open_entry(page, platform):
+        await page.locator('entry').first.click()
+    monkeypatch.setattr('desktop.crawler.open_login', open_entry)
+
+
 def runner(events, click):
     page = SimpleNamespace(locator=lambda _: SimpleNamespace(first=SimpleNamespace(click=click)))
-    task = DesktopCrawler({'platform': 'bili', 'action': 'connect', 'mode': 'search', 'query': '', 'limit': 5}, page, lambda kind, **data: events.append(kind))
+    task = DesktopCrawler({'platform': 'bili', 'action': 'connect', 'mode': 'search', 'query': '', 'limit': 5, 'loginMode': 'qrcode'}, page, lambda kind, **data: events.append(kind) if kind != 'timing' else None)
     task.publish_account = AsyncMock(side_effect=lambda: events.append('account'))
     return task
 
@@ -23,6 +30,44 @@ async def test_saved_login_does_not_present_page():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('platform', ['bili', 'ks'])
+async def test_empty_session_skips_network_but_douyin_keeps_storage_check(platform):
+    task = runner([], AsyncMock())
+    task.platform = platform
+    task.crawler = SimpleNamespace(cookie_urls=['https://www.bilibili.com'])
+    task.context = SimpleNamespace(cookies=AsyncMock(return_value=[]))
+    task.client = SimpleNamespace(update_cookies=AsyncMock(), pong=AsyncMock(return_value=True))
+    assert not await task.logged_in()
+    task.client.pong.assert_not_awaited()
+    task.client.update_cookies.assert_not_awaited()
+    task.platform = 'dy'
+    assert await task.logged_in()
+    task.client.pong.assert_awaited_once_with(task.context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('current,reuse,expected_navigation', [
+    ('https://www.bilibili.com/', True, False),
+    ('https://bilibili.com/', True, False),
+    ('data:text/html,studio-bili', True, True),
+    ('https://another.example/', True, True),
+    ('https://www.bilibili.com/', False, True),
+])
+async def test_setup_only_reuses_matching_desktop_page(monkeypatch, current, reuse, expected_navigation):
+    task = runner([], AsyncMock())
+    task.request['reusePage'] = reuse
+    task.page = SimpleNamespace(
+        context=SimpleNamespace(new_cdp_session=AsyncMock()),
+        url=current, evaluate=AsyncMock(return_value='test'),
+        on=lambda *_: None, goto=AsyncMock(),
+    )
+    crawler = SimpleNamespace(index_url='https://www.bilibili.com', create_client=AsyncMock())
+    monkeypatch.setattr('desktop.crawler.create_native', lambda *_: (crawler, 'create_client', 'client'))
+    await task.setup()
+    assert bool(task.page.goto.await_count) == expected_navigation
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('failed', [False, True])
 async def test_login_entry_prepared_before_presentation(failed):
     events = []
@@ -33,7 +78,7 @@ async def test_login_entry_prepared_before_presentation(failed):
     task = runner(events, click)
     task.logged_in = AsyncMock(side_effect=[False, True])
     await task.authenticate()
-    assert events == ['click', 'state', 'account']
+    assert events == ['state', 'click', 'account']
 
 
 @pytest.mark.asyncio
@@ -84,23 +129,14 @@ async def test_cancel_during_navigation_retry_is_not_swallowed(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('already_open', [False, True])
-async def test_tieba_waits_for_login_panel_before_presentation(already_open):
+async def test_tieba_reuses_visible_qr_without_clicking_again(already_open):
+    from desktop.login_flow import open_login
     events = []
-    entry = SimpleNamespace(click=AsyncMock(side_effect=lambda **_: events.append('click')))
-    qr = SimpleNamespace(
-        is_visible=AsyncMock(return_value=already_open),
-        wait_for=AsyncMock(side_effect=lambda **_: events.append('ready')),
-    )
-    page = SimpleNamespace(locator=lambda selector: SimpleNamespace(
-        first=qr if 'qrcode' in selector else entry,
-    ))
-    task = DesktopCrawler({'platform': 'tieba', 'action': 'connect', 'mode': 'search', 'query': '', 'limit': 5}, page, lambda kind, **_: events.append(kind))
-    task.logged_in = AsyncMock(side_effect=[False, True])
-    task.publish_account = AsyncMock(side_effect=lambda: events.append('account'))
-    await task.authenticate()
-    assert events == ([] if already_open else ['click']) + ['ready', 'state', 'account']
-    if already_open:
-        entry.click.assert_not_awaited()
+    entry = SimpleNamespace(is_visible=AsyncMock(return_value=True), evaluate=AsyncMock(side_effect=lambda *a, **kw: events.append('click')))
+    qr = SimpleNamespace(is_visible=AsyncMock(side_effect=[already_open, True]))
+    page = SimpleNamespace(locator=lambda selector: SimpleNamespace(filter=lambda **_: SimpleNamespace(first=qr if 'qrcode' in selector else entry)))
+    assert await open_login(page, 'tieba') is qr
+    assert events == ([] if already_open else ['click'])
 
 
 @pytest.mark.asyncio

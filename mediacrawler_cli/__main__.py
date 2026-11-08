@@ -7,12 +7,17 @@ from typing import Optional
 import typer
 from mediacrawler_cli.runtime import CLIError, run, recover
 from mediacrawler_cli.state import PLATFORMS
+from desktop.health import POLICY
 
 app = typer.Typer(help='独立采集 CLI，结果输出 stdout，登录提示输出 stderr', no_args_is_help=True)
 auth = typer.Typer(no_args_is_help=True)
 session = typer.Typer(no_args_is_help=True)
 app.add_typer(auth, name='auth')
 app.add_typer(session, name='session')
+
+
+def profile_busy_message(platform, profile):
+    return f'{platform}/{profile} 正在使用中，可稍后重试或用 --profile 选择其他配置'
 
 
 def invoke(action, platform, profile='default', data_dir=None, **options):
@@ -26,11 +31,15 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
     if request['qr'] not in ('terminal', 'image', 'browser') or request['format'] not in ('json', 'jsonl'):
         raise typer.BadParameter('login-mode 必须是 terminal/image/browser；format 必须是 json/jsonl')
     try:
-        run(request)
+        return run(request)
     except CLIError as error:
-        messages = {'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        if action == 'check' and error.code != 'CHECK_FAILED':
+            typer.echo(json.dumps({'type': 'platform', 'platform': platform, 'status': 'failed', 'policy': {**POLICY, 'qr_timeout_ms': options.get('qr_timeout_ms', POLICY['qr_timeout_ms'])},
+                                  'error': {'code': 'TIMEOUT' if error.code == 'TASK_TIMEOUT' else 'UNKNOWN',
+                                            'stage': 'worker', 'cause': error.code, 'retryable': True}}))
+        messages = {'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
         typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
-                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR'), 'run_id': error.run_id}), err=True)
+                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR'), 'run_id': error.run_id}, ensure_ascii=False), err=True)
         raise typer.Exit({'AUTH_REQUIRED': 3, 'PROFILE_BUSY': 4, 'TASK_TIMEOUT': 6, 'CANCELLED': 130}.get(error.code, 5))
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
@@ -180,7 +189,10 @@ def session_recover(platform: str = typer.Option(...), profile: str = 'default',
         recover(data_dir, platform, profile)
         typer.echo(json.dumps({'recovered': True}))
     except (CLIError, RuntimeError) as error:
-        typer.echo(json.dumps({'code': str(error)}), err=True)
+        detail = {'code': str(error)}
+        if str(error) == 'PROFILE_BUSY':
+            detail.update(message=profile_busy_message(platform, profile), retryable=True)
+        typer.echo(json.dumps(detail, ensure_ascii=False), err=True)
         raise typer.Exit(4)
 
 
@@ -195,14 +207,44 @@ def clean_command(platform: Optional[str] = None, profile: Optional[str] = None,
 
 
 @app.command()
-def check(platform: Optional[str] = None, all: bool = False):
+def check(platform: Optional[str] = typer.Option(None, help='检查单个平台'),
+          all: bool = typer.Option(False, help='检查全部平台，网络只测一次'),
+          network: bool = typer.Option(True, help='DNS、HTTP 与本机网络诊断'),
+          speed: bool = typer.Option(True, help='有界参考测速；--no-speed 只检查连通性'),
+          qr_timeout: int = typer.Option(POLICY['qr_timeout_ms'] // 1000, min=1, max=120, help='取码总预算（秒），不含浏览器启动与网络诊断'),
+          defaults: bool = typer.Option(False, help='输出共用超时、失败阈值和错误枚举，不访问网络')):
+    """网络 → 平台页面 → 实际提取二维码，输出 JSONL 诊断报告
+
+    check --platform bili / check --all / check --defaults
+
+    每个对象有 type、status、policy；失败含 error.code/stage/retryable
+    网络报告附 DNS/HTTP、参考下载均值/中位数和节点样本，不代表宽带套餐速度
+    测速失败仍继续检查平台；代理路径不同会单独标识，不因 DNS 失败跳过浏览器
+    临时独立 profile、无头静音、不扫码、不修改现有登录态
+    退出码：0 平台检查通过，5 至少一项平台检查失败（包括进程超时）
+    """
+    from desktop.health import POLICY, ERRORS, URLS
+    if defaults:
+        typer.echo(json.dumps({'policy': POLICY, 'error_codes': ERRORS}))
+        return
     if bool(platform) == all:
         raise typer.BadParameter('请选择 --platform 或 --all')
+    if platform and platform not in PLATFORMS:
+        raise typer.BadParameter('平台：' + ', '.join(PLATFORMS))
+    targets = list(PLATFORMS) if all else [platform]
     failed = False
-    for selected in PLATFORMS if all else (platform,):
-        with tempfile.TemporaryDirectory(prefix='mediacrawler-check-') as directory:
+    with tempfile.TemporaryDirectory(prefix='mediacrawler-check-') as directory:
+        if network:
             try:
-                invoke('check', selected, data_dir=directory, timeout=90)
+                invoke('network-check', targets[0], data_dir=directory, timeout=40,
+                       probe_urls=[URLS[p] for p in targets], speed=speed)
+            except typer.Exit:
+                typer.echo(json.dumps({'type': 'network', 'status': 'failed',
+                                      'error': {'code': 'UNKNOWN', 'stage': 'network'}, 'policy': POLICY}))
+        for selected in targets:
+            try:
+                invoke('check', selected, data_dir=directory, timeout=qr_timeout + 45,
+                       qr_timeout_ms=qr_timeout * 1000)
             except typer.Exit:
                 failed = True
     if failed:
@@ -211,6 +253,7 @@ def check(platform: Optional[str] = None, all: bool = False):
 
 @app.command()
 def doctor():
+    """检查本机 Chromium、Node、Python 与平台模块；网络和二维码请用 check"""
     from playwright.sync_api import sync_playwright
     from mediacrawler_cli.browser import options
     import shutil

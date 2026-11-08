@@ -126,9 +126,11 @@ async def fetch(runner, record):
         duration = number((raw.get('video') or {}).get('duration'))
         return raw, duration / 1000 if duration is not None else None
     if platform == 'xhs':
-        params = parse_qs(urlparse(record['url']).query)
-        raw = await runner.crawler.get_note_detail_async_task(identity, params.get('xsec_source', ['pc_search'])[0],
-                                                            params.get('xsec_token', [''])[0], asyncio.Semaphore(1))
+        raw = runner.xhs_details.pop(record['id'], None)
+        if raw is None:
+            params = parse_qs(urlparse(record['url']).query)
+            raw = await runner.crawler.get_note_detail_async_task(identity, params.get('xsec_source', ['pc_search'])[0],
+                                                                 params.get('xsec_token', [''])[0], asyncio.Semaphore(1))
         video = (raw or {}).get('video') or {}
         duration = ((video.get('media') or {}).get('video') or {}).get('duration')
         if duration is None:

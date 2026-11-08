@@ -36,6 +36,8 @@ test('已有历史结果时主动扫码仍可展示，登录完成后恢复结�
     body = body.slice(0, node.pos) + body.slice(node.end)
   const state = {
     platform: 'bili',
+    tasks: {},
+    views: { bili: { historyId: '' } },
     accounts: { bili: 'expired' },
     pages: { bili: { id: 'history' } },
     loginView: { platform: 'bili', mode: 'qrcode', preparing: true },
@@ -82,6 +84,17 @@ test('已有历史结果时主动扫码仍可展示，登录完成后恢复结�
     const html = renderToStaticMarkup(React.createElement(App))
     assert.doesNotMatch(html, /data-component="LoginPanel"/)
     assert.match(html, /class="contents"><div data-component="Results"/)
+    // 主动打开本地历史无需登录；返回扫码后仍保留结果组件
+    state.accounts.bili = 'expired'
+    state.logins = { bili: { status: 'error' } }
+    state.views.bili.historyId = 'history'
+    const offline = renderToStaticMarkup(React.createElement(App))
+    assert.doesNotMatch(offline, /data-component="LoginPanel"/)
+    assert.match(offline, /class="contents"><div data-component="Results"/)
+    state.views.bili.historyId = ''
+    const login = renderToStaticMarkup(React.createElement(App))
+    assert.match(login, /data-component="LoginPanel"/)
+    assert.match(login, /class="hidden"><div data-component="Results"/)
   } finally {
     delete globalThis.window
     delete globalThis.appFixture

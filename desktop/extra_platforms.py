@@ -74,6 +74,8 @@ class ExtraCollector:
         await self.save(item)
 
     async def search(self):
+        from desktop.search_options import search_options
+        options = search_options(self.platform, self.runner.request.get('filters'))
         query = self.runner.request['query']
         if self.platform == 'zhihu':
             # 原生搜索依赖搜索页生成的 Cookie，首页会话不足以发起查询
@@ -85,13 +87,13 @@ class ExtraCollector:
         for page in range(1, 11):
             more = True
             if self.platform == 'zhihu':
-                rows = await self.client.get_note_by_keyword(query, page=page)
+                rows = await self.client.get_note_by_keyword(query, page=page, **options)
             elif self.platform == 'wb':
                 from media_platform.weibo.help import filter_search_result_card
-                response = await self.client.get_note_by_keyword(query, page=page)
+                response = await self.client.get_note_by_keyword(query, page=page, **options)
                 rows = filter_search_result_card(response.get('cards') or [])
             elif self.platform == 'tieba':
-                rows = await self.client.get_notes_by_keyword(query, page=page, page_size=20)
+                rows = await self.client.get_notes_by_keyword(query, page=page, page_size=20, **options)
             else:
                 response = await self.client.search_info_by_keyword_v2(query, pcursor=str(page), search_session_id=session)
                 if response.get('result') != 1:

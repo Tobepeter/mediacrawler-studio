@@ -1,16 +1,24 @@
-import type { StudioState } from './types'
+import type { Platform, StudioState, StudioTask, ContentItem } from './types'
+
+type TaskSnapshot = Pick<StudioState, 'accounts'> & {
+  task?: StudioTask
+  results: ContentItem[]
+}
 
 // 只响应同一任务的状态变化；快照、历史恢复和重复事件保持安静
 export function taskFeedback(
-  previous: StudioState | undefined,
-  next: StudioState,
+  previous: TaskSnapshot | undefined,
+  next: TaskSnapshot,
+  foreground?: { platform: Platform; visible: boolean },
 ) {
   const before = previous?.task
   const task = next.task
   if (
     !before ||
     !task ||
-    (task.silent && task.status !== 'auth' && before.status !== 'auth') ||
+    task.silent ||
+    (foreground &&
+      (!foreground.visible || foreground.platform !== task.platform)) ||
     before.startedAt !== task.startedAt ||
     before.platform !== task.platform ||
     before.action !== task.action
@@ -24,10 +32,32 @@ export function taskFeedback(
     task.status === 'completed' &&
     task.warning &&
     task.warning !== before.warning
-  if (!wasActive && !newWarning) return
+  const diagnosedStop =
+    before.status === 'cancelled' && task.status === 'error' && !!task.failure
+  if (!wasActive && !newWarning && !diagnosedStop) return
   const id = `task-${task.platform}-${task.startedAt}`
   const count = next.results.length
   if (task.silent && task.status === 'error') return
+  if (task.status === 'error' && task.failure) {
+    const messages: Record<string, string> = {
+      NETWORK_OFFLINE: '网络已断开，请检查网络连接',
+      DNS_FAILED: '暂时无法解析平台地址，请检查网络',
+      CONNECTION_FAILED: '暂时无法连接平台，请稍后重试',
+      HTTP_ERROR: '平台暂时无法正常响应，请稍后重试',
+      ACCESS_RESTRICTED: '平台暂时限制访问，请稍后重试',
+      TLS_FAILED: '平台安全连接失败，请检查网络设置',
+      VERIFICATION_REQUIRED: '平台需要额外验证，请稍后重试或反馈问题',
+    }
+    const message = messages[task.failure.code]
+    if (message) return { id, kind: 'warning' as const, message }
+  }
+  // 内联二维码已就地显示重试入口，后台失败不再叠加登录失败 toast
+  if (
+    task.action === 'connect' &&
+    task.loginMode === 'qrcode' &&
+    task.status === 'error'
+  )
+    return
   if (task.status === 'error')
     return {
       id,

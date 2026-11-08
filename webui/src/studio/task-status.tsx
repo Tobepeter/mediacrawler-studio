@@ -24,7 +24,10 @@ export function TaskStatus() {
   const { error } = useView()
   const results = usePage()?.results || []
   const mode = useStudio((state) => state.mode)
-  const downloadPending = useStudio((state) => state.downloadPending)
+  const platform = useStudio((state) => state.platform)
+  const downloadPending = useStudio((state) =>
+    ['video', 'images'].includes(state.working[platform] || ''),
+  )
   const [now, setNow] = useState(Date.now())
   const active = activeStatuses.includes(task?.status || '')
   useEffect(() => {
@@ -54,7 +57,7 @@ export function TaskStatus() {
   const detail = error || (failed ? task?.message : '')
   const showLogin = async () => {
     try {
-      await window.studio?.showLogin()
+      await window.studio?.showLogin(undefined, platform)
     } catch {
       toast.error(t('打开失败，请重试'))
     }
@@ -71,7 +74,7 @@ export function TaskStatus() {
           label={t('取消下载')}
           onClick={() =>
             void window.studio
-              ?.cancel()
+              ?.cancel(platform)
               .catch(() => toast.error(t('停止失败，请重试')))
           }
         >

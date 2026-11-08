@@ -66,7 +66,7 @@ npm run test:cli
 npm run test:python
 ```
 
-线上 check 使用临时未登录 profile，串行检查首页登录入口和可见二维码，不扫码、不修改已有账号。失败表示当前环境未通过，可能是页面改版、风控或网络，需要人工复核，不直接判定为网站改版
+线上 check 使用临时未登录 profile，串行检查首页登录入口和实际二维码 PNG 提取，不扫码、不修改已有账号。失败表示当前环境未通过，可能是页面改版、风控或网络，需要人工复核，不直接判定为网站改版
 
 离线测试覆盖参数、持久化、锁、故障回收、部分输出、二维码编码，以及本地模拟登录入口。浏览器测试需要先安装 Chromium，不访问平台
 
@@ -224,3 +224,27 @@ mediacrawler collect --platform xhs --query 桌面整理 --login-mode image
 ```
 
 登录方式只决定需要登录时如何展示扫码，不决定采集是否有界面。图片模式仅调用系统预览显示 PNG，不显示浏览器；浏览器模式不再额外打开图片。`--non-interactive` 优先，登录态缺失直接报错，不展示任何扫码界面。后台加载失败不会自动改为可见浏览器
+
+## 登录巡检与网络诊断
+
+```sh
+mediacrawler check --help
+mediacrawler check --defaults
+mediacrawler check --platform bili
+mediacrawler check --all --no-speed
+mediacrawler check --platform dy --no-network --qr-timeout 20
+```
+
+`--help` 按命令分流；`auth --help`、`collect --help`、`download --help`、`check --help` 和 `doctor --help` 分别说明各自功能
+
+`check` 默认先输出一条 `type=network` 的 JSONL，再按平台输出 `type=platform` 报告；`--all` 只执行一次网络诊断。网络/测速失败不阻断平台检查，平台失败后继续后续平台。退出码 0 表示所有平台取图检查通过，5 表示至少一个平台失败；网络结果需要读取自己的 status，不以总体退出码代替。stderr 保留运行错误，stdout 保留结构化报告
+
+网络报告包括本机非回环活动接口、IPv4 路由可用性、参考网站和目标平台 DNS/HTTP 状态、耗时及参考下载速度。活动接口不等于互联网可达；收到 HTTP 响应只证明对应目标可达，403/429 仍单独返回访问限制。DNS 使用系统解析器，HTTP 使用 Python HTTPX 和环境代理，平台页面使用浏览器路径，各自明确标识，不能将其中一个的失败直接推断为其他路径也失败
+
+测速只作参考：默认尝试南京大学公开 CLI 节点配置与 Cloudflare 下载节点，各节点独立采样，保留成功数、均值、中位数和失败原因。南大 HTTPS 配置不可用时明确记录，不降级跳过证书检查；仅一个可用样本标记 limited。当前不是覆盖全国的测速服务，也不代表国内运营商宽带极限。测速预算 10 秒 / 20 MiB，网络阶段总预算 20 秒；样本太少返回 null，不把不可用当作 0 Mbps。`--no-speed` 禁用带宽采样，`--no-network` 跳过整个主动网络诊断
+
+平台检查使用临时独立 profile，无头、静音，不扫码，不修改现有登录态。检查流程为页面导航 → 登录入口 → 验证码检测 → 二维码实际 PNG 提取，不只检查元素出现。报告不输出二维码、Cookie、请求凭据和页面正文。`verification.status` 为 detected / not_detected / unknown，not_detected 不保证没有其他未适配的验证方式
+
+`error` 包含 code、stage、retryable，可附 status_code、timed_out 或 worker cause。枚举以 `check --defaults` 为准，包括 NETWORK_OFFLINE、DNS_FAILED、CONNECTION_FAILED、TLS_FAILED、HTTP_ERROR、ACCESS_RESTRICTED、VERIFICATION_REQUIRED、LOGIN_ENTRY_NOT_FOUND、QR_NOT_FOUND、QR_IMAGE_FAILED、TIMEOUT、UNKNOWN。失败是观察结果，不直接宣判平台改版
+
+共用策略来自 `desktop/health-policy.json`，`check --defaults` 无网络输出这些配置与枚举。取码默认 30 秒，导航上限 15 秒；浏览器启动/进程预算另计。`--qr-timeout` 仅覆盖本次 CLI 检查，报告 policy 返回实际值，不能当作等待用户扫码的超时。`doctor` 仍只负责本机运行环境检查

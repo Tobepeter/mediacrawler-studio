@@ -28,7 +28,8 @@ async def main(request):
     from playwright.async_api import async_playwright
     async with async_playwright() as playwright:
         async with asyncio.timeout(20):
-            browser = await playwright.chromium.connect_over_cdp(request['endpoint'], timeout=15000)
+            # 下载连接同样不能改写 Electron 主界面的系统主题
+            browser = await playwright.chromium.connect_over_cdp(request['endpoint'], timeout=15000, no_defaults=True)
         for context in browser.contexts:
             for page in context.pages:
                 session = await context.new_cdp_session(page)
@@ -52,6 +53,6 @@ if __name__ == '__main__':
     except BaseException as error:
         if not isinstance(error, (asyncio.CancelledError, KeyboardInterrupt)):
             emit('diagnostic', detail=exception_detail(error))
-        code = 'cancelled' if isinstance(error, (asyncio.CancelledError, KeyboardInterrupt)) else 'disk' if isinstance(error, OSError) else str(error) if isinstance(error, RuntimeError) and str(error) in ('login', 'unsupported', 'expired', 'unavailable') else 'network'
+        code = 'cancelled' if isinstance(error, (asyncio.CancelledError, KeyboardInterrupt)) else 'disk' if isinstance(error, OSError) else str(error) if isinstance(error, RuntimeError) and str(error) in ('login', 'unsupported', 'expired', 'unavailable', 'quality_unavailable', 'audio_unavailable', 'ffmpeg_required', 'hls_unsupported', 'hls_failed') else 'network'
         emit('download-error', code=code)
         sys.exit(1)

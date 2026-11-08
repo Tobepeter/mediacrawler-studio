@@ -4,13 +4,13 @@ import { Loader2, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
-import { useStudio } from './store'
+import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
 
 // 播放地址只在当前详情内存中保留，切换封面或卸载即停止请求和播放
 export function DouyinMedia({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
-  const busy = useStudio((state) => state.busy || state.pending)
+  const busy = useStudio((state) => platformBusy(state, item.platform))
   const [mode, setMode] = useState('video')
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'playing' | 'error'
@@ -35,7 +35,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
   const load = async (refresh = false) => {
     const bridge = window.studio
     if (!bridge || request.current) return
-    if (useStudio.getState().busy || useStudio.getState().pending) {
+    if (platformBusy(useStudio.getState(), item.platform)) {
       setError('请先结束当前任务')
       setStatus('error')
       return
@@ -122,7 +122,6 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
                 className='absolute inset-0 size-full object-contain'
                 controls
                 autoPlay
-                muted
                 playsInline
                 preload='metadata'
                 controlsList='nodownload'

@@ -23,7 +23,9 @@ def build(target, clean=False):
             '--specpath', 'build', '--paths', str(ROOT), '--add-binary', f'{Path(node).resolve()}:bin',
             '--add-data', f'{ROOT / "libs"}:libs',
             '--add-data', f'{ROOT / "media_platform/kuaishou/graphql"}:media_platform/kuaishou/graphql',
-            '--add-data', f'{ROOT / "LICENSE"}:.']
+            '--add-data', f'{ROOT / "LICENSE"}:.',
+            '--add-data', f'{ROOT / "desktop/health-policy.json"}:desktop',
+            '--add-data', f'{ROOT / "desktop/search-options.json"}:desktop']
     modules = ['desktop', 'media_platform', 'store', 'config', 'model', 'tools',
                'database', 'proxy', 'cache', 'base', 'constant']
     if target == 'cli':

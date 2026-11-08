@@ -1,3 +1,24 @@
+import searchOptions from './search-options.json' with { type: 'json' }
+
+export function validateFilters(platform, filters = {}) {
+  const fields = searchOptions[platform]
+  if (
+    !fields ||
+    !filters ||
+    typeof filters !== 'object' ||
+    Array.isArray(filters)
+  )
+    throw new Error('筛选条件无效')
+  for (const [key, value] of Object.entries(filters)) {
+    if (
+      !Object.hasOwn(fields, key) ||
+      !fields[key].options.some((item) => item.value === value)
+    )
+      throw new Error('筛选条件无效')
+  }
+  return { ...filters }
+}
+
 export const platforms = {
   bili: {
     name: 'B站',
@@ -90,6 +111,8 @@ export function validateRequest(value) {
     silent: value.action === 'connect' && value.silent === true,
     comments: value.comments === true,
     replies: value.comments === true && value.replies === true,
+    filters:
+      mode === 'search' ? validateFilters(value.platform, value.filters) : {},
     platform: value.platform,
     action: value.action,
     mode,

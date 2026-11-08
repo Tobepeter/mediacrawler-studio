@@ -1,3 +1,6 @@
+import { loginFeedback } from './login-feedback'
+import { recordLoginDuration } from './login-estimate'
+import { recordLoginOutcome } from './login-health'
 import { t, translateMessage } from '@/i18n/studio'
 import { create } from 'zustand'
 import { toast } from 'sonner'
@@ -34,8 +37,9 @@ const initialForm = (platform: Platform): PlatformForm => ({
   limit: 5,
   comments: false,
   replies: false,
+  filters: {},
 })
-const initialView = () => ({ error: '' })
+const initialView = () => ({ error: '', historyId: '' })
 const downloadPromptKey = 'studio-ask-before-download'
 const readDownloadPrompt = () => {
   try {
@@ -53,7 +57,11 @@ interface StudioStore extends StudioState {
   ready: boolean
   attempted: Partial<Record<Platform, boolean>>
   pending: boolean
-  downloadPending: boolean
+  requests: Partial<Record<Platform, 'start' | 'logout' | 'download'>>
+  setRequest: (
+    platform: Platform,
+    kind?: 'start' | 'logout' | 'download',
+  ) => void
   downloadFailure: string
   loginMode: LoginMode
   setLoginMode: (value: LoginMode) => boolean
@@ -69,10 +77,25 @@ interface StudioStore extends StudioState {
   ) => void
   receive: (state: StudioState) => void
   restore: (id: string) => Promise<void>
+  clearResults: () => Promise<void>
+  cancelLogin: () => Promise<void>
   start: (action?: 'collect' | 'connect', silent?: boolean) => Promise<void>
 }
 
-// 页面输入、错误独立；正在执行的任务仍全局唯一
+export function platformBusy(state: StudioStore, platform = state.platform) {
+  return (
+    state.pending || !!state.requests[platform] || !!state.working[platform]
+  )
+}
+
+function taskSnapshot(state: StudioState, platform: Platform) {
+  return {
+    accounts: state.accounts,
+    task: state.tasks[platform],
+    results: state.pages[platform]?.results || [],
+  }
+}
+
 export const useStudio = create<StudioStore>((set, get) => ({
   mode: window.studio ? 'desktop' : 'preview',
   accounts: {},
@@ -80,8 +103,8 @@ export const useStudio = create<StudioStore>((set, get) => ({
   busy: false,
   ready: false,
   attempted: {},
-  task: null,
-  results: [],
+  tasks: {},
+  working: {},
   pages: {},
   history: [],
   drafts: {},
@@ -106,7 +129,14 @@ export const useStudio = create<StudioStore>((set, get) => ({
   },
   edited: {},
   pending: false,
-  downloadPending: false,
+  requests: {},
+  setRequest: (platform, kind) =>
+    set((state) => {
+      const requests = { ...state.requests }
+      if (kind) requests[platform] = kind
+      else delete requests[platform]
+      return { requests }
+    }),
   downloadFailure: '',
   loginMode: 'qrcode',
   setLoginMode: (value) => {
@@ -134,7 +164,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
   patch: (value) => set(value),
   switchPlatform: (platform) => {
     if (platform === get().platform) return
-    // 每次进入平台重新允许一次自动取码；同一页内失败不无限重试
+    // 页面切换保留平台结果；后台任务由 SessionManager 独立维护
     set((state) => ({
       platform,
       selected: null,
@@ -163,7 +193,69 @@ export const useStudio = create<StudioStore>((set, get) => ({
   },
   receive: (state) => {
     const previous = get()
-    const feedback = taskFeedback(previous.ready ? previous : undefined, state)
+    const feedback = taskFeedback(
+      previous.ready ? taskSnapshot(previous, previous.platform) : undefined,
+      taskSnapshot(state, previous.platform),
+      {
+        platform: previous.platform,
+        visible:
+          document.visibilityState === 'visible' &&
+          window.location.hash !== '#/history',
+      },
+    )
+    const loginNotice = loginFeedback(
+      previous.ready ? previous : undefined,
+      state,
+      {
+        platform: previous.platform,
+        visible:
+          document.visibilityState === 'visible' &&
+          window.location.hash !== '#/history',
+      },
+    )
+    for (const platform of Object.keys(state.logins || {}) as Platform[]) {
+      const login = state.logins?.[platform]
+      const before = previous.logins?.[platform]
+      if (
+        !previous.ready ||
+        !login?.id ||
+        login.id !== before?.id ||
+        login.status === before.status
+      )
+        continue
+      if (login.status === 'ready' || login.status === 'connected') {
+        recordLoginOutcome(platform, login.id, 'success')
+        if (login.status === 'ready' && login.startedAt)
+          recordLoginDuration(platform, Date.now() - login.startedAt)
+      } else if (login.status === 'error')
+        recordLoginOutcome(
+          platform,
+          login.id,
+          login.failure?.code === 'TIMEOUT' ? 'timeout' : 'failed',
+        )
+    }
+    const task = state.tasks[previous.platform]
+    const beforeTask = previous.tasks[previous.platform]
+    if (
+      previous.ready &&
+      task?.action === 'connect' &&
+      beforeTask?.startedAt === task.startedAt &&
+      beforeTask?.platform === task.platform
+    ) {
+      const id = `${task.platform}:${task.startedAt}`
+      if (state.accounts[task.platform] === 'connected')
+        recordLoginOutcome(task.platform, id, 'success')
+      else if (task.status === 'error' && beforeTask.status !== 'error') {
+        recordLoginOutcome(
+          task.platform,
+          id,
+          task.failure?.code === 'TIMEOUT' ||
+            task.message === '获取二维码超时，请重试'
+            ? 'timeout'
+            : 'failed',
+        )
+      }
+    }
     set((current) => ({
       ...state,
       ready: true,
@@ -181,6 +273,8 @@ export const useStudio = create<StudioStore>((set, get) => ({
         ]),
       ) as Record<Platform, PlatformForm>,
     }))
+    if (loginNotice)
+      toast[loginNotice.kind](t(loginNotice.message), { id: loginNotice.id })
     if (feedback)
       toast[feedback.kind](t(feedback.message, { count: feedback.count }), {
         id: feedback.id,
@@ -199,18 +293,50 @@ export const useStudio = create<StudioStore>((set, get) => ({
       limit: record.task.limit,
       comments: record.task.comments === true,
       replies: record.task.replies === true,
+      filters: record.task.filters || {},
     })
-    get().updateView({ error: '' }, record.task.platform)
+    get().updateView({ error: '', historyId: record.id }, record.task.platform)
     set({ selected: null })
   },
+  clearResults: async () => {
+    const { platform } = get()
+    if (platformBusy(get(), platform)) return
+    const id = get().pages[platform]?.id
+    if (window.studio) await window.studio.clearResults(platform)
+    set((state) => {
+      if (state.pages[platform] && state.pages[platform]?.id !== id) return {}
+      const pages = { ...state.pages }
+      delete pages[platform]
+      return {
+        pages,
+        views: { ...state.views, [platform]: initialView() },
+        selected: state.selected?.platform === platform ? null : state.selected,
+      }
+    })
+  },
+  cancelLogin: async () => {
+    const { platform, tasks } = get()
+    const task = tasks[platform]
+    if (task?.platform === platform && activeStatuses.includes(task.status))
+      await window.studio?.cancel(platform)
+    else if (window.studio?.stopLogin) await window.studio.stopLogin(platform)
+    else await window.studio?.cancel(platform)
+  },
   start: async (action = 'collect', silent = false) => {
-    if (
-      get().pending ||
-      get().busy ||
-      activeStatuses.includes(get().task?.status || '')
-    )
+    if (action === 'connect' && window.studio?.retryLogin) {
+      const platform = get().platform
+      get().updateView({ historyId: '' }, platform)
+      if (
+        ['error', 'expired', 'paused'].includes(
+          get().logins?.[platform]?.status || '',
+        )
+      )
+        await window.studio.retryLogin(platform)
+      else await window.studio.ensureLogin?.(platform)
       return
+    }
     const platform = get().platform
+    if (platformBusy(get(), platform)) return
     if (action === 'collect' && get().accounts[platform] !== 'connected') {
       get().updateView(
         {
@@ -229,13 +355,13 @@ export const useStudio = create<StudioStore>((set, get) => ({
       )
       return
     }
+    get().setRequest(platform, 'start')
     set({
-      pending: true,
       selected: null,
       attempted: { ...get().attempted, [platform]: true },
     })
-    get().updateView({ error: '' }, platform)
-    const taskBefore = get().task
+    get().updateView({ error: '', historyId: '' }, platform)
+    const taskBefore = get().tasks[platform]
     try {
       await window.studio.start({
         ...get().forms[platform],
@@ -258,14 +384,18 @@ export const useStudio = create<StudioStore>((set, get) => ({
         platform,
       )
       // 主进程已发布失败状态时，由 receive 通知，避免再弹一次
-      if (get().task === taskBefore || get().task?.status !== 'error') {
+      if (
+        get().platform === platform &&
+        (get().tasks[platform] === taskBefore ||
+          get().tasks[platform]?.status !== 'error')
+      ) {
         toast.error(t('无法开始'), {
           id: 'task-start',
           description: translateMessage(get().views[platform].error),
         })
       }
     } finally {
-      set({ pending: false })
+      get().setRequest(platform)
     }
   },
 }))
@@ -275,7 +405,7 @@ export const usePage = () => useStudio((state) => state.pages[state.platform])
 export const useView = () => useStudio((state) => state.views[state.platform])
 export const useViewTask = () =>
   useStudio((state) => {
-    const task = state.task
+    const task = state.tasks[state.platform]
     if (
       task?.platform === state.platform &&
       (activeStatuses.includes(task.status) ||

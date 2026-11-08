@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, screen } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  screen,
+  net,
+  WebContentsView,
+} from 'electron'
 import { createServer } from 'node:net'
 import { writeFile, mkdir, mkdtemp, readdir, rmdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -10,6 +19,7 @@ import { isPlatformUrl, serializeResults } from './contracts.mjs'
 import { StudioLogger, attachRendererLogs } from './logging/logger.mjs'
 import { appIcon } from './app-icon.mjs'
 import { installPlaybackHeaders } from './playback-headers.mjs'
+import { HealthCheck } from './health-check.mjs'
 import { CliInstall } from './cli-install.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -58,6 +68,7 @@ app
     const windows = new PlatformWindows()
     let mainWindow
     const service = new StudioService({
+      online: () => net.isOnline(),
       // 子进程 cwd 必须是真实目录，不能使用打包后的 app.asar
       root: app.isPackaged ? app.getPath('userData') : root,
       logger,
@@ -70,11 +81,24 @@ app
       },
     })
     windows.onChange = () => service.publish()
-    windows.onDismiss = () => {
-      void service.cancel()
+    windows.onDismiss = (platform) => {
+      void service.cancel(platform)
     }
     await service.init()
     service.sessions = new SessionManager(service)
+    const health = new HealthCheck(
+      service,
+      () =>
+        new WebContentsView({
+          webPreferences: {
+            partition: 'studio-health',
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            backgroundThrottling: false,
+          },
+        }),
+    )
 
     function handle(channel, action) {
       ipcMain.handle(`studio:${channel}`, async (event, ...args) => {
@@ -97,6 +121,7 @@ app
       const error = await shell.openPath(logger.directory)
       if (error) throw new Error('无法打开日志目录')
     })
+    handle('health-check', () => health.run())
     handle('snapshot', () => service.state)
     const cliInstall = new CliInstall({
       packaged: app.isPackaged,
@@ -105,7 +130,20 @@ app
     handle('cli-status', () => cliInstall.status())
     handle('cli-install', (action) => cliInstall.change(action))
     handle('start', (value) => service.start(value))
-    handle('cancel', () => service.cancel())
+    handle('cancel', (platform) => service.cancel(platform))
+    handle('login-foreground', (platform) =>
+      service.sessions.setForeground(platform),
+    )
+    handle('ensure-login', (platform) => service.sessions.ensure(platform))
+    handle('retry-login', (platform) => service.sessions.retry(platform))
+    handle('stop-login', (platform) => {
+      if (
+        !Object.hasOwn(service.state.accounts, platform) &&
+        !Object.hasOwn(service.state.logins, platform)
+      )
+        throw new Error('不支持的平台')
+      return service.sessions.stop(platform)
+    })
     handle('resolve-video', (platform, id, requestId) =>
       service.resolveVideo(platform, id, requestId),
     )
@@ -115,13 +153,19 @@ app
       if (typeof platform !== 'string') throw new Error('不支持的平台')
       return service.clearSessions(platform)
     })
-    let choosingDownload = false
+    const choosingDownload = new Set()
     handle(
       'download-media',
-      async (platform, id, kind, askBeforeDownload = false) => {
+      async (
+        platform,
+        id,
+        kind,
+        askBeforeDownload = false,
+        quality = 'best',
+      ) => {
         service.mediaItem(platform, id, kind)
-        if (choosingDownload) throw new Error('请先结束当前任务')
-        choosingDownload = true
+        if (choosingDownload.has(platform)) throw new Error('请先结束当前任务')
+        choosingDownload.add(platform)
         let directory
         try {
           let destination = app.getPath('downloads')
@@ -141,6 +185,7 @@ app
             id,
             kind,
             directory,
+            quality,
           )
           return result
         } catch (error) {
@@ -152,7 +197,7 @@ app
             return { saved: 0, total: 0, code: 'disk' }
           throw error
         } finally {
-          choosingDownload = false
+          choosingDownload.delete(platform)
           if (directory) {
             try {
               if (!(await readdir(directory)).length) await rmdir(directory)
@@ -165,23 +210,41 @@ app
     )
     handle('save-draft', (platform, form) => service.saveDraft(platform, form))
     handle('open-history', (id) => service.openHistory(id))
-    handle('show-login', (mode) => {
+    handle('clear-results', (platform) => service.clearResults(platform))
+    handle('show-login', (mode, platform = windows.presentation?.platform) => {
       if (
         mode !== undefined &&
         !['embedded', 'window', 'qrcode'].includes(mode)
       )
         throw new Error('不支持的登录方式')
-      if (service.state.task?.status === 'auth')
-        windows.show(service.state.task.platform, mode)
+      const task = service.state.tasks[platform]
+      if (task?.status === 'auth')
+        windows.show(platform, mode || task.loginMode)
     })
-    handle('login-qr', (platform, refresh = false) => {
+    handle('login-qr', async (platform, refresh = false) => {
       if (typeof refresh !== 'boolean') throw new Error('不支持的操作')
-      if (
-        service.state.task?.status !== 'auth' ||
-        service.state.task.platform !== platform
-      )
-        return { code: 'cancelled' }
-      return windows.captureQr(platform, refresh)
+      const run = service.operations.get(platform)
+      if (run?.task?.status !== 'auth') return { code: 'cancelled' }
+      if (!net.isOnline()) {
+        run.task.failure = {
+          code: 'NETWORK_OFFLINE',
+          stage: 'qr',
+          retryable: true,
+        }
+        await service.cancel(platform)
+        if (service.state.tasks[platform] === run.task)
+          service.finish(run, 'error', '网络已断开，请检查网络连接')
+        return { code: 'unavailable' }
+      }
+      const active = () =>
+        service.operations.get(platform) === run && run.task.status === 'auth'
+      const result =
+        windows.presentation?.platform === platform
+          ? await windows.captureQr(platform, refresh)
+          : await windows.captureBackgroundQr(platform, refresh, active)
+      if (!active()) return { code: 'cancelled' }
+      if (result.image) service.qrReady(platform)
+      return result
     })
     handle('attach-login', (platform, bounds) =>
       windows.attachLogin(platform, bounds),
@@ -199,7 +262,11 @@ app
     })
     handle('dismiss-login', () => service.dismissLogin())
     handle('open-source', (url) => {
-      if (!isPlatformUrl(url)) throw new Error('不支持的来源链接')
+      if (
+        url !== 'https://github.com/Tobepeter/mediacrawler-studio/issues' &&
+        !isPlatformUrl(url)
+      )
+        throw new Error('不支持的来源链接')
       return shell.openExternal(url)
     })
     handle('export', async (format, platform, id) => {
@@ -274,13 +341,15 @@ app
       if (quitting) return
       event.preventDefault()
       quitting = true
-      Promise.all([service.sessions.stopAll(), service.cancel()]).finally(
-        async () => {
-          await service.persistence.catch(() => {})
-          windows.destroy()
-          app.quit()
-        },
-      )
+      Promise.all([
+        health.stop(),
+        service.sessions.stopAll(true),
+        service.stopAll(),
+      ]).finally(async () => {
+        await service.persistence.catch(() => {})
+        windows.destroy()
+        app.quit()
+      })
     })
     app.on('window-all-closed', () => app.quit())
 

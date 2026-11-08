@@ -10,35 +10,32 @@ const source = await readFile(
 const code = ts.transpileModule(
   source.replace(
     /import .* from '.\/store'/,
-    'const { activeStatuses, useStudio } = globalThis.loginFixture',
+    'const { useStudio } = globalThis.loginFixture',
   ),
   { compilerOptions: { module: ts.ModuleKind.ESNext } },
 ).outputText
 
-test('只给当前未登录平台自动取码，已有会话/历史/主动退出不触发，卸载后停止协调', async () => {
+test('切换只提升目标平台优先级，不取消后台登录；历史弹窗不影响任务，卸载停止订阅', async () => {
+  const calls = []
+  const foreground = []
   let listener
-  let starts = 0
-  const state = {
-    ready: true,
-    platform: 'bili',
-    accounts: { bili: 'saved' },
-    pages: {},
-    attempted: {},
-    start: () => {
-      starts++
-      state.attempted.bili = true
-    },
-    busy: false,
-    pending: false,
+  const state = { ready: true, platform: 'bili' }
+  globalThis.document = {
+    visibilityState: 'visible',
+    addEventListener() {},
+    removeEventListener() {},
   }
   globalThis.window = {
-    studio: {},
+    studio: {
+      setLoginForeground: async (p) => foreground.push(p),
+      ensureLogin: async (p) => calls.push(p),
+      cancel: () => assert.fail('must not cancel'),
+    },
     location: { hash: '#/' },
     addEventListener() {},
     removeEventListener() {},
   }
   globalThis.loginFixture = {
-    activeStatuses: ['checking', 'auth', 'running'],
     useStudio: {
       getState: () => state,
       subscribe: (fn) => {
@@ -47,118 +44,40 @@ test('只给当前未登录平台自动取码，已有会话/历史/主动退出
       },
     },
   }
-  const { LoginController } = await import(
-    'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
-  )
-  const dispose = new LoginController().start()
-  assert.equal(starts, 0)
-  state.accounts.bili = 'unknown'
-  listener()
-  listener()
-  assert.equal(starts, 1)
-  state.attempted.bili = false
-  state.pages.bili = { id: 'history' }
-  listener()
-  assert.equal(starts, 1)
-  state.pages = {}
-  globalThis.window.location.hash = '#/history'
-  listener()
-  assert.equal(starts, 1)
-  dispose()
-  globalThis.window.location.hash = '#/'
-  listener()
-  assert.equal(starts, 1)
-  delete globalThis.window
-  delete globalThis.loginFixture
-})
-
-for (const existingResults of [false, true]) {
-  test(`历史弹窗关闭后恢复被它取消的登录，已有结果=${existingResults}`, async () => {
-    let listener
-    let starts = 0
-    let cancels = 0
-    const state = {
-      ready: true,
-      platform: 'bili',
-      accounts: { bili: 'expired' },
-      pages: existingResults ? { bili: { id: 'old' } } : {},
-      attempted: { bili: true },
-      busy: true,
-      pending: false,
-      task: {
-        action: 'connect',
-        platform: 'bili',
-        loginMode: 'qrcode',
-        status: 'auth',
-      },
-      start: () => {
-        starts++
-        state.task.status = 'checking'
-        state.busy = true
-      },
-    }
-    globalThis.window = {
-      studio: {
-        cancel: async () => {
-          cancels++
-          state.task.status = 'cancelled'
-          state.busy = false
-        },
-      },
-      location: { hash: '#/' },
-      addEventListener() {},
-      removeEventListener() {},
-    }
-    globalThis.loginFixture = {
-      activeStatuses: ['checking', 'auth', 'running', 'stopping'],
-      useStudio: {
-        getState: () => state,
-        subscribe: (fn) => {
-          listener = fn
-          return () => {}
-        },
-      },
-    }
+  try {
     const { LoginController } = await import(
-      'data:text/javascript;base64,' +
-        Buffer.from(code).toString('base64') +
-        `#history-${existingResults}`
+      'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
     )
     const dispose = new LoginController().start()
-    try {
-      globalThis.window.location.hash = '#/history'
-      listener()
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      assert.equal(cancels, 1)
-      assert.equal(starts, 0)
-      globalThis.window.location.hash = '#/'
-      listener()
-      assert.equal(starts, 1)
-      // 恢复后失败不循环重试
-      state.task.status = 'error'
-      state.busy = false
-      listener()
-      assert.equal(starts, 1)
-      // 真正恢复历史内容（task 清空）不能被自动登录覆盖
-      state.task = {
-        action: 'connect',
-        platform: 'bili',
-        loginMode: 'qrcode',
-        status: 'auth',
-      }
-      state.busy = true
-      globalThis.window.location.hash = '#/history'
-      listener()
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      state.task = null
-      state.pages = { bili: { id: 'restored' } }
-      globalThis.window.location.hash = '#/'
-      listener()
-      assert.equal(starts, 1)
-    } finally {
-      dispose()
-      delete globalThis.window
-      delete globalThis.loginFixture
-    }
-  })
-}
+    listener()
+    listener()
+    assert.deepEqual(calls, ['bili'])
+    state.platform = 'dy'
+    listener()
+    state.platform = 'xhs'
+    listener()
+    state.platform = 'bili'
+    listener()
+    assert.deepEqual(calls, ['bili', 'dy', 'xhs', 'bili'])
+    globalThis.window.location.hash = '#/history'
+    state.platform = 'ks'
+    listener()
+    assert.equal(calls.length, 4)
+    assert.equal(foreground.at(-1), null)
+    globalThis.window.location.hash = '#/'
+    listener()
+    assert.equal(calls.at(-1), 'ks')
+    assert.equal(foreground.at(-1), 'ks')
+    globalThis.document.visibilityState = 'hidden'
+    listener()
+    assert.equal(foreground.at(-1), null)
+    dispose()
+    state.platform = 'wb'
+    listener()
+    assert.equal(calls.length, 5)
+  } finally {
+    delete globalThis.document
+    delete globalThis.window
+    delete globalThis.loginFixture
+  }
+})

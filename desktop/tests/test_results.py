@@ -40,3 +40,41 @@ async def test_search_only_fetches_requested_details(monkeypatch):
     await runner.search()
     assert fetched == [0, 1]
     assert len(emitted) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['search', 'link'])
+async def test_xhs_finishes_media_without_refetching_notes(mode, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from desktop.crawler import DesktopCrawler
+    from store.xhs import XhsStoreFactory
+
+    ids = ['a' * 24, 'b' * 24] if mode == 'search' else ['b' * 24]
+    events = []
+    runner = DesktopCrawler({
+        'platform': 'xhs', 'limit': len(ids), 'action': 'collect', 'mode': mode,
+        'query': 'test' if mode == 'search' else f'https://www.xiaohongshu.com/explore/{ids[0]}',
+    }, None, lambda event, **_: events.append(event))
+    runner.setup = AsyncMock()
+    runner.authenticate = AsyncMock()
+    runner.client = SimpleNamespace(get_note_by_keyword=AsyncMock(return_value={'items': [{'id': i} for i in ids]}))
+    monkeypatch.setitem(XhsStoreFactory.STORES, 'studio', lambda: runner.store)
+
+    def detail(note_id, **kwargs):
+        raw = {'note_id': note_id, 'type': 'normal', 'image_list': [{'url_default': 'https://cdn.example/image.jpg'}]}
+        if note_id.startswith('b'):
+            raw.update(type='video', video={'consumer': {'origin_video_key': 'video.mp4'}, 'duration': 15})
+        return raw
+
+    load = AsyncMock(side_effect=detail)
+    runner.crawler = SimpleNamespace(get_note_detail_async_task=load)
+    await runner.run()
+    assert [call.kwargs['note_id'] for call in load.await_args_list] == ids
+    for item in runner.store.items.values():
+        assert item['images'] == ['https://cdn.example/image.jpg']
+    video = runner.store.items[f'xhs:{ids[-1]}']
+    assert video['durationSeconds'] == 15
+    assert video['media']['status'] == 'available'
+    assert events[-1] == 'done'
+    assert not runner.xhs_details

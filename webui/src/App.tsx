@@ -33,13 +33,23 @@ export default function App() {
   const history = useStudioRoute() === 'history'
   const account = useStudio((state) => state.accounts[state.platform])
   const page = useStudio((state) => state.pages[state.platform])
+  const historyPreview = useStudio(
+    (state) =>
+      !!state.views[state.platform].historyId &&
+      state.views[state.platform].historyId === state.pages[state.platform]?.id,
+  )
   const inlineLogin = useStudio(
     (state) =>
-      state.loginView?.platform === state.platform &&
-      state.loginView.mode === 'qrcode',
+      (state.logins?.[state.platform] !== undefined &&
+        state.accounts[state.platform] !== 'connected') ||
+      (state.loginView?.platform === state.platform &&
+        state.loginView.mode === 'qrcode') ||
+      (state.tasks[state.platform]?.status === 'auth' &&
+        state.tasks[state.platform]?.loginMode === 'qrcode'),
   )
   const showContent =
-    !inlineLogin && (!window.studio || account === 'connected' || !!page)
+    historyPreview ||
+    (!inlineLogin && (!window.studio || account === 'connected' || !!page))
   useEffect(connectStudio, [])
   useEffect(() => new LoginController().start(), [])
   return (
@@ -76,14 +86,16 @@ export default function App() {
           </div>
         </div>
       </header>
-      {/* 内容独立滚动；底部留出窗口圆角，Radix 包装层保留空状态撑满布局 */}
+      <div className='shrink-0 px-4 sm:px-6'>
+        <CollectForm />
+      </div>
+      {/* 上下操作区固定，中间只占剩余高度，不向状态栏下面延伸 */}
       <ScrollArea
         className={cn(
           'min-h-0 flex-1 [&>[data-radix-scroll-area-viewport]>div]:!flex [&>[data-radix-scroll-area-viewport]>div]:min-h-full',
         )}
       >
         <main className='flex min-w-0 flex-1 flex-col px-4 sm:px-6'>
-          <CollectForm />
           <div className={showContent ? 'contents' : 'hidden'}>
             <Results />
           </div>

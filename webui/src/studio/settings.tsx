@@ -31,8 +31,9 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { ThemeToggle } from './theme-toggle'
+import { HealthSettings } from './health-settings'
 import { CliSettings } from './cli-settings'
-import { activeStatuses, platformNames, useStudio } from './store'
+import { platformNames, useStudio } from './store'
 
 // 语言、外观、下载偏好和平台会话管理
 export function StudioSettings() {
@@ -41,7 +42,7 @@ export function StudioSettings() {
   const {
     busy,
     pending,
-    task,
+    requests,
     patch,
     setLoginMode,
     askBeforeDownload,
@@ -49,7 +50,7 @@ export function StudioSettings() {
   } = useStudio()
   const [clearing, setClearing] = useState(false)
   const [resetting, setResetting] = useState(false)
-  const blocked = busy || pending || activeStatuses.includes(task?.status || '')
+  const blocked = busy || pending || Object.keys(requests).length > 0
   const changeLanguage = async (language: string) => {
     try {
       window.localStorage.setItem('studio-language', language)
@@ -166,6 +167,7 @@ export function StudioSettings() {
               </div>
             </div>
           </section>
+          <HealthSettings />
           <CliSettings />
           <section
             aria-labelledby='studio-account-settings'

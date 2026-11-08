@@ -132,3 +132,23 @@ test('新增平台支持搜索、作品地址与导出，拒绝跨站伪造链�
     )
   }
 })
+
+test('平台筛选白名单，链接模式忽略筛选，拒绝跨平台与无效值', () => {
+  assert.deepEqual(
+    validateRequest({ ...request, filters: { sort: 'click', time: '7' } })
+      .filters,
+    { sort: 'click', time: '7' },
+  )
+  assert.throws(() => validateRequest({ ...request, filters: { type: '2' } }))
+  assert.throws(() => validateRequest({ ...request, filters: { time: '999' } }))
+  assert.throws(() => validateRequest({ ...request, filters: [] }))
+  assert.deepEqual(
+    validateRequest({
+      ...request,
+      mode: 'link',
+      query: 'https://b23.tv/abc',
+      filters: { sort: 'click' },
+    }).filters,
+    {},
+  )
+})

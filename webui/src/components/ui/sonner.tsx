@@ -15,7 +15,7 @@ export function Toaster(props: ToasterProps) {
   return (
     <Sonner
       theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-      position='bottom-right'
+      position='top-right'
       icons={{
         success: <CircleCheck className='size-4' />,
         info: <Info className='size-4' />,

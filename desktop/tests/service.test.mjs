@@ -16,11 +16,11 @@ const request = {
 const windows = {
   accounts: async () => ({}),
   prepare: async () => 'exact-target',
-  beginLogin(platform) {
-    this.presentation = { platform, mode: this.loginMode, preparing: true }
+  beginLogin(platform, mode) {
+    this.presentation = { platform, mode, preparing: true }
   },
-  show(platform) {
-    this.presentation = { platform, mode: this.loginMode }
+  show(platform, mode) {
+    this.presentation = { platform, mode }
   },
   hide() {
     this.presentation = null
@@ -61,19 +61,19 @@ test('取消保留历史，重启进入空白采集页', async () => {
   )
   try {
     await service.start(request)
-    await until(() => service.state.results.length === 1)
+    await until(() => (service.state.pages.bili?.results || []).length === 1)
     await assert.rejects(service.start(request), /请先结束/)
-    await service.cancel()
-    assert.equal(service.state.task.status, 'cancelled')
-    assert.equal(service.state.results.length, 1)
+    await service.cancel('bili')
+    assert.equal(service.state.tasks.bili.status, 'cancelled')
+    assert.equal((service.state.pages.bili?.results || []).length, 1)
     assert.equal(service.busy, false)
     await service.persistence
     await service.init()
-    assert.equal(service.state.task, null)
-    assert.equal(service.state.results.length, 0)
+    assert.equal(service.state.tasks.bili, undefined)
+    assert.equal((service.state.pages.bili?.results || []).length, 0)
     assert.equal(service.state.history.length, 1)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -85,7 +85,7 @@ test('异常退出变为失败，不伪报成功', async () => {
   try {
     await service.start(request)
     await until(() => !service.busy)
-    assert.equal(service.state.task.status, 'error')
+    assert.equal(service.state.tasks.bili.status, 'error')
     await service.persistence
   } finally {
     await cleanup()
@@ -100,13 +100,13 @@ test('正常完成释放进程，允许再次开始', async () => {
   try {
     await service.start(request)
     await until(() => !service.busy)
-    assert.equal(service.state.task.status, 'completed')
+    assert.equal(service.state.tasks.bili.status, 'completed')
     await service.start(request)
     await until(() => !service.busy)
-    assert.equal(service.state.results.length, 1)
+    assert.equal((service.state.pages.bili?.results || []).length, 1)
     await service.persistence
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -152,7 +152,7 @@ test('平台结果隔离、登录不覆盖历史、旧批次恢复后导出对�
     await service.openHistory(first)
     assert.equal(service.state.pages.bili.id, first)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await service.persistence
     await cleanup()
   }
@@ -168,7 +168,7 @@ test('账号资料按平台隔离，完成事件后仍等进程退出再解除 b
   })`)
   try {
     await service.start({ ...request, action: 'connect' })
-    await until(() => service.state.task.status === 'completed')
+    await until(() => service.state.tasks.bili.status === 'completed')
     assert.equal(service.state.busy, true)
     assert.deepEqual(service.state.profiles.bili, {
       nickname: 'bili',
@@ -181,7 +181,7 @@ test('账号资料按平台隔离，完成事件后仍等进程退出再解除 b
     assert.equal(service.state.profiles.bili.nickname, 'bili')
     assert.equal(service.state.profiles.dy.nickname, 'dy')
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -201,10 +201,16 @@ test('评论增量更新、取消保留、草稿选项和历史恢复', async ()
       replies: true,
     })
     await service.start({ ...request, comments: true, replies: true })
-    await until(() => service.state.results[0]?.comments?.length === 1)
-    await service.cancel()
-    assert.equal(service.state.results.length, 1)
-    assert.equal(service.state.results[0].commentStatus, 'cancelled')
+    await until(
+      () =>
+        (service.state.pages.bili?.results || [])[0]?.comments?.length === 1,
+    )
+    await service.cancel('bili')
+    assert.equal((service.state.pages.bili?.results || []).length, 1)
+    assert.equal(
+      (service.state.pages.bili?.results || [])[0].commentStatus,
+      'cancelled',
+    )
     const id = service.state.pages.bili.id
     await service.persistence
     await service.init()
@@ -213,7 +219,7 @@ test('评论增量更新、取消保留、草稿选项和历史恢复', async ()
     assert.equal(record.results[0].comments[0].text, '已收到的评论')
     assert.equal(record.task.comments, true)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -242,16 +248,16 @@ test('清除登录态独占任务槽，保留历史和草稿，禁止采集中�
         })
       },
     }
-    service.busy = true
+    service.operations.set('bili', { kind: 'collect' })
     await assert.rejects(service.clearSessions(), /请先结束/)
     assert.equal(calls, 0)
-    service.busy = false
+    service.operations.delete('bili')
     const clearing = service.clearSessions()
     assert.equal(service.busy, true)
     await assert.rejects(service.start(request), /请先结束/)
     await assert.rejects(service.clearSessions(), /请先结束/)
-    const stopping = service.cancel()
-    assert.equal(service.state.task, null)
+    const stopping = service.cancel('bili')
+    assert.equal(service.state.tasks.bili, undefined)
     await until(() => typeof release === 'function')
     release()
     await clearing
@@ -311,7 +317,7 @@ test('下载只使用已有结果，互斥到进程退出且不改变采集历�
     assert.equal(service.busy, false)
     assert.equal(JSON.stringify(service.state), before)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -333,13 +339,15 @@ test('取消下载等待进程关闭，保留已完成文件数量', async () =>
     ]
     const result = service.downloadMedia('bili', 'bili:1', 'images', '/unused')
     await new Promise((resolve) =>
-      service.downloadJob.child.stdout.once('data', resolve),
+      service.operations
+        .get('bili')
+        .downloadJob.child.stdout.once('data', resolve),
     )
-    await service.cancel()
+    await service.cancel('bili')
     assert.deepEqual(await result, { saved: 1, total: 2, code: 'cancelled' })
     assert.equal(service.busy, false)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -349,7 +357,11 @@ test('单平台退出只清理目标账号，失败可重试且不影响记录',
   try {
     service.state.accounts = { bili: 'connected', dy: 'connected' }
     service.state.profiles = { bili: { nickname: 'B' }, dy: { nickname: 'D' } }
-    service.state.task = { ...request, action: 'connect', status: 'completed' }
+    service.state.tasks.bili = {
+      ...request,
+      action: 'connect',
+      status: 'completed',
+    }
     const pages = service.state.pages
     let release
     const cleared = []
@@ -367,14 +379,14 @@ test('单平台退出只清理目标账号，失败可重试且不影响记录',
     await Promise.resolve()
     assert.equal(service.busy, true)
     await assert.rejects(service.start(request), /请先结束/)
-    await assert.rejects(service.clearSessions('dy'), /请先结束/)
+    await assert.rejects(service.clearSessions('bili'), /请先结束/)
     await until(() => typeof release === 'function')
     release()
     await clearing
     assert.deepEqual(cleared, ['bili'])
     assert.deepEqual(service.state.accounts, { dy: 'connected' })
     assert.deepEqual(service.state.profiles, { dy: { nickname: 'D' } })
-    assert.equal(service.state.task, null)
+    assert.equal(service.state.tasks.bili, undefined)
     assert.equal(service.state.pages, pages)
     service.windows.clearSessions = async () => {
       throw new Error('mock failure')
@@ -417,7 +429,10 @@ test('抖音播放地址解析复用已有结果，互斥且不写入历史', as
     await assert.rejects(service.resolveVideo('dy', 'dy:missing', 'token'))
     const pending = service.resolveVideo('dy', 'dy:1', 'token')
     assert.equal(service.busy, true)
-    await assert.rejects(service.start(request), /结束当前任务/)
+    await assert.rejects(
+      service.start({ ...request, platform: 'dy' }),
+      /结束当前任务/,
+    )
     await service.cancelVideo('stale-token')
     const result = await pending
     assert.deepEqual(result, {
@@ -428,7 +443,7 @@ test('抖音播放地址解析复用已有结果，互斥且不写入历史', as
     assert.equal(JSON.stringify(service.state.pages), before)
     assert.equal(service.state.history.length, 0)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -449,13 +464,13 @@ test('关闭播放器仅取消对应请求，释放媒体任务槽', async () =>
   }
   try {
     const result = service.resolveVideo('dy', 'dy:1', 'current')
-    await until(() => !!service.downloadJob?.child)
+    await until(() => !!service.operations.get('dy')?.downloadJob?.child)
     await service.cancelVideo('current')
     assert.equal((await result).code, 'cancelled')
     assert.equal(service.busy, false)
-    assert.equal(service.downloadJob, null)
+    assert.equal(service.operations.has('dy'), false)
   } finally {
-    await service.cancel()
+    await service.stopAll()
     await cleanup()
   }
 })
@@ -508,9 +523,120 @@ test('静默连接不创建登录弹层，未登录保留手动入口', async ()
     assert.equal(presented, 0)
     assert.equal(service.state.accounts.bili, 'expired')
     assert.equal(service.state.loginView, null)
-    assert.equal(service.state.task.status, 'completed')
+    assert.equal(service.state.tasks.bili.status, 'completed')
   } finally {
-    await service.cancel()
+    await service.stopAll()
+    await cleanup()
+  }
+})
+
+test('清空只移除当前平台展示，后台推送不恢复，历史与输入仍可复用', async () => {
+  const { service, cleanup } = await createService(
+    itemScript +
+      "console.log(JSON.stringify({type:'done'})); process.exit(0); });",
+  )
+  try {
+    await service.start(request)
+    await until(() => !service.busy)
+    await service.persistence
+    const id = service.state.pages.bili.id
+    const other = { id: 'other', results: [] }
+    service.state.pages.dy = other
+    service.state.accounts.bili = 'connected'
+    service.state.drafts.bili = { query: 'test' }
+    service.operations.set('bili', { kind: 'collect' })
+    assert.throws(() => service.clearResults('bili'), /请先结束/)
+    service.operations.delete('bili')
+    service.clearResults('bili')
+    service.publish()
+    assert.equal(service.state.pages.bili, undefined)
+    assert.equal(service.state.pages.dy, other)
+    assert.equal(service.state.tasks.bili, undefined)
+    assert.deepEqual(service.state.pages.bili?.results || [], [])
+    assert.equal(service.state.accounts.bili, 'connected')
+    assert.equal(service.state.drafts.bili.query, 'test')
+    assert.equal(service.state.history.length, 1)
+    const restored = await service.openHistory(id)
+    assert.equal(restored.results.length, 1)
+    assert.equal(service.state.pages.bili.id, id)
+    assert.throws(() => service.clearResults('invalid'), /不支持/)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('下载画质传给共用下载器，筛选写入草稿与历史', async () => {
+  const { service, cleanup } = await createService(
+    itemScript +
+      "console.log(JSON.stringify({type:'done'})); process.exit(0); });",
+  )
+  try {
+    await service.saveDraft('bili', {
+      ...request,
+      filters: { sort: 'pubdate' },
+    })
+    assert.deepEqual(service.library.workspace.drafts.bili.filters, {
+      sort: 'pubdate',
+    })
+    await service.start({ ...request, filters: { sort: 'pubdate' } })
+    await until(() => !service.busy)
+    await service.persistence
+    assert.deepEqual(service.state.pages.bili.task.filters, { sort: 'pubdate' })
+    const id = service.state.pages.bili.results[0].id
+    service.runMedia = async (_record, options) => options
+    assert.equal(
+      (await service.downloadMedia('bili', id, 'video', '/tmp', '720p'))
+        .quality,
+      '720p',
+    )
+    assert.equal(
+      (await service.downloadMedia('bili', id, 'video', '/tmp')).quality,
+      'best',
+    )
+    await assert.rejects(
+      service.downloadMedia('bili', id, 'video', '/tmp', 'arbitrary'),
+      /清晰度无效/,
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('两平台同时采集，停止其中一个后另一个继续写入自己的结果和历史', async () => {
+  const { service, cleanup } =
+    await createService(`process.stdin.once('data', data => {
+    const { platform } = JSON.parse(data)
+    let n = 0
+    const emit = () => console.log(JSON.stringify({type:'item',item:{id:String(++n),platform}}))
+    emit()
+    setInterval(emit, 30)
+  })`)
+  try {
+    await Promise.all([
+      service.start(request),
+      service.start({ ...request, platform: 'xhs' }),
+    ])
+    await until(
+      () =>
+        service.state.pages.bili.results.length &&
+        service.state.pages.xhs.results.length,
+    )
+    assert.deepEqual(service.state.working, { bili: 'collect', xhs: 'collect' })
+    await assert.rejects(service.start(request), /请先结束/)
+    await service.cancel('xhs')
+    const before = service.state.pages.bili.results.length
+    await until(() => service.state.pages.bili.results.length > before)
+    assert.deepEqual(service.state.working, { bili: 'collect' })
+    assert.equal(service.state.tasks.xhs.status, 'cancelled')
+    await service.stopAll()
+    for (const platform of ['bili', 'xhs']) {
+      const record = await service.library.get(service.state.pages[platform].id)
+      assert.equal(record.task.status, 'cancelled')
+      assert.ok(record.results.every((item) => item.platform === platform))
+    }
+  } finally {
+    await service.stopAll()
+    await service.persistence
     await cleanup()
   }
 })

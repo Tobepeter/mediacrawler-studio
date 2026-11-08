@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
 import { LoginGate } from './login-gate'
 import { PlatformIcon } from './platform-icon'
+import { ResultActions } from './result-actions'
 import {
   activeStatuses,
   platformNames,
@@ -23,17 +24,19 @@ export function CollectForm() {
 
   const {
     accounts,
-    task,
-    pending,
-    busy: workerBusy,
+    tasks,
+    requests,
+    working,
+    pending: clearing,
     updateForm,
     start,
     switchPlatform,
   } = useStudio()
   const form = useForm()
   const page = usePage()
-  const blocked =
-    workerBusy || pending || activeStatuses.includes(task?.status || '')
+  const task = tasks[form.platform]
+  const pending = clearing || !!requests[form.platform]
+  const blocked = pending || !!working[form.platform]
   const busy =
     blocked &&
     task?.platform === form.platform &&
@@ -72,7 +75,7 @@ export function CollectForm() {
   }
   const cancel = async () => {
     try {
-      await window.studio?.cancel()
+      await window.studio?.cancel(form.platform)
     } catch {
       toast.error(t('停止失败，请重试'))
     }
@@ -84,35 +87,41 @@ export function CollectForm() {
         value={form.platform}
         onValueChange={(platform) => switchPlatform(platform as Platform)}
       >
-        <div className='flex flex-wrap items-center justify-between gap-2'>
+        {/* 单行高度固定，账号和状态按钮不参与撑高 */}
+        <div className='flex h-10 items-center justify-between gap-2'>
           <TabsList
             aria-label={t('平台')}
-            className='h-auto flex-wrap justify-start'
+            className='min-w-0 justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
           >
             {(Object.keys(platformNames) as Platform[]).map((platform) => (
-              <TabsTrigger className='gap-2' key={platform} value={platform}>
+              <TabsTrigger
+                className='relative shrink-0 gap-2'
+                title={
+                  working[platform] === 'collect' ? t('采集中') : undefined
+                }
+                key={platform}
+                value={platform}
+              >
                 <PlatformIcon platform={platform} />
                 {t(platformNames[platform])}
+                {working[platform] === 'collect' && (
+                  <span className='absolute right-1 top-1 size-1 rounded-full bg-primary'>
+                    <span className='sr-only'>{t('采集中')}</span>
+                  </span>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
-          <div className='flex items-center gap-2'>
-            {blocked && task && task.platform !== form.platform && (
-              <Button
-                variant='ghost'
-                onClick={() => switchPlatform(task.platform)}
-              >
-                <Loader2 className='animate-spin motion-reduce:animate-none' />
-                {t(platformNames[task.platform])}
-                {t('处理中')}
-              </Button>
-            )}
+          <div className='flex h-10 shrink-0 items-center gap-2'>
             {(account === 'connected' || !!page) && <LoginGate />}
           </div>
         </div>
-        <TabsContent value={form.platform} hidden={locked && !!window.studio}>
+        {/* 未登录只隐藏控件，保留响应式占位，切平台时不收缩顶部布局 */}
+        <TabsContent value={form.platform} className='flex items-start gap-2'>
           <form
+            className={`min-w-0 flex-1 ${locked && window.studio ? 'invisible' : ''}`}
             aria-label={t('采集条件')}
+            aria-hidden={locked && !!window.studio}
             aria-describedby={locked ? 'login-gate-label' : undefined}
             onSubmit={(event) => {
               event.preventDefault()
@@ -121,7 +130,7 @@ export function CollectForm() {
           >
             <fieldset
               disabled={locked}
-              className='flex min-w-0 flex-wrap items-center justify-end gap-2'
+              className='flex min-w-0 flex-wrap items-center justify-end gap-2 sm:h-9 sm:flex-nowrap'
             >
               <div className='flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1'>
                 <Input
@@ -137,7 +146,10 @@ export function CollectForm() {
                   maxLength={2000}
                   disabled={busy || pending || locked}
                 />
-                <CollectOptions disabled={busy || pending || locked} />
+                <CollectOptions
+                  key={form.platform}
+                  disabled={busy || pending || locked}
+                />
               </div>
               {form.mode === 'search' && (
                 <CountPicker
@@ -179,6 +191,9 @@ export function CollectForm() {
               </Button>
             </fieldset>
           </form>
+          <div className='flex size-9 shrink-0 items-center justify-center'>
+            <ResultActions />
+          </div>
         </TabsContent>
       </Tabs>
     </section>

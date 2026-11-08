@@ -4,7 +4,7 @@ from pathlib import Path
 import runpy
 import sys
 
-WORKERS = ('desktop.worker', 'desktop.download_worker')
+WORKERS = ('desktop.worker', 'desktop.download_worker', 'desktop.health_worker')
 
 
 def main():

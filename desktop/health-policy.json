@@ -1,0 +1,19 @@
+{
+  "qr_timeout_ms": 30000,
+  "navigation_timeout_ms": 15000,
+  "probe_timeout_ms": 4000,
+  "network_timeout_ms": 20000,
+  "speed_timeout_ms": 10000,
+  "speed_max_bytes": 20971520,
+  "timeout_threshold": 3,
+  "failure_window_ms": 900000,
+  "login_delays_ms": {
+    "bili": 0,
+    "dy": 1500,
+    "xhs": 1500,
+    "zhihu": 4000,
+    "wb": 4000,
+    "tieba": 4000,
+    "ks": 4000
+  }
+}

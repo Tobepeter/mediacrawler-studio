@@ -17,6 +17,42 @@ const request = {
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 
+test('二维码超时释放准备任务，旧准备结果不能覆盖新任务', async (t) => {
+  const { service, windows, children } = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let complete
+  windows.prepare = () =>
+    new Promise((resolve) => {
+      complete = resolve
+    })
+  const old = service.start(request)
+  await tick()
+  t.mock.timers.tick(30_000)
+  await tick()
+  assert.equal(service.busy, false)
+  assert.equal(service.state.tasks.dy.message, '获取二维码超时，请重试')
+  windows.prepare = async () => 'new-page'
+  await service.start(request)
+  const current = service.state.tasks.dy
+  complete('old-page')
+  await old
+  assert.equal(service.state.tasks.dy, current)
+  assert.equal(children.length, 1)
+  await service.cancel('dy')
+})
+
+test('二维码出现即停止取码计时，不把扫码等待当作获取超时', async (t) => {
+  const { service } = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  await service.start(request)
+  service.qrReady('dy')
+  t.mock.timers.tick(30_000)
+  await tick()
+  assert.equal(service.busy, true)
+  assert.equal(service.operations.get('dy').stopRequested, false)
+  await service.cancel('dy')
+})
+
 async function fixture(t) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'studio-login-'))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
@@ -25,11 +61,11 @@ async function fixture(t) {
     presentation: null,
     accounts: async () => ({}),
     prepare: async () => 'same-page',
-    beginLogin(platform) {
-      this.presentation = { platform, mode: this.loginMode, preparing: true }
+    beginLogin(platform, mode) {
+      this.presentation = { platform, mode, preparing: true }
     },
-    show(platform) {
-      this.presentation = { platform, mode: this.loginMode }
+    show(platform, mode) {
+      this.presentation = { platform, mode }
     },
     hide() {
       this.presentation = null
@@ -70,16 +106,17 @@ test('准备阶段立即展示，关闭后不启动 worker，迟到的成功或�
       })
     const start = service.start(request)
     assert.equal(service.state.loginView.preparing, true)
-    assert.equal(service.state.task.status, 'checking')
+    assert.equal(service.state.tasks.dy.status, 'checking')
+    await tick()
     await service.dismissLogin()
     assert.equal(service.state.loginView, null)
-    assert.equal(service.stopRequested, true)
+    assert.equal(service.operations.get('dy').stopRequested, true)
     await assert.rejects(service.start(request), /请先结束/)
     if (fail) reject(new Error('late preparation error'))
     else resolve('same-page')
     await start
     assert.equal(children.length, 0)
-    assert.equal(service.state.task.status, 'cancelled')
+    assert.equal(service.state.tasks.dy.status, 'cancelled')
     assert.equal(service.busy, false)
     assert.equal(windows.presentation, null)
   }
@@ -101,7 +138,7 @@ test('checking/auth 均可放弃，晚到的扫码和账号消息无效，下次
     first.send({ type: 'account', profile: { nickname: 'late' } })
     first.send({ type: 'done' })
     await cancel
-    assert.equal(service.state.task.status, 'cancelled')
+    assert.equal(service.state.tasks.dy.status, 'cancelled')
     assert.notEqual(service.state.accounts.dy, 'connected')
     assert.equal(service.state.profiles.dy, undefined)
     assert.equal(windows.presentation, null)
@@ -113,7 +150,7 @@ test('checking/auth 均可放弃，晚到的扫码和账号消息无效，下次
     next.send({ type: 'done' })
     await tick()
     next.emit('close', 0, null)
-    assert.equal(service.state.task.status, 'completed')
+    assert.equal(service.state.tasks.dy.status, 'completed')
     assert.equal(service.state.profiles.dy.nickname, 'current')
     assert.equal(service.state.loginView, null)
   }
@@ -128,13 +165,26 @@ test('三种模式都提前展示准备状态，普通采集检查不强制弹�
       mode: loginMode,
       preparing: true,
     })
-    await service.cancel()
+    await service.cancel('dy')
   }
   await service.start({ ...request, action: 'collect', query: 'test' })
   assert.equal(service.state.loginView, null)
   children.at(-1).send({ type: 'state', status: 'auth' })
   await tick()
   assert.equal(service.state.loginView.platform, 'dy')
-  await service.cancel()
+  await service.cancel('dy')
   await service.persistence
+})
+
+test('明确离线时不启动平台浏览器，返回可通知的诊断失败', async (t) => {
+  const { service, windows, children } = await fixture(t)
+  service.online = () => false
+  windows.prepare = () => {
+    throw new Error('must not navigate')
+  }
+  await service.start(request)
+  assert.equal(service.busy, false)
+  assert.equal(children.length, 0)
+  assert.equal(service.state.tasks.dy.failure.code, 'NETWORK_OFFLINE')
+  assert.equal(service.state.tasks.dy.status, 'error')
 })

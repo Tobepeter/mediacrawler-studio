@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import placeholder from '@/assets/qr-placeholder.svg'
 import { cn } from '@/lib/utils'
+import { LoginCountdown } from './login-countdown'
 
 // 占位与真码共用尺寸，模糊遮罩明确表示当前不可扫码
 export function QrFrame({
   image,
   loading,
+  confirming,
+  estimateAt,
+  loadingLabel,
   children,
   onRetry,
   retryDisabled,
@@ -16,6 +20,9 @@ export function QrFrame({
 }: {
   image?: string
   loading?: boolean
+  confirming?: boolean
+  estimateAt?: number
+  loadingLabel?: string
   children?: ReactNode
   onRetry?: () => void
   retryDisabled?: boolean
@@ -24,7 +31,10 @@ export function QrFrame({
   const { t } = useTranslation('studio')
   return (
     <div
-      className='relative aspect-square w-72 max-w-full overflow-hidden rounded-lg bg-white p-4'
+      className={cn(
+        'relative aspect-square w-72 max-w-full overflow-hidden rounded-lg p-4',
+        image ? 'bg-white' : 'bg-card',
+      )}
       aria-busy={loading}
     >
       <img
@@ -34,18 +44,29 @@ export function QrFrame({
         draggable={false}
         className={cn(
           'size-full object-contain',
-          !image && 'select-none opacity-40 blur-sm',
+          !image && 'select-none opacity-40 blur-sm dark:invert',
         )}
       />
-      {(loading || !image) && (
-        <div className='absolute inset-0 flex items-center justify-center bg-white/70 p-6 text-center text-sm text-black/60'>
-          {loading ? (
-            <span role='status'>
+      {(loading || confirming || !image) && (
+        <div className='absolute inset-0 flex items-center justify-center bg-card/80 p-6 text-center text-sm text-foreground'>
+          {confirming ? (
+            <span role='status' className='flex flex-col items-center gap-2'>
+              <Check className='size-5' aria-hidden='true' />
+              {t('请在手机上确认')}
+            </span>
+          ) : loading ? (
+            <span className='flex flex-col items-center gap-2 text-muted-foreground'>
               <Loader2
                 aria-hidden='true'
                 className='size-4 animate-spin motion-reduce:animate-none'
               />
-              <span className='sr-only'>{t('加载中')}</span>
+              <span
+                role='status'
+                className={estimateAt ? undefined : 'sr-only'}
+              >
+                {loadingLabel || t('加载中')}
+              </span>
+              {estimateAt && <LoginCountdown estimateAt={estimateAt} />}
             </span>
           ) : onRetry ? (
             <IconButton
