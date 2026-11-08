@@ -116,6 +116,7 @@ export function validateRequest(value) {
   const mode = ['link', 'creator'].includes(value.mode) ? value.mode : 'search'
   const limit = Number(value.limit)
   const maximum = mode === 'creator' ? creatorLimit : 100
+  const paged = mode !== 'link' && creatorPlatforms.includes(value.platform)
   if (!Number.isInteger(limit) || limit < 1 || limit > maximum)
     throw new Error(`采集数量需为 1–${maximum} 条`)
   if (value.action === 'collect') {
@@ -127,7 +128,7 @@ export function validateRequest(value) {
   }
   if (
     value.cursor !== undefined &&
-    (mode !== 'creator' ||
+    (!paged ||
       typeof value.cursor !== 'string' ||
       !value.cursor ||
       value.cursor.length > 4096)
@@ -150,6 +151,7 @@ export function validateRequest(value) {
     query,
     limit: mode === 'link' ? 1 : limit,
     ...(value.cursor ? { cursor: value.cursor } : {}),
+    ...(value.auto === true && paged ? { auto: true } : {}),
   }
 }
 

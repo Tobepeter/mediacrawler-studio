@@ -31,6 +31,24 @@ def test_cli_validates_creator_options():
     assert runner.invoke(app, ['creator', 'posts', '--creator', 'a', '--quality', 'high']).exit_code == 2
 
 
+def test_cli_validates_search_options():
+    runner = CliRunner()
+    assert runner.invoke(app, ['search']).exit_code == 2
+    assert runner.invoke(app, ['search', '--query', '  ']).exit_code == 2
+    assert runner.invoke(app, ['search', '--query', 'a', '--platform', 'bili']).exit_code == 2
+    assert runner.invoke(app, ['search', '--query', 'a', '--limit', '101']).exit_code == 2
+
+
+def test_paged_search_ends_with_page_and_collect_stays_plain(tmp_path, monkeypatch, capsys):
+    item = {'id': 'a', 'title': '作品'}
+    fake_worker(monkeypatch, worker({'type': 'page', 'next_cursor': 'next', 'has_more': True}, {'type': 'complete', 'items': [item]}))
+    run(request(tmp_path, mode='search', paged=True))
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert lines[-1]['next_cursor'] == 'next'
+    run(request(tmp_path, mode='search'))
+    assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [item]
+
+
 def test_jsonl_ends_with_page(tmp_path, monkeypatch, capsys):
     item = {'id': 'a', 'name': '博主'}
     fake_worker(monkeypatch, worker({'type': 'page', 'next_cursor': 'next', 'has_more': True}, {'type': 'complete', 'items': [item]}))

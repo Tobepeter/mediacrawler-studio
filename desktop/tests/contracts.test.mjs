@@ -182,7 +182,7 @@ test('博主主页模式只接受完整主页链接并放宽数量', () => {
   )
 })
 
-test('翻页位置只用于博主模式', () => {
+test('翻页位置和自动模式只用于抖音博主与关键词', () => {
   const query = 'https://www.douyin.com/user/MS4wLjABAAAAabc'
   const base = {
     platform: 'dy',
@@ -194,8 +194,25 @@ test('翻页位置只用于博主模式', () => {
   assert.equal(validateRequest({ ...base, cursor: 'c' }).cursor, 'c')
   assert.equal('cursor' in validateRequest(base), false)
   assert.throws(() => validateRequest({ ...base, cursor: 1 }), /翻页/)
+  const search = { ...base, mode: 'search', query: 'x' }
+  assert.equal(validateRequest({ ...search, cursor: 'c' }).cursor, 'c')
+  assert.equal(validateRequest({ ...search, auto: true }).auto, true)
   assert.throws(
-    () => validateRequest({ ...base, mode: 'search', query: 'x', cursor: 'c' }),
+    () => validateRequest({ ...search, platform: 'bili', cursor: 'c' }),
     /翻页/,
+  )
+  assert.equal(
+    'auto' in validateRequest({ ...search, platform: 'bili', auto: true }),
+    false,
+  )
+  assert.equal(
+    'auto' in
+      validateRequest({
+        ...base,
+        mode: 'link',
+        query: 'https://www.douyin.com/video/123',
+        auto: true,
+      }),
+    false,
   )
 })

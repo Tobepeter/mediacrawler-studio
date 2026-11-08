@@ -38,8 +38,9 @@ class Rule:
 
 RULES = {
     ('dy', 'search_info_by_keyword'): Rule(
-        # 换关键词约等于用户看完一屏结果再搜下一个，翻页约等于向下滚动
-        key='dy-search', fresh_gap=(10, 15), page_gap=(3, 6), is_fresh=first_search_page,
+        # 换关键词约等于用户看完一屏结果再搜下一个，翻页约等于看完一屏再向下滚动
+        # 3-6 秒翻页时，几分钟内连续采几批就会触发验证（2026-11-09 实际遇到）
+        key='dy-search', fresh_gap=(10, 15), page_gap=(6, 10), is_fresh=first_search_page,
         window_limit=20, window_seconds=600, cooldown_seconds=1800,
     ),
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),

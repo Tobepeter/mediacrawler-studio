@@ -13,6 +13,7 @@ import {
   creatorPlatforms,
   creatorPresets,
   extractShareUrl,
+  isAutoForm,
   isCreatorUrl,
   isDouyinShortLink,
   platformOfUrl,
@@ -23,6 +24,7 @@ import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
 import {
   activeStatuses,
+  isContinuing,
   platformNames,
   useForm,
   usePage,
@@ -49,8 +51,12 @@ export function CollectForm() {
   const form = useForm()
   const page = usePage()
   const task = tasks[form.platform]
-  const pending = clearing || !!requests[form.platform]
-  const blocked = pending || !!working[form.platform]
+  // 滚动续采在后台进行，不锁定表单，也不把采集按钮切成停止
+  const continuing = isContinuing(task)
+  const pending =
+    clearing ||
+    (!!requests[form.platform] && requests[form.platform] !== 'continue')
+  const blocked = pending || (!!working[form.platform] && !continuing)
   const busy =
     blocked &&
     task?.platform === form.platform &&
@@ -216,7 +222,13 @@ export function CollectForm() {
                   disabled={busy || pending || locked}
                   max={form.mode === 'creator' ? creatorLimit : undefined}
                   presets={form.mode === 'creator' ? creatorPresets : undefined}
-                  onChange={(limit) => updateForm({ limit })}
+                  auto={isAutoForm(form)}
+                  onAuto={
+                    creatorPlatforms.includes(form.platform)
+                      ? () => updateForm({ auto: true })
+                      : undefined
+                  }
+                  onChange={(limit) => updateForm({ limit, auto: false })}
                 />
               )}
               {/* 固定操作占位，状态切换不挤动输入框 */}

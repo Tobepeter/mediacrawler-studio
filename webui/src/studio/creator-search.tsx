@@ -169,6 +169,8 @@ export function CreatorSearch(props: {
       if (!search.data) setSubmitted('')
       void settleCreatorSearch()
     }
+    // 搜索和采集互斥，打开弹窗时先结束后台续采
+    if (value) void useStudio.getState().stopContinuation(platform)
     if (value && seed.trim() && seed.trim() !== keyword.trim()) {
       // 只带入主输入框的词，由用户回车确认，避免打开弹窗就消耗一次搜索
       setKeyword(seed.trim())

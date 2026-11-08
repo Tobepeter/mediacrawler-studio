@@ -46,12 +46,19 @@ test('历史可离线查看，扫码入口复用现有码，取消路由到真�
       cancel: async (platform) => calls.push(['cancel', platform]),
     },
   }
-  globalThis.storeFixture = { create, t: (s) => s, toast: {} }
+  globalThis.storeFixture = {
+    create,
+    t: (s) => s,
+    toast: {},
+    autoBatchSize: 20,
+    isAutoForm: () => false,
+  }
   try {
     const { useStudio } = await import(
       'data:text/javascript;base64,' +
         Buffer.from(
-          'const {create,t,toast}=globalThis.storeFixture;\n' + code,
+          'const {create,t,toast,autoBatchSize,isAutoForm}=globalThis.storeFixture;\n' +
+            code,
         ).toString('base64')
     )
     await useStudio.getState().restore('history')

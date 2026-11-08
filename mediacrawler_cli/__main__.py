@@ -136,6 +136,36 @@ def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', hel
     invoke('collect', mode='creator', query=reference or '', **options)
 
 
+@app.command('search')
+def search_command(query: Optional[str] = typer.Option(None, help='关键词；只传 --cursor 时可省略'),
+                   cursor: Optional[str] = typer.Option(None, help='上一次输出的 next_cursor'),
+                   platform: str = 'dy', limit: int = typer.Option(20, min=1, max=100, help='本次最多返回多少条，默认一页 20 条'),
+                   profile: str = 'default', data_dir: Optional[str] = None, non_interactive: bool = False,
+                   qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal / image / browser'),
+                   login_timeout: int = typer.Option(300, min=1), timeout: int = typer.Option(900, min=1),
+                   lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', save: bool = False,
+                   output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
+                   quality: str = typer.Option('best', help='best、worst 或 720p 等'),
+                   media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
+                   include_source: bool = False, verbose: bool = False):
+    """按关键词分页采集作品，末行 type=page 给出 next_cursor
+
+    --limit 是本次要多少条，--cursor 是从哪继续，两者独立；has_more=false 表示已到末尾
+    示例：search --query 罗翔；search --cursor <next_cursor> --limit 50
+    需要一次拿固定条数、不关心翻页时用 collect
+    """
+    import re
+    creator_platform(platform)
+    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+        raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
+    if not (query or '').strip() and not cursor:
+        raise typer.BadParameter('需要 --query 或 --cursor')
+    options = dict(locals())
+    options.pop('re', None)
+    options['query'] = (query or '').strip()
+    invoke('collect', mode='search', paged=True, **options)
+
+
 @app.command('download')
 def download_command(source: Optional[str] = typer.Option(None, help='作品页面链接，识别平台后获取媒体'),
                      input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin；同平台最多 100 条'),

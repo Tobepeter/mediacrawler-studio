@@ -3,6 +3,16 @@ import type { Platform } from './types'
 export const creatorPlatforms: readonly Platform[] = ['dy']
 export const creatorLimit = 200
 export const creatorPresets = [20, 50, 100, 200] as const
+export const autoBatchSize = 20
+
+export const isAutoForm = (form: {
+  platform: Platform
+  mode: string
+  auto?: boolean
+}) =>
+  creatorPlatforms.includes(form.platform) &&
+  form.mode !== 'link' &&
+  form.auto !== false
 
 // 与主进程校验保持一致；分享短链无法在输入时区分作品和主页
 export function isCreatorUrl(value: string) {

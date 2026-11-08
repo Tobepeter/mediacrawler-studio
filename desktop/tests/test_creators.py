@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-from desktop.creators import CreatorError, collect_creator_posts, decode_cursor, encode_cursor, parse_reference, search_creators
+from desktop.creators import CreatorError, collect_creator_posts, collect_search_posts, decode_cursor, encode_cursor, parse_reference, search_creators
 
 SEC = 'MS4wLjABAAAA' + 'a' * 30
 
@@ -250,3 +250,50 @@ async def test_short_link_resolution(target, ok):
     else:
         with pytest.raises(CreatorError):
             await collect_creator_posts(runner(client), 'https://v.douyin.com/abc/')
+
+
+def keyword_client(batches):
+    client = SimpleNamespace()
+    client.search_info_by_keyword = AsyncMock(side_effect=batches)
+    return client
+
+
+def keyword_page(start, size, more=1, logid='log'):
+    return {'has_more': more, 'extra': {'logid': logid}, 'data': [{'aweme_info': {'aweme_id': str(start + i)}} for i in range(size)]}
+
+
+@pytest.mark.asyncio
+async def test_search_cursor_resumes_without_gap_or_repeat():
+    client = keyword_client([keyword_page(0, 10), keyword_page(10, 10), keyword_page(10, 10), keyword_page(20, 3, more=0)])
+    task = runner(client, limit=15)
+    await collect_search_posts(task, '罗翔')
+    assert len(task.store.ids) == 15
+    assert client.search_info_by_keyword.await_args_list[1].kwargs == {'offset': 10, 'search_id': 'log'}
+    cursor = pages(task)[-1]['next_cursor']
+    next_task = runner(client, limit=20)
+    await collect_search_posts(next_task, '罗翔', cursor)
+    assert sorted(map(int, (key.split(':')[1] for key in next_task.store.ids))) == list(range(15, 23))
+    assert pages(next_task)[-1] == {'has_more': False, 'next_cursor': None}
+
+
+@pytest.mark.asyncio
+async def test_search_batch_ending_on_page_boundary_continues_from_next_page():
+    client = keyword_client([keyword_page(0, 10), keyword_page(10, 10)])
+    task = runner(client, limit=20)
+    await collect_search_posts(task, '罗翔')
+    state = decode_cursor(pages(task)[-1]['next_cursor'], 'search')
+    assert (state['o'], state['s']) == (20, 0)
+
+
+@pytest.mark.asyncio
+async def test_search_cursor_bound_to_keyword():
+    with pytest.raises(CreatorError) as error:
+        await collect_search_posts(runner(keyword_client([])), '别的词', encode_cursor('search', q='罗翔', o=10, i='', s=0))
+    assert error.value.code == 'INVALID_CURSOR'
+
+
+@pytest.mark.asyncio
+async def test_search_cursor_alone_supplies_keyword():
+    client = keyword_client([keyword_page(0, 3, more=0)])
+    await collect_search_posts(runner(client), '', encode_cursor('search', q='罗翔', o=10, i='log', s=0))
+    assert client.search_info_by_keyword.await_args.args == ('罗翔',)

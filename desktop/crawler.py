@@ -262,6 +262,10 @@ class DesktopCrawler:
         if self.platform not in ('bili', 'dy', 'xhs'):
             await ExtraCollector(self).search()
             return
+        if self.platform == "dy":
+            from desktop.creators import collect_search_posts
+            await collect_search_posts(self, self.request["query"], self.request.get("cursor"), options)
+            return
         # 按需取详情，避免原生批次最少 10/20 条超过用户所选数量
         query = self.request["query"]
         semaphore = asyncio.Semaphore(1)
@@ -274,20 +278,6 @@ class DesktopCrawler:
                     item = await self.crawler.get_video_info_task(aid=post.get("aid"), bvid="", semaphore=semaphore)
                     if item:
                         await self.save_bilibili(item)
-                    if len(self.store.ids) >= self.request["limit"]:
-                        return
-            elif self.platform == "dy":
-                from store.douyin import update_douyin_aweme
-                response = await self.client.search_info_by_keyword(query, offset=(page - 1) * 10, search_id=search_id, **options)
-                posts = response.get("data") or []
-                search_id = response.get("extra", {}).get("logid", "")
-                for post in posts:
-                    item = post.get("aweme_info")
-                    if not item:
-                        mix = post.get("aweme_mix_info", {}).get("mix_items") or []
-                        item = mix[0] if mix else None
-                    if item:
-                        await update_douyin_aweme(item)
                     if len(self.store.ids) >= self.request["limit"]:
                         return
             else:

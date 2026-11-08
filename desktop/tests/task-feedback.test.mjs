@@ -63,6 +63,21 @@ test('继续采集成功不弹通知，失败和警告仍然提示', () => {
   )
 })
 
+test('自动模式首批有结果不弹通知，没有结果仍提示', () => {
+  const running = state('running', { auto: true })
+  assert.equal(
+    taskFeedback(running, {
+      ...state('completed', { auto: true }),
+      results: [{ id: '1' }],
+    }),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(running, state('completed', { auto: true })).kind,
+    'info',
+  )
+})
+
 test('无结果、部分失败、错误、取消各有准确语义', () => {
   const running = state('running')
   assert.equal(taskFeedback(running, state('completed')).kind, 'info')

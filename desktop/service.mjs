@@ -129,6 +129,7 @@ export class StudioService {
       comments: value.comments === true,
       replies: value.comments === true && value.replies === true,
       filters: validateFilters(platform, value.filters),
+      ...(typeof value.auto === 'boolean' ? { auto: value.auto } : {}),
     }
     return this.trackSave(this.library.saveWorkspace())
   }
@@ -404,7 +405,7 @@ export class StudioService {
     const previous = request.cursor ? this.state.pages[request.platform] : null
     if (
       request.cursor &&
-      (previous?.task.mode !== 'creator' ||
+      (previous?.task.mode !== request.mode ||
         previous.task.query !== request.query)
     )
       throw new Error('采集记录已变化，请重新开始')

@@ -56,13 +56,13 @@ const ResultItems = memo(function ResultItems({
   const busy = useStudio((state) => platformBusy(state, platform))
   // 博主页每张卡片的平台和作者都相同，改为展示点赞帮助挑选
   const creatorTask = page?.task.mode === 'creator' ? page.task : null
-  const formQuery = useStudio((state) => state.forms[platform].query)
-  // 用户停止或失败后不自动恢复；输入框改了别的内容时继续采集会覆盖它
+  // 自动模式和博主可以续采；用户停止或失败后不自动恢复，固定数量只给手动按钮
+  const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
   const autoContinue =
     !busy &&
-    !!creatorTask?.nextCursor &&
-    ['completed', 'restored'].includes(creatorTask.status) &&
-    formQuery === creatorTask.query
+    !!pagedTask?.auto &&
+    !!pagedTask.nextCursor &&
+    ['completed', 'restored'].includes(pagedTask.status)
   return (
     <>
       {!results.length ? (
@@ -180,23 +180,31 @@ const ResultItems = memo(function ResultItems({
               </Reveal>
             ))}
           </div>
-          {creatorTask && (
+          {pagedTask && (
             <AutoContinue key={page?.id} active={autoContinue}>
-              {active ? (
+              {active && pagedTask.auto ? (
+                <span className='inline-flex h-9 items-center gap-2'>
+                  <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
+                  {t('加载更多')}
+                </span>
+              ) : active ? (
                 <Button variant='outline' disabled>
                   <Loader2 className='animate-spin motion-reduce:animate-none' />
                   {t('采集中')}
                 </Button>
-              ) : creatorTask.nextCursor ? (
+              ) : pagedTask.nextCursor ? (
                 <Button
                   variant='outline'
                   disabled={busy}
-                  onClick={continueCreator}
+                  onClick={continueCollect}
                 >
-                  {t('继续采集 {{count}} 条', { count: creatorTask.limit })}
+                  {pagedTask.auto
+                    ? t('加载更多')
+                    : t('继续采集 {{count}} 条', { count: pagedTask.limit })}
                 </Button>
               ) : (
-                creatorTask.exhausted && t('已采完全部作品')
+                pagedTask.exhausted &&
+                t(creatorTask ? '已采完全部作品' : '没有更多了')
               )}
             </AutoContinue>
           )}
@@ -206,9 +214,9 @@ const ResultItems = memo(function ResultItems({
   )
 })
 
-const continueCreator = () => void useStudio.getState().continueCreator()
+const continueCollect = () => void useStudio.getState().continueCollect()
 
-// 必须有真实滚动才自动继续：内容不足一屏时不替用户扩大选定的条数，按钮仍可手动点
+// 必须有真实滚动才自动继续，避免打开历史或内容不足一屏时平白发请求，按钮仍可手动点
 // 只在可继续时监听，批次结束时 inView 可能还是旧值，等下一次滚动再判断就不会多采
 function AutoContinue(props: { active: boolean; children: ReactNode }) {
   const { active, children } = props
@@ -235,7 +243,7 @@ function AutoContinue(props: { active: boolean; children: ReactNode }) {
   }, [root, active])
   const shouldContinue = active && inView && scrolled
   useEffect(() => {
-    if (shouldContinue) continueCreator()
+    if (shouldContinue) continueCollect()
   }, [shouldContinue])
   return (
     <div

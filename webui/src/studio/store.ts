@@ -4,6 +4,7 @@ import { recordLoginOutcome } from './login-health'
 import { t, translateMessage } from '@/i18n/studio'
 import { create } from 'zustand'
 import { toast } from 'sonner'
+import { autoBatchSize, isAutoForm } from './creator-options'
 import { taskFeedback } from './task-feedback'
 import type {
   CollectRequest,
@@ -12,6 +13,7 @@ import type {
   Platform,
   PlatformForm,
   StudioState,
+  StudioTask,
 } from './types'
 
 export const platformNames = {
@@ -57,10 +59,12 @@ interface StudioStore extends StudioState {
   ready: boolean
   attempted: Partial<Record<Platform, boolean>>
   pending: boolean
-  requests: Partial<Record<Platform, 'start' | 'logout' | 'download'>>
+  requests: Partial<
+    Record<Platform, 'start' | 'continue' | 'logout' | 'download'>
+  >
   setRequest: (
     platform: Platform,
-    kind?: 'start' | 'logout' | 'download',
+    kind?: 'start' | 'continue' | 'logout' | 'download',
   ) => void
   downloadFailure: string
   loginMode: LoginMode
@@ -84,8 +88,12 @@ interface StudioStore extends StudioState {
     silent?: boolean,
     cursor?: string,
   ) => Promise<void>
-  continueCreator: () => Promise<void>
+  continueCollect: () => Promise<void>
+  stopContinuation: (platform?: Platform) => Promise<void>
 }
+
+export const isContinuing = (task?: StudioTask) =>
+  !!task?.continued && activeStatuses.includes(task.status)
 
 export function platformBusy(state: StudioStore, platform = state.platform) {
   return (
@@ -327,11 +335,27 @@ export const useStudio = create<StudioStore>((set, get) => ({
     else if (window.studio?.stopLogin) await window.studio.stopLogin(platform)
     else await window.studio?.cancel(platform)
   },
-  continueCreator: async () => {
-    const task = get().pages[get().platform]?.task
-    if (task?.mode !== 'creator' || !task.nextCursor) return
-    get().updateForm({ query: task.query, mode: 'creator', limit: task.limit })
-    await get().start('collect', false, task.nextCursor)
+  continueCollect: async () => {
+    const cursor = get().pages[get().platform]?.task.nextCursor
+    if (cursor) await get().start('collect', false, cursor)
+  },
+  // 后台续采不占用表单，用户发起别的操作时让路，等平台真正空闲
+  stopContinuation: async (platform = get().platform) => {
+    const task = get().tasks[platform]
+    if (!isContinuing(task)) return
+    await window.studio?.cancel(platform)
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer)
+        unsubscribe()
+        resolve()
+      }
+      const timer = setTimeout(finish, 10000)
+      const unsubscribe = useStudio.subscribe(() => {
+        if (!platformBusy(get(), platform)) finish()
+      })
+      if (!platformBusy(get(), platform)) finish()
+    })
   },
   start: async (action = 'collect', silent = false, cursor) => {
     if (action === 'connect' && window.studio?.retryLogin) {
@@ -347,6 +371,8 @@ export const useStudio = create<StudioStore>((set, get) => ({
       return
     }
     const platform = get().platform
+    if (action === 'collect' && !cursor && isContinuing(get().tasks[platform]))
+      await get().stopContinuation(platform)
     if (platformBusy(get(), platform)) return
     if (action === 'collect' && get().accounts[platform] !== 'connected') {
       get().updateView(
@@ -366,7 +392,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
       )
       return
     }
-    get().setRequest(platform, 'start')
+    get().setRequest(platform, cursor ? 'continue' : 'start')
     set({
       selected: null,
       attempted: { ...get().attempted, [platform]: true },
@@ -374,8 +400,26 @@ export const useStudio = create<StudioStore>((set, get) => ({
     get().updateView({ error: '', historyId: '' }, platform)
     const taskBefore = get().tasks[platform]
     try {
+      // 续采沿用原任务的条件，不读也不改用户正在编辑的表单
+      const page = get().pages[platform]?.task
+      const form = get().forms[platform]
+      const request =
+        cursor && page
+          ? {
+              platform,
+              mode: page.mode,
+              query: page.query,
+              limit: page.limit,
+              comments: page.comments,
+              replies: page.replies,
+              filters: page.filters,
+              auto: page.auto,
+            }
+          : isAutoForm(form)
+            ? { ...form, auto: true, limit: autoBatchSize }
+            : { ...form, auto: false }
       await window.studio.start({
-        ...get().forms[platform],
+        ...request,
         action,
         silent,
         loginMode: 'qrcode',

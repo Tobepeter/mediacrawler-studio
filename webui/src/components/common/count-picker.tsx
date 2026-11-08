@@ -16,6 +16,8 @@ export interface CountPickerProps {
   disabled?: boolean
   max?: number
   presets?: readonly number[]
+  auto?: boolean
+  onAuto?: () => void
 }
 
 // 快捷数量与自定义输入，确认后才写回，关闭时丢弃草稿
@@ -27,6 +29,8 @@ export function CountPicker(props: CountPickerProps) {
     disabled,
     max = 100,
     presets = [5, 10, 20, 50, 100],
+    auto,
+    onAuto,
   } = props
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(String(value))
@@ -58,7 +62,7 @@ export function CountPicker(props: CountPickerProps) {
           className='w-28 shrink-0 justify-between px-3'
           aria-label={t('采集数量')}
         >
-          {t('{{count}} 条', { count: value })}
+          {auto ? t('自动') : t('{{count}} 条', { count: value })}
           <ChevronDown className='opacity-50' />
         </Button>
       </PopoverTrigger>
@@ -67,6 +71,23 @@ export function CountPicker(props: CountPickerProps) {
         className='space-y-3'
         aria-label={t('采集数量')}
       >
+        {onAuto && (
+          <Button
+            type='button'
+            variant={auto ? 'secondary' : 'outline'}
+            className='w-full justify-between'
+            aria-pressed={!!auto}
+            onClick={() => {
+              onAuto()
+              setOpen(false)
+            }}
+          >
+            {t('自动')}
+            <span className='text-xs font-normal text-muted-foreground'>
+              {t('滚动时继续加载')}
+            </span>
+          </Button>
+        )}
         <div className='flex gap-1' role='group' aria-label={t('采集数量')}>
           {presets
             .filter(
@@ -77,9 +98,9 @@ export function CountPicker(props: CountPickerProps) {
               <Button
                 key={preset}
                 type='button'
-                variant={value === preset ? 'secondary' : 'outline'}
+                variant={!auto && value === preset ? 'secondary' : 'outline'}
                 className='flex-1 px-0'
-                aria-pressed={value === preset}
+                aria-pressed={!auto && value === preset}
                 onClick={() => apply(preset)}
               >
                 {preset}

@@ -213,8 +213,8 @@ def run(request):
         finally:
             lock.release()
     values = list(items.values())
-    # 博主命令需要分页位置；失败时也输出，已取结果可从该位置继续
-    paged = request['action'] == 'creator-search' or request.get('mode') == 'creator'
+    # 博主和分页搜索需要分页位置；失败时也输出，已取结果可从该位置继续
+    paged = request['action'] == 'creator-search' or request.get('mode') == 'creator' or request.get('paged') is True
     summary = {'type': 'page', **page, 'count': len(values), 'complete': error is None}
     if request['format'] == 'json':
         print(json.dumps({'items': values, 'page': summary} if paged else values, ensure_ascii=False))

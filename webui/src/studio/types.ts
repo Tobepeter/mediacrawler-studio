@@ -21,6 +21,8 @@ export interface CollectRequest {
   replies?: boolean
   filters?: Record<string, string>
   cursor?: string
+  // 抖音默认：按批采集，滚动到底继续；false 表示用户选了固定数量
+  auto?: boolean
   silent?: boolean
   loginMode?: LoginMode
 }

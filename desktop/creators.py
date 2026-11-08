@@ -1,4 +1,4 @@
-"""博主搜索与主页作品分页，桌面与 CLI 共用；当前支持抖音"""
+"""博主搜索、主页作品与关键词搜索的游标分页，桌面与 CLI 共用；当前支持抖音"""
 import base64
 import binascii
 import json
@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 PLATFORMS = ('dy',)
 SEARCH_REQUESTS_PER_CALL = 3
 EMPTY_PAGE_RETRIES = 2
+SEARCH_PAGE_SIZE = 10
+SEARCH_MAX_REQUESTS = 10
 RESOLVE_CANDIDATES = 20
 SEC_UID = re.compile(r'MS4wLj[A-Za-z0-9_-]{20,}')
 HOSTS = ('douyin.com', 'iesdouyin.com')
@@ -204,6 +206,43 @@ async def creator_profile(runner, identity):
     if not profile:
         raise CreatorError('CREATOR_NOT_FOUND', '没有找到这位博主，账号可能已注销')
     return profile
+
+
+async def collect_search_posts(runner, query, cursor=None, options=None):
+    from store.douyin import update_douyin_aweme
+    state = decode_cursor(cursor, 'search')
+    offset, search_id, skip = state.get('o', 0), state.get('i', ''), state.get('s', 0)
+    bound = state.get('q')
+    if state and (not isinstance(bound, str) or not bound or (query and bound != query) or not isinstance(offset, int) or isinstance(offset, bool) or offset < 0 or not isinstance(search_id, str)):
+        raise invalid_cursor()
+    # 游标自带关键词，CLI 续页可以只传 --cursor
+    query = bound or query
+    store = runner.store
+
+    def publish(next_offset=None, next_skip=0):
+        more = next_offset is not None
+        runner.emit('page', has_more=more, next_cursor=encode_cursor('search', q=query, o=next_offset, i=search_id, s=next_skip) if more else None)
+
+    for _ in range(SEARCH_MAX_REQUESTS):
+        response = await runner.client.search_info_by_keyword(query, offset=offset, search_id=search_id, **(options or {}))
+        posts = response.get('data') or []
+        search_id = (response.get('extra') or {}).get('logid') or search_id
+        for index in range(skip, len(posts)):
+            if len(store.ids) >= store.limit:
+                publish(offset, index)
+                return
+            post = posts[index]
+            mix = (post.get('aweme_mix_info') or {}).get('mix_items') or []
+            item = post.get('aweme_info') or (mix[0] if mix else None)
+            if item:
+                await update_douyin_aweme(item)
+        if not posts or response.get('has_more') in (False, 0):
+            publish()
+            return
+        offset, skip = offset + SEARCH_PAGE_SIZE, 0
+        if len(store.ids) >= store.limit:
+            break
+    publish(offset)
 
 
 async def collect_creator_posts(runner, reference, cursor=None):
