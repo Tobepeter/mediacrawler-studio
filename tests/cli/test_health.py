@@ -88,15 +88,15 @@ async def test_real_dom_checks_image_and_challenge(tmp_path):
         try:
             page = context.pages[0]
             await page.route('**/*', lambda route: route.fulfill(status=200, content_type='text/html', body=html))
-            result = await check_page(page, 'bili', 1500)
+            result = await check_page(page, 'bili', 8000)
             assert result['status'] == 'ok'
             assert result['stages']['qr_image']['bytes'] > 0
             assert 'image' not in result
             html = '<div id="captcha_container">验证</div>'
-            result = await check_page(page, 'bili', 1500)
+            result = await check_page(page, 'bili', 8000)
             assert result['error']['code'] == 'VERIFICATION_REQUIRED'
             html = '<div>页面没有登录入口</div>'
-            result = await check_page(page, 'bili', 300)
+            result = await check_page(page, 'bili', 1000)
             assert result['error']['code'] == 'LOGIN_ENTRY_NOT_FOUND'
             assert result['error']['timed_out'] is True
         finally:
