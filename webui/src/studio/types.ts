@@ -95,6 +95,7 @@ export interface StudioTask extends CollectRequest {
   creator?: CreatorInfo
   nextCursor?: string
   exhausted?: boolean
+  continued?: boolean
   status: TaskStatus
   message: string
   startedAt: number

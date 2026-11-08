@@ -415,7 +415,12 @@ export class StudioService {
       startedAt: Date.now(),
     }
     delete task.cursor
-    if (previous) task.creator = previous.task.creator
+    if (previous) {
+      task.creator = previous.task.creator
+      // 本批在拿到新游标前失败或被停止时，仍能从原位置继续
+      task.nextCursor = request.cursor
+      task.continued = true
+    }
     const run = {
       kind: request.action,
       task,

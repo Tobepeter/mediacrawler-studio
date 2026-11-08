@@ -43,6 +43,26 @@ test('采集终态通知一次，重复推送、快照、历史与新任务不�
   )
 })
 
+test('继续采集成功不弹通知，失败和警告仍然提示', () => {
+  const running = state('running', { continued: true })
+  assert.equal(
+    taskFeedback(running, state('completed', { continued: true })),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(
+      running,
+      state('completed', { continued: true, warning: '部分失败' }),
+    ).kind,
+    'warning',
+  )
+  assert.equal(
+    taskFeedback(running, state('error', { continued: true, message: '失败' }))
+      .kind,
+    'error',
+  )
+})
+
 test('无结果、部分失败、错误、取消各有准确语义', () => {
   const running = state('running')
   assert.equal(taskFeedback(running, state('completed')).kind, 'info')

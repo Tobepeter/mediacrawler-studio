@@ -771,6 +771,13 @@ test('继续采集并入原批次并更新翻页位置', async () => {
     await finished()
     const first = service.state.pages.dy
     assert.equal(first.task.nextCursor, 'next')
+    script = `console.log(JSON.stringify({type:'error',message:'失败'}));`
+    await start({ cursor: 'next' })
+    await until(
+      () => service.state.tasks.dy?.status === 'error' && !service.busy,
+    )
+    assert.equal(service.state.pages.dy.task.nextCursor, 'next')
+    assert.equal(service.state.pages.dy.results.length, 1)
     script = emit('2', 'null')
     await start({ cursor: 'next' })
     await finished()

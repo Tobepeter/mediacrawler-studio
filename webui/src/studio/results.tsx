@@ -2,7 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { IconButton } from '@/components/common/icon-button'
 import { Reveal } from '@/components/common/reveal'
 import { cn } from '@/lib/utils'
-import { memo, useState } from 'react'
+import { memo, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useInView } from 'react-intersection-observer'
 import {
   ArrowUpRight,
   Heart,
@@ -55,6 +56,13 @@ const ResultItems = memo(function ResultItems({
   const busy = useStudio((state) => platformBusy(state, platform))
   // 博主页每张卡片的平台和作者都相同，改为展示点赞帮助挑选
   const creatorTask = page?.task.mode === 'creator' ? page.task : null
+  const formQuery = useStudio((state) => state.forms[platform].query)
+  // 用户停止或失败后不自动恢复；输入框改了别的内容时继续采集会覆盖它
+  const autoContinue =
+    !busy &&
+    !!creatorTask?.nextCursor &&
+    ['completed', 'restored'].includes(creatorTask.status) &&
+    formQuery === creatorTask.query
   return (
     <>
       {!results.length ? (
@@ -173,7 +181,7 @@ const ResultItems = memo(function ResultItems({
             ))}
           </div>
           {creatorTask && (
-            <div className='flex justify-center pt-6 text-sm text-muted-foreground'>
+            <AutoContinue key={page?.id} active={autoContinue}>
               {active ? (
                 <Button variant='outline' disabled>
                   <Loader2 className='animate-spin motion-reduce:animate-none' />
@@ -183,20 +191,61 @@ const ResultItems = memo(function ResultItems({
                 <Button
                   variant='outline'
                   disabled={busy}
-                  onClick={() => void useStudio.getState().continueCreator()}
+                  onClick={continueCreator}
                 >
                   {t('继续采集 {{count}} 条', { count: creatorTask.limit })}
                 </Button>
               ) : (
                 creatorTask.exhausted && t('已采完全部作品')
               )}
-            </div>
+            </AutoContinue>
           )}
         </div>
       )}
     </>
   )
 })
+
+const continueCreator = () => void useStudio.getState().continueCreator()
+
+// 必须有真实滚动才自动继续：内容不足一屏时不替用户扩大选定的条数，按钮仍可手动点
+// 只在可继续时监听，批次结束时 inView 可能还是旧值，等下一次滚动再判断就不会多采
+function AutoContinue(props: { active: boolean; children: ReactNode }) {
+  const { active, children } = props
+  const [root, setRoot] = useState<Element | null>(null)
+  const [scrolled, setScrolled] = useState(false)
+  const { ref, inView } = useInView({
+    root,
+    rootMargin: '0px 0px 400px 0px',
+    skip: !root,
+  })
+  const anchor = useCallback(
+    (node: HTMLDivElement | null) => {
+      ref(node)
+      setRoot(node?.closest('[data-radix-scroll-area-viewport]') ?? null)
+    },
+    [ref],
+  )
+  useEffect(() => {
+    setScrolled(false)
+    if (!root || !active) return
+    const mark = () => setScrolled(true)
+    root.addEventListener('scroll', mark, { passive: true, once: true })
+    return () => root.removeEventListener('scroll', mark)
+  }, [root, active])
+  const shouldContinue = active && inView && scrolled
+  useEffect(() => {
+    if (shouldContinue) continueCreator()
+  }, [shouldContinue])
+  return (
+    <div
+      ref={anchor}
+      className='flex justify-center pt-6 text-sm text-muted-foreground'
+    >
+      {children}
+    </div>
+  )
+}
 
 // 封面占位尺寸固定；网络图片与缓存图片均按加载完成淡入
 function ResultCover({ src }: { src: string }) {

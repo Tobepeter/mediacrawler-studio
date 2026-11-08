@@ -65,6 +65,8 @@ export function taskFeedback(
       message: task.action === 'connect' ? '登录失败' : '采集失败',
       detail: task.message,
     }
+  // 继续采集的结果就接在列表末尾，滚动加载时每批弹通知只会打扰
+  if (task.continued && task.status === 'completed' && !task.warning) return
   if (task.action === 'collect' && task.status === 'completed')
     return {
       id,
