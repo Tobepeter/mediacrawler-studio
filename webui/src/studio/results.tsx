@@ -61,6 +61,7 @@ const ResultItems = memo(function ResultItems({
   // 自动模式接近底部就继续，看不到按钮；用户停止、失败或一批没有新内容时才交给手动
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
   // 旧博主记录没有这个字段，只有明确选了数字的才是固定数量
+  const formQuery = useStudio((state) => state.forms[platform].query)
   const autoMode = !!pagedTask && pagedTask.auto !== false
   // 看详情、找博主或翻历史时暂停：续采占用平台，会让这些操作失败或被打断
   const route = useStudioRoute()
@@ -90,7 +91,8 @@ const ResultItems = memo(function ResultItems({
         </div>
       ) : (
         <div className='pb-2 pt-1'>
-          {creatorTask?.creator && (
+          {/* 输入框已显示同一位博主时不重复，改看别的内容时才在这里标明结果归属 */}
+          {creatorTask?.creator && formQuery !== creatorTask.query && (
             <CreatorHeader
               creator={creatorTask.creator}
               count={results.length}

@@ -3,7 +3,6 @@ import { ArrowUpRight } from 'lucide-react'
 import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { cn } from '@/lib/utils'
 import type { CreatorInfo } from './types'
 
 export function CreatorAvatar(props: {
@@ -34,22 +33,41 @@ export function useCreatorStats() {
     ].filter(Boolean) as string[]
 }
 
-// 博主模式下代替输入框，完整链接只放在悬浮提示里
+function OpenCreator({ url, className }: { url: string; className?: string }) {
+  const { t } = useTranslation('studio')
+  return (
+    <IconButton
+      variant='ghost'
+      className={className}
+      label={t('打开博主主页')}
+      onClick={() => void window.studio?.openSource(url)}
+    >
+      <ArrowUpRight />
+    </IconButton>
+  )
+}
+
+// 博主模式下代替输入框，也是这批结果的标题；完整链接只放在悬浮提示里
 export function CreatorField(props: {
   url: string
   creator?: CreatorInfo
+  count?: number
   disabled?: boolean
   onClear: () => void
 }) {
-  const { url, creator, disabled, onClear } = props
+  const { url, creator, count, disabled, onClear } = props
   const { t } = useTranslation('studio')
+  const stats = useCreatorStats()
   const name = creator?.name || t('博主主页')
+  const detail = [
+    ...(creator ? stats(creator) : []),
+    count ? t('已采 {{count}} 条', { count }) : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <div
-      className={cn(
-        'flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-sm',
-        disabled && 'opacity-50',
-      )}
+      className='flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-sm'
       title={url}
     >
       <CreatorAvatar
@@ -57,8 +75,12 @@ export function CreatorField(props: {
         avatar={creator?.avatar}
         className='size-6 text-xs'
       />
-      <span className='truncate font-medium'>{name}</span>
+      <span className='shrink-0 truncate font-medium'>{name}</span>
+      <span className='hidden min-w-0 truncate text-xs text-muted-foreground sm:inline'>
+        {detail}
+      </span>
       <span className='flex-1' />
+      <OpenCreator url={creator?.url || url} className='size-7' />
       {!disabled && <ClearButton label={t('清除博主')} onClick={onClear} />}
     </div>
   )
@@ -81,13 +103,7 @@ export function CreatorHeader(props: { creator: CreatorInfo; count: number }) {
           {[...stats(creator), t('已采 {{count}} 条', { count })].join(' · ')}
         </p>
       </div>
-      <IconButton
-        variant='ghost'
-        label={t('打开博主主页')}
-        onClick={() => void window.studio?.openSource(creator.url)}
-      >
-        <ArrowUpRight />
-      </IconButton>
+      <OpenCreator url={creator.url} />
     </div>
   )
 }
