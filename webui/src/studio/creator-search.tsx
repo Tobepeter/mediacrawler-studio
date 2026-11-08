@@ -1,8 +1,16 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { useInView } from 'react-intersection-observer'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Search, UserSearch } from 'lucide-react'
 import { ClearableInput } from '@/components/common/clearable-input'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -10,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useLoadOnVisible } from '@/hooks/useLoadOnVisible'
 import { translateMessage } from '@/i18n/studio'
 import { creatorPlatforms } from './creator-options'
 import { CreatorAvatar, useCreatorStats } from './creator-ui'
@@ -59,6 +66,34 @@ function CreatorRow(props: {
   )
 }
 
+// 列表每次变化都重新挂载：inView 由观察器异步更新，沿用旧值会在追加后多请求一页
+// 新实例从不可见开始，观察器首次回调给出真实位置，内容没填满时也能继续加载
+function LoadMoreSentinel(props: {
+  root: HTMLElement | null
+  active: boolean
+  onLoad: () => void
+  children: ReactNode
+}) {
+  const { root, active, onLoad, children } = props
+  const { ref, inView } = useInView({
+    root,
+    rootMargin: '0px 0px 120px 0px',
+    skip: !root,
+  })
+  const shouldLoad = active && inView
+  useEffect(() => {
+    if (shouldLoad) onLoad()
+  }, [shouldLoad, onLoad])
+  return (
+    <div
+      ref={ref}
+      className='flex min-h-12 items-center justify-center gap-2 text-xs text-muted-foreground'
+    >
+      {children}
+    </div>
+  )
+}
+
 function Placeholder({ children }: { children: ReactNode }) {
   return <p className='p-2 text-sm text-muted-foreground'>{children}</p>
 }
@@ -81,14 +116,18 @@ export function CreatorSearch(props: {
   const items = search.data?.items ?? []
   const firstLoading = search.isFetching && !items.length
   // 同一时间只发一页，失败或整页重复时停下，不自动重试对频率敏感的接口
-  const loadNext = () => void search.fetchNextPage({ cancelRefetch: false })
+  const { fetchNextPage } = search
+  const loadNext = useCallback(
+    () => void fetchNextPage({ cancelRefetch: false }),
+    [fetchNextPage],
+  )
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
   const autoLoad =
     open &&
     search.hasNextPage &&
     !search.isFetching &&
     !search.isError &&
     !search.data?.stalled
-  const { rootRef, sentinelRef } = useLoadOnVisible(loadNext, autoLoad)
   // 回看博主直接打开已有记录，不消耗对频率敏感的搜索
   const recent = useMemo(() => {
     const seen = new Set<string>()
@@ -196,7 +235,7 @@ export function CreatorSearch(props: {
         {/* 换关键词时重建滚动容器，回到顶部 */}
         <div
           key={submitted}
-          ref={rootRef}
+          ref={setScroller}
           className='min-h-0 flex-1 space-y-1 overflow-y-auto'
         >
           {items.map((item) => (
@@ -221,10 +260,10 @@ export function CreatorSearch(props: {
             <div role='status' aria-label={t('搜索')}>
               {[0, 1, 2, 3].map((index) => (
                 <div key={index} className='flex items-center gap-3 p-2'>
-                  <div className='size-8 shrink-0 rounded-full bg-muted motion-safe:animate-pulse' />
+                  <Skeleton className='size-8 shrink-0 rounded-full motion-reduce:animate-none' />
                   <div className='flex-1 space-y-2'>
-                    <div className='h-3 w-1/3 rounded bg-muted motion-safe:animate-pulse' />
-                    <div className='h-3 w-2/3 rounded bg-muted motion-safe:animate-pulse' />
+                    <Skeleton className='h-3 w-1/3 motion-reduce:animate-none' />
+                    <Skeleton className='h-3 w-2/3 motion-reduce:animate-none' />
                   </div>
                 </div>
               ))}
@@ -267,9 +306,11 @@ export function CreatorSearch(props: {
           )}
           {/* 哨兵常驻列表末尾：正常滚动时已提前加载，滚得快才会看到 */}
           {search.hasNextPage && !!items.length && (
-            <div
-              ref={sentinelRef}
-              className='flex min-h-12 items-center justify-center gap-2 text-xs text-muted-foreground'
+            <LoadMoreSentinel
+              key={`${submitted}:${items.length}`}
+              root={scroller}
+              active={autoLoad}
+              onLoad={loadNext}
             >
               {search.isFetchNextPageError ? (
                 <>
@@ -293,7 +334,7 @@ export function CreatorSearch(props: {
                   {t('加载更多')}
                 </>
               )}
-            </div>
+            </LoadMoreSentinel>
           )}
         </div>
       </DialogContent>
