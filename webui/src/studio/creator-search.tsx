@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Search, UserSearch } from 'lucide-react'
+import { ClearableInput } from '@/components/common/clearable-input'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { translateMessage } from '@/i18n/studio'
 import { creatorPlatforms } from './creator-options'
 import { CreatorAvatar, useCreatorStats } from './creator-ui'
@@ -130,12 +130,24 @@ export function CreatorSearch(props: {
   }
 
   // 关闭时结束进行中的搜索，释放同平台的采集互斥
+  const stop = () => {
+    if (!loading) return
+    request.current++
+    setLoading(false)
+    void window.studio?.cancel(platform).catch(() => {})
+  }
+
+  const clear = () => {
+    stop()
+    setKeyword('')
+    setItems([])
+    setCursor(undefined)
+    setSearched(false)
+    setError('')
+  }
+
   const toggle = (value: boolean) => {
-    if (!value && loading) {
-      request.current++
-      setLoading(false)
-      void window.studio?.cancel(platform).catch(() => {})
-    }
+    if (!value) stop()
     if (value && seed.trim() && seed.trim() !== keyword.trim()) {
       // 只带入主输入框的词，由用户回车确认，避免打开弹窗就消耗一次搜索
       setKeyword(seed.trim())
@@ -177,13 +189,15 @@ export function CreatorSearch(props: {
             void search()
           }}
         >
-          <Input
+          <ClearableInput
+            className='flex-1'
             autoFocus
             aria-label={t('搜索博主名称或关键词')}
             placeholder={t('搜索博主名称或关键词')}
             value={keyword}
             maxLength={100}
             onChange={(event) => setKeyword(event.target.value)}
+            onClear={clear}
             onFocus={(event) => event.target.select()}
           />
           <Button

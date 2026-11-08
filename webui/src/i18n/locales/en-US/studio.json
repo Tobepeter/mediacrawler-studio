@@ -362,5 +362,6 @@
   "为避免触发平台验证，搜索会放慢一些": "Search is paced to avoid platform verification",
   "也可以直接粘贴博主主页链接": "You can also paste the creator's profile URL",
   "已采完全部作品": "All posts collected",
-  "打开博主主页": "Open creator profile"
+  "打开博主主页": "Open creator profile",
+  "清除": "Clear"
 }

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ClearableInput } from '@/components/common/clearable-input'
 import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
@@ -82,7 +82,7 @@ export function CollectForm() {
     })
     void start()
   }
-  const clearCreator = () => {
+  const clearQuery = () => {
     setCleared(true)
     updateForm({ query: '', mode: 'search', limit: limitFor('search') })
   }
@@ -173,11 +173,11 @@ export function CollectForm() {
                     url={form.query}
                     creator={creator}
                     disabled={busy || pending || locked}
-                    onClear={clearCreator}
+                    onClear={clearQuery}
                   />
                 ) : (
-                  <Input
-                    className='min-w-0 flex-1'
+                  <ClearableInput
+                    className='flex-1'
                     id='query'
                     autoFocus={cleared}
                     aria-label={t('关键词或作品链接')}
@@ -190,6 +190,7 @@ export function CollectForm() {
                     }
                     value={form.query}
                     onChange={(event) => updateQuery(event.target.value)}
+                    onClear={clearQuery}
                     required
                     maxLength={2000}
                     disabled={busy || pending || locked}

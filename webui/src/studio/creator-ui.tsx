@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { ArrowUpRight, X } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
+import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
@@ -58,17 +59,7 @@ export function CreatorField(props: {
       />
       <span className='truncate font-medium'>{name}</span>
       <span className='flex-1' />
-      {!disabled && (
-        <button
-          type='button'
-          className='flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-          aria-label={t('清除博主')}
-          title={t('清除博主')}
-          onClick={onClear}
-        >
-          <X className='size-4' />
-        </button>
-      )}
+      {!disabled && <ClearButton label={t('清除博主')} onClick={onClear} />}
     </div>
   )
 }
