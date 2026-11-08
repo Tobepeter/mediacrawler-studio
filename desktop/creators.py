@@ -1,9 +1,7 @@
 """博主搜索与主页作品分页，桌面与 CLI 共用；当前支持抖音"""
-import asyncio
 import base64
 import binascii
 import json
-import random
 import re
 from urllib.parse import urlparse
 
@@ -18,9 +16,9 @@ HOSTS = ('douyin.com', 'iesdouyin.com')
 class CreatorError(RuntimeError):
     """str(error) 给界面展示，code 与 candidates 给 CLI 的结构化错误"""
 
-    def __init__(self, code, message, candidates=None):
+    def __init__(self, code, message, candidates=None, retry_after=None):
         super().__init__(message)
-        self.code, self.candidates = code, candidates or []
+        self.code, self.candidates, self.retry_after = code, candidates or [], retry_after
 
 
 def invalid_cursor():
@@ -47,11 +45,6 @@ def decode_cursor(value, kind):
     return state
 
 
-async def pause():
-    # 翻页留出间隔，整页连续请求比单次搜索更容易触发风控
-    await asyncio.sleep(random.uniform(1.5, 3))
-
-
 async def checked(call):
     from media_platform.douyin.exception import DataFetchError
     try:
@@ -65,8 +58,6 @@ async def checked(call):
         raise CreatorError('AUTH_REQUIRED', '登录已失效，请重新扫码')
     if status:
         raise CreatorError('PLATFORM_ERROR', '抖音暂时无法完成请求，请稍后重试')
-    if (response.get('search_nil_info') or {}).get('search_nil_type') == 'verify_check':
-        raise CreatorError('SEARCH_VERIFICATION_REQUIRED', '抖音要求验证，请稍后重试')
     return response
 
 
@@ -132,9 +123,8 @@ async def search_creators(runner, keyword, limit=10, cursor=None, requests=SEARC
             'has_more': next_offset is not None,
         }
 
-    for attempt in range(requests):
-        if attempt:
-            await pause()
+    # 请求间隔由 desktop.pacing 在 client 出口统一控制
+    for _ in range(requests):
         response = await checked(runner.client.search_info_by_keyword(
             keyword, offset=offset, search_id=search_id, search_channel=SearchChannelType.USER,
         ))
@@ -256,7 +246,6 @@ async def collect_creator_posts(runner, reference, cursor=None):
                 publish(position, skip)
                 return
             empty += 1
-            await pause()
             continue
         empty = 0
         for index in range(skip, len(rows)):
@@ -279,4 +268,3 @@ async def collect_creator_posts(runner, reference, cursor=None):
         if len(store.ids) >= store.limit:
             return
         position, skip = following, 0
-        await pause()

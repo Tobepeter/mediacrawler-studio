@@ -5,6 +5,7 @@ from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
+from desktop.pacing import pace_client
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
@@ -59,6 +60,7 @@ class DesktopCrawler:
         self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
+        pace_client(self.client, self.platform)
 
     async def logged_in(self):
         if self.platform == 'wb' and urlparse(self.page.url).hostname in ('www.weibo.com', 'weibo.com'):

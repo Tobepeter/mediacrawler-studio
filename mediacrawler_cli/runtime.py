@@ -16,8 +16,8 @@ from mediacrawler_cli.cleanup import clean, prune, KEEP_RUNS
 
 
 class CLIError(Exception):
-    def __init__(self, code, run_id=None, candidates=None):
-        self.code, self.run_id, self.candidates = code, run_id, candidates or []
+    def __init__(self, code, run_id=None, candidates=None, retry_after=None):
+        self.code, self.run_id, self.candidates, self.retry_after = code, run_id, candidates or [], retry_after
         super().__init__(code)
 
 
@@ -157,7 +157,7 @@ def run(request):
                 elif event['type'] == 'state':
                     print(event.get('message', ''), file=sys.stderr)
                 elif event['type'] == 'failure':
-                    raise CLIError(event['code'], run_id, event.get('candidates'))
+                    raise CLIError(event['code'], run_id, event.get('candidates'), event.get('retry_after'))
             except queue.Empty:
                 if process.poll() is not None and not reader.is_alive():
                     break

@@ -160,5 +160,5 @@ def main(path):
         code = error.code if isinstance(error, CreatorError) else str(error)
         if not code.isupper() or len(code) > 60:
             code = 'PLATFORM_ERROR'
-        emit('failure', code=code, candidates=getattr(error, 'candidates', []))
+        emit('failure', code=code, candidates=getattr(error, 'candidates', []), retry_after=getattr(error, 'retry_after', None))
         raise SystemExit(1)

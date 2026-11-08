@@ -14,6 +14,13 @@ def worker(*events):
     return f'import json;{lines}'
 
 
+def test_failure_reports_retry_after(tmp_path, monkeypatch):
+    fake_worker(monkeypatch, worker({'type': 'failure', 'code': 'RATE_LIMITED', 'retry_after': 42}))
+    with pytest.raises(CLIError) as error:
+        run(request(tmp_path, mode='search'))
+    assert error.value.retry_after == 42
+
+
 def test_cli_validates_creator_options():
     runner = CliRunner()
     assert runner.invoke(app, ['creator', 'search', '--query', 'a', '--platform', 'bili']).exit_code == 2

@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-from desktop import creators
 from desktop.creators import CreatorError, collect_creator_posts, decode_cursor, encode_cursor, parse_reference, search_creators
 
 SEC = 'MS4wLjABAAAA' + 'a' * 30
@@ -9,7 +8,6 @@ SEC = 'MS4wLjABAAAA' + 'a' * 30
 
 @pytest.fixture(autouse=True)
 def fast(monkeypatch):
-    monkeypatch.setattr(creators, 'pause', AsyncMock())
     async def update(aweme):
         store = current['store']
         key = f"dy:{aweme['aweme_id']}"
@@ -121,7 +119,6 @@ async def test_search_cursor_bound_to_keyword():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('response,code', [
     ({'status_code': 8}, 'AUTH_REQUIRED'), ({'status_code': 5}, 'PLATFORM_ERROR'),
-    ({'status_code': 0, 'search_nil_info': {'search_nil_type': 'verify_check'}}, 'SEARCH_VERIFICATION_REQUIRED'),
 ])
 async def test_search_maps_platform_errors(response, code):
     with pytest.raises(CreatorError) as error:

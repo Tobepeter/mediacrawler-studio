@@ -37,8 +37,22 @@ uv run mediacrawler creator posts --cursor <上次的 next_cursor> --limit 50
 - stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`
 - 游标不透明，精确到页内位置，换 `--limit` 继续也不漏条，绑定关键词或博主，不匹配返回 `INVALID_CURSOR`。失败或风控时也会输出最近的游标，可稍后继续；跨次搜索可能出现重复候选，按 `id` 去重
 - search 的 `source=user` 是博主卡片，`source=video` 是相关视频作者，字段较少。抖音这条接口只返回混排结果，不等于平台完整的用户搜索
-- 搜索接口对频率敏感，短时间多次搜索会返回 `SEARCH_VERIFICATION_REQUIRED`，请隔一段时间再试；posts 单次最多 100 条，翻页间隔 1.5–3 秒
+- 敏感接口经统一节流，见下方“访问节奏”；posts 单次最多 100 条
 - 主页按平台顺序返回，通常从新到旧，置顶作品可能排在最前。需要从早到晚学习时，翻完后按 `publishedAt` 排序
+
+## 访问节奏
+
+抖音搜索对频率敏感，关键词搜索和博主搜索共用同一组限制，CLI 与桌面端跨进程共享（状态在数据目录的 `pacing/`）。数值按正常用户的操作节奏估算，没有做线上压测
+
+| 接口 | 间隔 | 上限 |
+| --- | --- | --- |
+| 抖音搜索，新搜索 | 10–15 秒 | 10 分钟 20 次 |
+| 抖音搜索，翻页 | 3–6 秒 | 不计入上限 |
+| 抖音主页作品翻页 | 2–4 秒 | 无 |
+
+- 命令会自动等待间隔，单次等待超过 30 秒或达到上限时返回 `RATE_LIMITED`
+- 平台返回验证要求时返回 `SEARCH_VERIFICATION_REQUIRED`，之后 30 分钟内本地直接返回 `RATE_COOLDOWN`，不再请求平台。这些错误都带 `retry_after`（秒）
+- 其他接口不受此限制。需要纳入时在 `desktop/pacing.py` 的 `RULES` 增加一行
 
 ## 数据目录与并行
 
