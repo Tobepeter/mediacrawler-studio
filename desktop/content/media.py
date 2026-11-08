@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
-from desktop.links import HOSTS, media_referer
+from desktop.links import media_referer
 from media_downloader.selection import selection
 
 

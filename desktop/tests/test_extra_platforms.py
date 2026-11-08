@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-import config
 from desktop.crawler import DesktopCrawler
 from desktop.extra_platforms import ExtraCollector
 from desktop.native_platforms import create_native, PLATFORMS

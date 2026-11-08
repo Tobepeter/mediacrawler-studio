@@ -5,7 +5,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-import psutil
 import pytest
 from filelock import FileLock
 from typer.testing import CliRunner
