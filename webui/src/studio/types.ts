@@ -76,6 +76,14 @@ export interface CreatorSummary {
   url: string
 }
 
+export interface CreatorInfo {
+  name: string
+  url: string
+  avatar?: string
+  followers?: number | null
+  posts?: number | null
+}
+
 export interface CreatorPage {
   items: CreatorSummary[]
   nextCursor?: string
@@ -84,8 +92,9 @@ export interface CreatorPage {
 }
 
 export interface StudioTask extends CollectRequest {
-  creator?: { name: string; url: string }
+  creator?: CreatorInfo
   nextCursor?: string
+  exhausted?: boolean
   status: TaskStatus
   message: string
   startedAt: number

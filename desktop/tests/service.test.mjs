@@ -730,7 +730,13 @@ test('采集任务记录博主名称，草稿接受博主模式', async () => {
     await until(
       () => service.state.tasks.dy?.status === 'completed' && !service.busy,
     )
-    assert.deepEqual(service.state.tasks.dy.creator, { name: '博主', url })
+    assert.deepEqual(service.state.tasks.dy.creator, {
+      name: '博主',
+      url,
+      avatar: '',
+      followers: null,
+      posts: null,
+    })
     assert.equal(service.state.tasks.dy.limit, 150)
   } finally {
     delete process.env.STUDIO_PYTHON

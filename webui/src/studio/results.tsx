@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { memo, useState } from 'react'
 import {
   ArrowUpRight,
+  Heart,
   MessageSquare,
   Inbox,
   Images,
@@ -16,6 +17,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { activeStatuses, platformBusy, platformNames, useStudio } from './store'
 import type { Platform } from './types'
 import { openSource } from './content-detail'
+import { CreatorHeader } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 
 export function Results() {
@@ -43,13 +45,16 @@ const ResultItems = memo(function ResultItems({
 }: {
   platform: Platform
 }) {
-  const { t } = useTranslation('studio')
+  const { t, i18n } = useTranslation('studio')
+  const compact = new Intl.NumberFormat(i18n.language, { notation: 'compact' })
 
   const page = useStudio((state) => state.pages[platform])
   const patch = useStudio((state) => state.patch)
   const results = page?.results || []
   const active = activeStatuses.includes(page?.task.status || '')
   const busy = useStudio((state) => platformBusy(state, platform))
+  // 博主页每张卡片的平台和作者都相同，改为展示点赞帮助挑选
+  const creatorTask = page?.task.mode === 'creator' ? page.task : null
   return (
     <>
       {!results.length ? (
@@ -66,6 +71,12 @@ const ResultItems = memo(function ResultItems({
         </div>
       ) : (
         <div className='pb-2 pt-1'>
+          {creatorTask?.creator && (
+            <CreatorHeader
+              creator={creatorTask.creator}
+              count={results.length}
+            />
+          )}
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
             {results.map((item, index) => (
               <Reveal
@@ -99,15 +110,17 @@ const ResultItems = memo(function ResultItems({
                       </span>
                     )}
                     <CardHeader>
-                      <div>
-                        <Badge variant='secondary' className='gap-1'>
-                          <PlatformIcon
-                            platform={item.platform}
-                            className='size-3'
-                          />
-                          {t(platformNames[item.platform])}
-                        </Badge>
-                      </div>
+                      {!creatorTask && (
+                        <div>
+                          <Badge variant='secondary' className='gap-1'>
+                            <PlatformIcon
+                              platform={item.platform}
+                              className='size-3'
+                            />
+                            {t(platformNames[item.platform])}
+                          </Badge>
+                        </div>
+                      )}
                       <h3 className='font-semibold'>{item.title}</h3>
                     </CardHeader>
                     {item.text && (
@@ -120,9 +133,20 @@ const ResultItems = memo(function ResultItems({
                   </button>
                   <CardFooter className='justify-between gap-2'>
                     <div className='flex min-w-0 items-center gap-2 text-muted-foreground'>
-                      <span className='truncate'>
-                        {item.author || t('未知作者')}
-                      </span>
+                      {creatorTask ? (
+                        item.likes && (
+                          <span className='inline-flex items-center gap-1 text-xs'>
+                            <Heart className='size-3' aria-hidden='true' />
+                            {Number.isFinite(Number(item.likes))
+                              ? compact.format(Number(item.likes))
+                              : item.likes}
+                          </span>
+                        )
+                      ) : (
+                        <span className='truncate'>
+                          {item.author || t('未知作者')}
+                        </span>
+                      )}
                       {item.commentStatus && (
                         <span
                           className='inline-flex shrink-0 items-center gap-1 text-xs'
@@ -148,15 +172,24 @@ const ResultItems = memo(function ResultItems({
               </Reveal>
             ))}
           </div>
-          {page?.task.mode === 'creator' && page.task.nextCursor && (
-            <div className='flex justify-center pt-6'>
-              <Button
-                variant='outline'
-                disabled={busy}
-                onClick={() => void useStudio.getState().continueCreator()}
-              >
-                {t('继续采集 {{count}} 条', { count: page.task.limit })}
-              </Button>
+          {creatorTask && (
+            <div className='flex justify-center pt-6 text-sm text-muted-foreground'>
+              {active ? (
+                <Button variant='outline' disabled>
+                  <Loader2 className='animate-spin motion-reduce:animate-none' />
+                  {t('采集中')}
+                </Button>
+              ) : creatorTask.nextCursor ? (
+                <Button
+                  variant='outline'
+                  disabled={busy}
+                  onClick={() => void useStudio.getState().continueCreator()}
+                >
+                  {t('继续采集 {{count}} 条', { count: creatorTask.limit })}
+                </Button>
+              ) : (
+                creatorTask.exhausted && t('已采完全部作品')
+              )}
             </div>
           )}
         </div>

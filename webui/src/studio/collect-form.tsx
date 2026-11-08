@@ -7,6 +7,7 @@ import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
 import { CreatorSearch } from './creator-search'
+import { CreatorField } from './creator-ui'
 import {
   creatorLimit,
   creatorPlatforms,
@@ -17,7 +18,6 @@ import {
   platformOfUrl,
 } from './creator-options'
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { LoginGate } from './login-gate'
 import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
@@ -28,7 +28,7 @@ import {
   usePage,
   useStudio,
 } from './store'
-import type { CreatorSummary, Platform } from './types'
+import type { CreatorInfo, CreatorSummary, Platform } from './types'
 
 // 链接自动识别，基础控件使用默认尺寸
 export function CollectForm() {
@@ -43,6 +43,8 @@ export function CollectForm() {
     updateForm,
     start,
     switchPlatform,
+    restore,
+    history,
   } = useStudio()
   const form = useForm()
   const page = usePage()
@@ -63,18 +65,26 @@ export function CollectForm() {
         ? form.limit
         : Math.max(form.limit, 50)
       : Math.min(form.limit, 100)
-  const [picked, setPicked] = useState<{ url: string; name: string }>()
-  const creatorName =
-    (picked?.url === form.query && picked.name) ||
-    (page?.task.query === form.query && page.task.creator?.name) ||
-    t('博主')
-  const chooseCreator = (creator: CreatorSummary) => {
-    setPicked({ url: creator.url, name: creator.name })
+  const [picked, setPicked] = useState<CreatorInfo>()
+  // 从主页切回输入时才需要抢焦点，首屏不打扰
+  const [cleared, setCleared] = useState(false)
+  const creator =
+    (picked?.url === form.query && picked) ||
+    (page?.task.query === form.query && page.task.creator) ||
+    history.find((entry) => entry.task.query === form.query)?.task.creator ||
+    undefined
+  const chooseCreator = (summary: CreatorSummary) => {
+    setPicked(summary)
     updateForm({
-      query: creator.url,
+      query: summary.url,
       mode: 'creator',
       limit: limitFor('creator'),
     })
+    void start()
+  }
+  const clearCreator = () => {
+    setCleared(true)
+    updateForm({ query: '', mode: 'search', limit: limitFor('search') })
   }
   const updateQuery = (input: string) => {
     const query = extractShareUrl(input)
@@ -158,37 +168,40 @@ export function CollectForm() {
               className='flex min-w-0 flex-wrap items-center justify-end gap-2 sm:h-9 sm:flex-nowrap'
             >
               <div className='flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1'>
-                {form.mode === 'creator' && (
-                  <Badge
-                    variant='secondary'
-                    className='max-w-40 shrink-0 truncate'
-                    title={creatorName}
-                  >
-                    {creatorName}
-                  </Badge>
+                {form.mode === 'creator' ? (
+                  <CreatorField
+                    url={form.query}
+                    creator={creator}
+                    disabled={busy || pending || locked}
+                    onClear={clearCreator}
+                  />
+                ) : (
+                  <Input
+                    className='min-w-0 flex-1'
+                    id='query'
+                    autoFocus={cleared}
+                    aria-label={t('关键词或作品链接')}
+                    placeholder={
+                      locked
+                        ? t('登录后即可采集')
+                        : creatorPlatforms.includes(form.platform)
+                          ? t('关键词、作品或博主主页链接')
+                          : t('关键词或作品链接')
+                    }
+                    value={form.query}
+                    onChange={(event) => updateQuery(event.target.value)}
+                    required
+                    maxLength={2000}
+                    disabled={busy || pending || locked}
+                  />
                 )}
-                <Input
-                  className='min-w-0 flex-1'
-                  id='query'
-                  aria-label={t('关键词或作品链接')}
-                  placeholder={
-                    locked
-                      ? t('登录后即可采集')
-                      : creatorPlatforms.includes(form.platform)
-                        ? t('关键词、作品或博主主页链接')
-                        : t('关键词或作品链接')
-                  }
-                  value={form.query}
-                  onChange={(event) => updateQuery(event.target.value)}
-                  required
-                  maxLength={2000}
-                  disabled={busy || pending || locked}
-                />
                 <CreatorSearch
                   key={`creators-${form.platform}`}
                   platform={form.platform}
+                  keyword={form.mode === 'search' ? form.query : ''}
                   disabled={blocked || locked}
                   onSelect={chooseCreator}
+                  onRestore={(id) => void restore(id)}
                 />
                 <CollectOptions
                   key={form.platform}

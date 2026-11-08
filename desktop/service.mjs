@@ -16,6 +16,23 @@ import {
   validateFilters,
 } from './contracts.mjs'
 
+const creatorCount = (value) =>
+  Number.isFinite(value) && value >= 0 ? value : null
+
+// 进程事件不可信，只保留展示需要的字段
+function creatorInfo(value) {
+  if (typeof value?.url !== 'string' || !isCreatorUrl(value.url)) return null
+  const avatar = typeof value.avatar === 'string' ? value.avatar : ''
+  return {
+    name: String(value.name || '').slice(0, 100),
+    url: value.url,
+    avatar:
+      avatar.startsWith('https://') && avatar.length <= 2048 ? avatar : '',
+    followers: creatorCount(value.followers),
+    posts: creatorCount(value.posts),
+  }
+}
+
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
   operations = new Map()
@@ -487,13 +504,10 @@ export class StudioService {
               event.next_cursor.length <= 4096
                 ? event.next_cursor
                 : undefined
+            task.exhausted = event.has_more === false
           } else if (event.type === 'creator') {
-            const url = event.creator?.url
-            if (typeof url === 'string' && isCreatorUrl(url))
-              task.creator = {
-                name: String(event.creator.name || '').slice(0, 100),
-                url,
-              }
+            const creator = creatorInfo(event.creator)
+            if (creator) task.creator = creator
           } else if (event.type === 'timing') {
             this.logger?.write('info', 'login', 'stage', {
               platform: request.platform,

@@ -354,5 +354,13 @@
   "关键词、作品或博主主页链接": "Keyword, post or creator URL",
   "继续采集 {{count}} 条": "Collect {{count}} more",
   "采集记录已变化，请重新开始": "The collection changed. Please start again.",
-  "翻页位置无效，请重新采集": "Invalid page position. Please collect again."
+  "翻页位置无效，请重新采集": "Invalid page position. Please collect again.",
+  "博主主页": "Creator profile",
+  "清除博主": "Clear creator",
+  "最近采集": "Recent",
+  "已采 {{count}} 条": "{{count}} collected",
+  "为避免触发平台验证，搜索会放慢一些": "Search is paced to avoid platform verification",
+  "也可以直接粘贴博主主页链接": "You can also paste the creator's profile URL",
+  "已采完全部作品": "All posts collected",
+  "打开博主主页": "Open creator profile"
 }
