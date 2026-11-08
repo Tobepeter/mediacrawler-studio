@@ -58,8 +58,10 @@ const ResultItems = memo(function ResultItems({
   const creatorTask = page?.task.mode === 'creator' ? page.task : null
   // 自动模式接近底部就继续，看不到按钮；用户停止、失败或一批没有新内容时才交给手动
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
+  // 旧博主记录没有这个字段，只有明确选了数字的才是固定数量
+  const autoMode = !!pagedTask && pagedTask.auto !== false
   const autoReady =
-    !!pagedTask?.auto &&
+    autoMode &&
     !!pagedTask.nextCursor &&
     !pagedTask.stalled &&
     ['completed', 'restored'].includes(pagedTask.status)
@@ -185,7 +187,7 @@ const ResultItems = memo(function ResultItems({
               key={`${page?.id}:${results.length}`}
               active={autoReady && !busy}
             >
-              {(active && pagedTask.auto) || autoReady ? (
+              {(active && autoMode) || autoReady ? (
                 <span className='inline-flex h-9 items-center' role='status'>
                   <Loader2
                     className='size-4 animate-spin motion-reduce:animate-none'
@@ -204,7 +206,7 @@ const ResultItems = memo(function ResultItems({
                   disabled={busy}
                   onClick={continueCollect}
                 >
-                  {pagedTask.auto
+                  {autoMode
                     ? t('加载更多')
                     : t('继续采集 {{count}} 条', { count: pagedTask.limit })}
                 </Button>

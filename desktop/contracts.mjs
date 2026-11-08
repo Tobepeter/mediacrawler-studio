@@ -151,7 +151,7 @@ export function validateRequest(value) {
     query,
     limit: mode === 'link' ? 1 : limit,
     ...(value.cursor ? { cursor: value.cursor } : {}),
-    ...(value.auto === true && paged ? { auto: true } : {}),
+    ...(typeof value.auto === 'boolean' && paged ? { auto: value.auto } : {}),
   }
 }
 

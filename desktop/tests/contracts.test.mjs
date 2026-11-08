@@ -197,6 +197,7 @@ test('翻页位置和自动模式只用于抖音博主与关键词', () => {
   const search = { ...base, mode: 'search', query: 'x' }
   assert.equal(validateRequest({ ...search, cursor: 'c' }).cursor, 'c')
   assert.equal(validateRequest({ ...search, auto: true }).auto, true)
+  assert.equal(validateRequest({ ...search, auto: false }).auto, false)
   assert.throws(
     () => validateRequest({ ...search, platform: 'bili', cursor: 'c' }),
     /翻页/,

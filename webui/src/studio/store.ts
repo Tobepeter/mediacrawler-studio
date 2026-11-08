@@ -409,11 +409,11 @@ export const useStudio = create<StudioStore>((set, get) => ({
               platform,
               mode: page.mode,
               query: page.query,
-              limit: page.limit,
+              limit: page.auto === false ? page.limit : autoBatchSize,
               comments: page.comments,
               replies: page.replies,
               filters: page.filters,
-              auto: page.auto,
+              auto: page.auto !== false,
             }
           : isAutoForm(form)
             ? { ...form, auto: true, limit: autoBatchSize }
