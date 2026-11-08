@@ -1,4 +1,5 @@
 """按需刷新视频地址，复用原生平台提取器，不保存媒体凭据"""
+from desktop.pacing import wait_turn
 import asyncio
 import json
 from urllib.parse import parse_qs, urlparse
@@ -86,6 +87,7 @@ class MediaResolver:
                 video = (data.get('thread') or {}).get('video') or {}
                 urls = [video[key] for key in ('video_url', 'play_url') if isinstance(video.get(key), str)]
             if not urls:
+                await wait_turn(self.runner.platform)
                 await self.page.goto(self.record['url'], wait_until='domcontentloaded', timeout=30000)
                 # 只读取页面已提供的直链，不操作播放器或录制媒体
                 urls = await self.page.evaluate("""() => Array.from(document.querySelectorAll('video, video source')).map(node => node.currentSrc || node.src).filter(url => /^https?:/.test(url))""")

@@ -1,4 +1,5 @@
 """新增平台评论分页，统一为桌面白名单字段"""
+from desktop.pacing import wait_turn
 import re
 from html import unescape
 from urllib.parse import urlencode
@@ -69,6 +70,7 @@ class ExtraCommentSource:
                 from model.m_baidu_tieba import TiebaComment
                 root = TiebaComment(**self.roots[parent])
                 params = urlencode({'tid': content_id, 'pid': parent, 'fid': root.tieba_id, 'pn': page})
+                await wait_turn('tieba')
                 await self.client.playwright_page.goto(f'https://tieba.baidu.com/p/comment?{params}', wait_until='domcontentloaded')
                 html = await self.client.playwright_page.content()
                 rows = [row.model_dump() for row in self.client._page_extractor.extract_tieba_note_sub_comments(html, parent_comment=root)]

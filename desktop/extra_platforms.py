@@ -1,4 +1,5 @@
 """知乎、微博、贴吧、快手的有界采集编排"""
+from desktop.pacing import wait_turn
 import asyncio
 import re
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -80,6 +81,7 @@ class ExtraCollector:
         if self.platform == 'zhihu':
             # 原生搜索依赖搜索页生成的 Cookie，首页会话不足以发起查询
             params = urlencode({'q': query, 'type': 'content'})
+            await wait_turn('zhihu')
             await self.runner.page.goto(f'https://www.zhihu.com/search?{params}', wait_until='domcontentloaded')
             await asyncio.sleep(5)
             await self.client.update_cookies(self.runner.context)

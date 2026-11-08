@@ -118,3 +118,92 @@ def test_first_search_page_detection():
     assert first_search_page(('k',), {'offset': 0})
     assert not first_search_page(('k',), {'offset': 15})
     assert not first_search_page(('k', 15), {})
+
+
+PLATFORMS = ('bili', 'dy', 'xhs', 'zhihu', 'wb', 'tieba', 'ks')
+
+
+def test_every_platform_has_its_own_timeline():
+    from mediacrawler_cli.state import PLATFORMS as supported
+    from desktop.pacing import PLATFORM_RULES
+    assert set(PLATFORM_RULES) == set(supported)
+    assert len({rule.key for rule in PLATFORM_RULES.values()}) == len(PLATFORM_RULES)
+
+
+@pytest.mark.parametrize('platform, module, name', [
+    ('bili', 'bilibili', 'BilibiliClient'), ('dy', 'douyin', 'DouYinClient'), ('xhs', 'xhs', 'XiaoHongShuClient'),
+    ('zhihu', 'zhihu', 'ZhiHuClient'), ('wb', 'weibo', 'WeiboClient'), ('tieba', 'tieba', 'BaiduTieBaClient'), ('ks', 'kuaishou', 'KuaiShouClient'),
+])
+def test_transport_methods_exist_on_real_clients(platform, module, name):
+    # 上游改名时这里会失败，否则节流会悄悄失效
+    from importlib import import_module
+    from desktop.pacing import TRANSPORTS
+    client = getattr(import_module(f'media_platform.{module}.client'), name)
+    for method in TRANSPORTS.get(platform, ('request',)):
+        assert callable(getattr(client, method))
+
+
+@pytest.fixture
+def timeline(tmp_path, monkeypatch):
+    monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
+    waits = []
+
+    async def sleep(seconds):
+        waits.append(seconds)
+    monkeypatch.setattr('desktop.pacing.asyncio.sleep', sleep)
+    return waits
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('platform', PLATFORMS)
+async def test_consecutive_requests_are_spaced_per_platform(timeline, platform):
+    client = SimpleNamespace(request=AsyncMock(return_value={}))
+    pace_client(client, platform)
+    await client.request('GET', 'a')
+    await client.request('GET', 'b')
+    assert timeline[0] == 0 and timeline[1] > 0
+    other = SimpleNamespace(request=AsyncMock(return_value={}))
+    pace_client(other, 'ks' if platform != 'ks' else 'bili')
+    await other.request('GET', 'a')
+    assert timeline[2] == 0
+
+
+@pytest.mark.asyncio
+async def test_method_rule_and_transport_count_once(timeline):
+    client = SimpleNamespace()
+
+    async def request(*args):
+        return {}
+
+    async def search(keyword, page=1):
+        return await client.request('POST', 'search')
+    client.request, client.get_note_by_keyword = request, search
+    pace_client(client, 'xhs')
+    await client.get_note_by_keyword('x')
+    assert timeline == [0]
+
+
+@pytest.mark.asyncio
+async def test_login_check_ignores_cooldown(timeline):
+    from desktop.pacing import PLATFORM_RULES
+    start_cooldown(state_path(PLATFORM_RULES['xhs']), PLATFORM_RULES['xhs'])
+    client = SimpleNamespace(request=AsyncMock(return_value={}))
+
+    async def pong():
+        return await client.request('GET', 'me')
+    client.pong = pong
+    pace_client(client, 'xhs')
+    assert await client.pong() == {}
+    with pytest.raises(CreatorError) as error:
+        await client.request('GET', 'note')
+    assert error.value.code == 'RATE_COOLDOWN'
+
+
+@pytest.mark.asyncio
+async def test_wait_turn_shares_platform_timeline(timeline):
+    from desktop.pacing import wait_turn
+    client = SimpleNamespace(request=AsyncMock(return_value={}))
+    pace_client(client, 'zhihu')
+    await client.request('GET', 'a')
+    await wait_turn('zhihu')
+    assert timeline[1] > 0

@@ -1,9 +1,14 @@
-"""平台敏感接口的统一出口：跨进程节流、频次上限和风控冷却
+"""平台请求的统一节流出口：按平台控制间隔，跨进程共享，并处理风控冷却
 
-CLI 与桌面每次操作都是新进程，且共用同一网络出口，状态必须落盘共享
-只有 RULES 列出的接口受控；数值按正常用户操作节奏估算，未做线上压测
+规则：采集相关的平台请求都必须经过这里，业务代码不要自己 sleep，也不要绕开 client 发请求
+- 走 client 的请求由 pace_client 在底层自动接管，上游代码不用改
+- 不走 client 的页面导航，在导航前调用 wait_turn
+
+频率只改两张表：PLATFORM_RULES 是每个平台的基础节奏，RULES 给个别敏感接口定更慢的节奏
+数值按正常用户操作节奏估算，未做线上压测。CLI 与桌面都是短进程且共用出口 IP，状态必须落盘共享
 """
 import asyncio
+import contextvars
 import json
 import math
 import os
@@ -19,6 +24,8 @@ from platformdirs import user_data_path
 from desktop.creators import CreatorError
 
 MAX_WAIT_SECONDS = 30
+# 一次业务调用只算一次访问：外层已占用名额时，内层底层请求不再重复等待
+holding = contextvars.ContextVar('pacing_holding', default=False)
 
 
 def first_search_page(args, kwargs):
@@ -68,9 +75,24 @@ RULES = {
         window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked,
     ),
     ('xhs', 'get_notes_by_creator'): Rule(key='xhs', page_gap=(3, 6), cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
-    # 上游每条详情后已固定等 2 秒，这里主要防 CLI 和桌面同时采集时叠加
-    ('xhs', 'get_note_by_id'): Rule(key='xhs', page_gap=(2, 3.5), cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
 }
+
+
+# 每个平台的基础节奏，互不影响；一个平台被风控不牵连其他平台
+XHS_COOLDOWN = dict(cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked)
+PLATFORM_RULES = {
+    'bili': Rule(key='bili', page_gap=(1, 2.5), name='B站'),
+    'dy': Rule(key='dy', page_gap=(1.5, 3), name='抖音'),
+    'xhs': Rule(key='xhs', page_gap=(2, 3.5), **XHS_COOLDOWN),
+    'zhihu': Rule(key='zhihu', page_gap=(2, 4), name='知乎'),
+    'wb': Rule(key='wb', page_gap=(2, 4), name='微博'),
+    'tieba': Rule(key='tieba', page_gap=(2, 4), name='贴吧'),
+    'ks': Rule(key='ks', page_gap=(2, 4), name='快手'),
+}
+# 各平台实际发请求的底层方法；贴吧有一部分通过页面完成，不经过 request
+TRANSPORTS = {'tieba': ('request', '_fetch_json_by_browser', 'get_notes_by_keyword', 'get_note_by_id')}
+# 登录状态检查不算采集，冷却期也要能判断账号是否有效
+EXEMPT = ('pong', 'query_self')
 
 
 def state_path(rule):
@@ -147,26 +169,59 @@ def paced(original, rule, report=None):
         return CreatorError('SEARCH_VERIFICATION_REQUIRED', f'{rule.name}要求验证，访问暂停约 {minutes} 分钟', retry_after=rule.cooldown_seconds)
 
     async def call(*args, **kwargs):
+        if holding.get():
+            return await original(*args, **kwargs)
         path = state_path(rule)
         fresh = bool(rule.is_fresh and rule.is_fresh(args, kwargs))
         wait = reserve(path, rule, fresh)
         if report and wait >= 1:
             report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=fresh)
         await asyncio.sleep(wait)
+        token = holding.set(True)
         try:
             response = await original(*args, **kwargs)
         except Exception as error:
             if rule.is_blocked and rule.is_blocked(error):
                 raise verification(path) from None
             raise
+        finally:
+            holding.reset(token)
         if rule.cooldown_seconds and isinstance(response, dict) and (response.get('search_nil_info') or {}).get('search_nil_type') == 'verify_check':
             raise verification(path)
         return response
     return call
 
 
+def exempted(original):
+    async def call(*args, **kwargs):
+        token = holding.set(True)
+        try:
+            return await original(*args, **kwargs)
+        finally:
+            holding.reset(token)
+    return call
+
+
 def pace_client(client, platform, report=None):
-    for (owner, method), rule in RULES.items():
+    base = PLATFORM_RULES.get(platform)
+    wrap = {method: rule for (owner, method), rule in RULES.items() if owner == platform}
+    if base:
+        for method in TRANSPORTS.get(platform, ('request',)):
+            wrap.setdefault(method, base)
+    for method, rule in wrap.items():
         original = getattr(client, method, None)
-        if owner == platform and original is not None:
+        if original is not None:
             setattr(client, method, paced(original, rule, report))
+    for method in EXEMPT:
+        original = getattr(client, method, None)
+        if original is not None:
+            setattr(client, method, exempted(original))
+
+
+async def wait_turn(platform, report=None):
+    """不走 client 的页面导航用这个排队，节奏和该平台的其他请求共用"""
+    rule = PLATFORM_RULES[platform]
+    wait = reserve(state_path(rule), rule, False)
+    if report and wait >= 1:
+        report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=False)
+    await asyncio.sleep(wait)
