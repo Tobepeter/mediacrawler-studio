@@ -98,6 +98,8 @@ export interface StudioTask extends CollectRequest {
   nextCursor?: string
   exhausted?: boolean
   continued?: boolean
+  // 续采一批没有新增内容，停止自动加载，避免对同一位置反复请求
+  stalled?: boolean
   status: TaskStatus
   message: string
   startedAt: number

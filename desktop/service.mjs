@@ -426,6 +426,7 @@ export class StudioService {
       kind: request.action,
       task,
       results: previous ? [...previous.results] : [],
+      baseCount: previous?.results.length ?? 0,
       stopRequested: false,
     }
     this.operations.set(request.platform, run)
@@ -638,6 +639,8 @@ export class StudioService {
     if (release && this.operations.get(task.platform) === run)
       this.operations.delete(task.platform)
     Object.assign(task, { status, message, finishedAt: Date.now() })
+    if (task.continued && status === 'completed')
+      task.stalled = run.results.length === run.baseCount
     this.windows.hide(task.platform)
     if (status === 'cancelled' || status === 'error') {
       for (const item of run.results) {

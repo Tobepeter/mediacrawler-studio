@@ -56,12 +56,12 @@ const ResultItems = memo(function ResultItems({
   const busy = useStudio((state) => platformBusy(state, platform))
   // 博主页每张卡片的平台和作者都相同，改为展示点赞帮助挑选
   const creatorTask = page?.task.mode === 'creator' ? page.task : null
-  // 自动模式和博主可以续采；用户停止或失败后不自动恢复，固定数量只给手动按钮
+  // 自动模式接近底部就继续，看不到按钮；用户停止、失败或一批没有新内容时才交给手动
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
-  const autoContinue =
-    !busy &&
+  const autoReady =
     !!pagedTask?.auto &&
     !!pagedTask.nextCursor &&
+    !pagedTask.stalled &&
     ['completed', 'restored'].includes(pagedTask.status)
   return (
     <>
@@ -181,11 +181,17 @@ const ResultItems = memo(function ResultItems({
             ))}
           </div>
           {pagedTask && (
-            <AutoContinue key={page?.id} active={autoContinue}>
-              {active && pagedTask.auto ? (
-                <span className='inline-flex h-9 items-center gap-2'>
-                  <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
-                  {t('加载更多')}
+            <AutoContinue
+              key={`${page?.id}:${results.length}`}
+              active={autoReady && !busy}
+            >
+              {(active && pagedTask.auto) || autoReady ? (
+                <span className='inline-flex h-9 items-center' role='status'>
+                  <Loader2
+                    className='size-4 animate-spin motion-reduce:animate-none'
+                    aria-hidden='true'
+                  />
+                  <span className='sr-only'>{t('加载中')}</span>
                 </span>
               ) : active ? (
                 <Button variant='outline' disabled>
@@ -216,15 +222,14 @@ const ResultItems = memo(function ResultItems({
 
 const continueCollect = () => void useStudio.getState().continueCollect()
 
-// 必须有真实滚动才自动继续，避免打开历史或内容不足一屏时平白发请求，按钮仍可手动点
-// 只在可继续时监听，批次结束时 inView 可能还是旧值，等下一次滚动再判断就不会多采
+// 列表每次变化都重新挂载：inView 由观察器异步更新，沿用旧值会在追加后多采一批
+// 新实例从不可见开始，观察器首次回调给出真实位置，内容没填满时也会继续
 function AutoContinue(props: { active: boolean; children: ReactNode }) {
   const { active, children } = props
   const [root, setRoot] = useState<Element | null>(null)
-  const [scrolled, setScrolled] = useState(false)
   const { ref, inView } = useInView({
     root,
-    rootMargin: '0px 0px 400px 0px',
+    rootMargin: '0px 0px 800px 0px',
     skip: !root,
   })
   const anchor = useCallback(
@@ -234,14 +239,7 @@ function AutoContinue(props: { active: boolean; children: ReactNode }) {
     },
     [ref],
   )
-  useEffect(() => {
-    setScrolled(false)
-    if (!root || !active) return
-    const mark = () => setScrolled(true)
-    root.addEventListener('scroll', mark, { passive: true, once: true })
-    return () => root.removeEventListener('scroll', mark)
-  }, [root, active])
-  const shouldContinue = active && inView && scrolled
+  const shouldContinue = active && inView
   useEffect(() => {
     if (shouldContinue) continueCollect()
   }, [shouldContinue])
