@@ -43,7 +43,7 @@ test('采集终态通知一次，重复推送、快照、历史与新任务不�
   )
 })
 
-test('继续采集成功不弹通知，失败和警告仍然提示', () => {
+test('继续采集的成功和失败都显示在列表末尾，只有警告才弹通知', () => {
   const running = state('running', { continued: true })
   assert.equal(
     taskFeedback(running, state('completed', { continued: true })),
@@ -57,8 +57,21 @@ test('继续采集成功不弹通知，失败和警告仍然提示', () => {
     'warning',
   )
   assert.equal(
-    taskFeedback(running, state('error', { continued: true, message: '失败' }))
-      .kind,
+    taskFeedback(running, state('error', { continued: true, message: '失败' })),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(
+      running,
+      state('error', {
+        continued: true,
+        failure: { code: 'ACCESS_RESTRICTED' },
+      }),
+    ),
+    undefined,
+  )
+  assert.equal(
+    taskFeedback(state('running'), state('error', { message: '失败' })).kind,
     'error',
   )
 })

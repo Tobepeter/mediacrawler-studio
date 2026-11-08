@@ -297,3 +297,24 @@ async def test_search_cursor_alone_supplies_keyword():
     client = keyword_client([keyword_page(0, 3, more=0)])
     await collect_search_posts(runner(client), '', encode_cursor('search', q='罗翔', o=10, i='log', s=0))
     assert client.search_info_by_keyword.await_args.args == ('罗翔',)
+
+
+@pytest.mark.asyncio
+async def test_profile_failure_keeps_collecting_and_names_creator_from_posts():
+    from media_platform.douyin.exception import DataFetchError
+    client = post_client([{'status_code': 0, 'has_more': 0, 'max_cursor': '', 'aweme_list': [{'aweme_id': '1', 'author': {'nickname': '作者'}}]}])
+    client.get_user_info = AsyncMock(side_effect=DataFetchError('blocked'))
+    task = runner(client)
+    await collect_creator_posts(task, f'https://www.douyin.com/user/{SEC}')
+    assert task.store.ids == {'dy:1'}
+    assert [data['creator']['name'] for kind, data in task.events if kind == 'creator'] == ['作者']
+    assert [data['detail']['cause'] for kind, data in task.events if kind == 'log'] == ['blocked']
+
+
+@pytest.mark.asyncio
+async def test_profile_auth_failure_still_stops():
+    client = post_client([])
+    client.get_user_info = AsyncMock(return_value={'status_code': 8})
+    with pytest.raises(CreatorError) as error:
+        await collect_creator_posts(runner(client), f'https://www.douyin.com/user/{SEC}')
+    assert error.value.code == 'AUTH_REQUIRED'

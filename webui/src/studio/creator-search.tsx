@@ -169,6 +169,7 @@ export function CreatorSearch(props: {
       if (!search.data) setSubmitted('')
       void settleCreatorSearch()
     }
+    useStudio.getState().patch({ creatorSearchOpen: value })
     // 搜索和采集互斥，打开弹窗时先结束后台续采
     if (value) void useStudio.getState().stopContinuation(platform)
     if (value && seed.trim() && seed.trim() !== keyword.trim()) {

@@ -60,7 +60,7 @@ class DesktopCrawler:
         self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
-        pace_client(self.client, self.platform)
+        pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail))
 
     async def logged_in(self):
         if self.platform == 'wb' and urlparse(self.page.url).hostname in ('www.weibo.com', 'weibo.com'):

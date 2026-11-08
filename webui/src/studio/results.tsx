@@ -3,6 +3,8 @@ import { IconButton } from '@/components/common/icon-button'
 import { Reveal } from '@/components/common/reveal'
 import { cn } from '@/lib/utils'
 import { memo, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { translateMessage } from '@/i18n/studio'
+import { useStudioRoute } from './route'
 import { useInView } from 'react-intersection-observer'
 import {
   ArrowUpRight,
@@ -60,6 +62,13 @@ const ResultItems = memo(function ResultItems({
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
   // 旧博主记录没有这个字段，只有明确选了数字的才是固定数量
   const autoMode = !!pagedTask && pagedTask.auto !== false
+  // 看详情、找博主或翻历史时暂停：续采占用平台，会让这些操作失败或被打断
+  const route = useStudioRoute()
+  const paused = useStudio(
+    (state) => !!state.selected || state.creatorSearchOpen,
+  )
+  // 打开应用或历史看到的旧记录，要等用户真的滚动才请求，不能一打开就访问平台
+  const fromEarlier = (pagedTask?.finishedAt ?? 0) < sessionStart
   const autoReady =
     autoMode &&
     !!pagedTask.nextCursor &&
@@ -185,9 +194,10 @@ const ResultItems = memo(function ResultItems({
           {pagedTask && (
             <AutoContinue
               key={`${page?.id}:${results.length}`}
-              active={autoReady && !busy}
+              active={autoReady && !busy && !paused && route !== 'history'}
+              needsScroll={fromEarlier}
             >
-              {(active && autoMode) || autoReady ? (
+              {(active && autoMode) || (autoReady && !fromEarlier) ? (
                 <span className='inline-flex h-9 items-center' role='status'>
                   <Loader2
                     className='size-4 animate-spin motion-reduce:animate-none'
@@ -201,15 +211,27 @@ const ResultItems = memo(function ResultItems({
                   {t('采集中')}
                 </Button>
               ) : pagedTask.nextCursor ? (
-                <Button
-                  variant='outline'
-                  disabled={busy}
-                  onClick={continueCollect}
-                >
-                  {autoMode
-                    ? t('加载更多')
-                    : t('继续采集 {{count}} 条', { count: pagedTask.limit })}
-                </Button>
+                <span className='flex min-w-0 items-center gap-3'>
+                  {pagedTask.status === 'error' && (
+                    <span className='truncate text-destructive' role='alert'>
+                      {translateMessage(pagedTask.message)}
+                    </span>
+                  )}
+                  <Button
+                    variant='outline'
+                    className='shrink-0'
+                    disabled={busy}
+                    onClick={continueCollect}
+                  >
+                    {pagedTask.status === 'error'
+                      ? t('重试')
+                      : autoMode
+                        ? t('加载更多')
+                        : t('继续采集 {{count}} 条', {
+                            count: pagedTask.limit,
+                          })}
+                  </Button>
+                </span>
               ) : (
                 pagedTask.exhausted &&
                 t(creatorTask ? '已采完全部作品' : '没有更多了')
@@ -222,12 +244,18 @@ const ResultItems = memo(function ResultItems({
   )
 })
 
+const sessionStart = Date.now()
 const continueCollect = () => void useStudio.getState().continueCollect()
 
 // 列表每次变化都重新挂载：inView 由观察器异步更新，沿用旧值会在追加后多采一批
 // 新实例从不可见开始，观察器首次回调给出真实位置，内容没填满时也会继续
-function AutoContinue(props: { active: boolean; children: ReactNode }) {
-  const { active, children } = props
+function AutoContinue(props: {
+  active: boolean
+  needsScroll: boolean
+  children: ReactNode
+}) {
+  const { active, needsScroll, children } = props
+  const [scrolled, setScrolled] = useState(false)
   const [root, setRoot] = useState<Element | null>(null)
   const { ref, inView } = useInView({
     root,
@@ -241,7 +269,16 @@ function AutoContinue(props: { active: boolean; children: ReactNode }) {
     },
     [ref],
   )
-  const shouldContinue = active && inView
+  useEffect(() => {
+    if (!root || !needsScroll) return
+    // 内容变短时浏览器也会触发 scroll，回到顶部的不算用户往下看
+    const mark = () => {
+      if (root.scrollTop > 0) setScrolled(true)
+    }
+    root.addEventListener('scroll', mark, { passive: true })
+    return () => root.removeEventListener('scroll', mark)
+  }, [root, needsScroll])
+  const shouldContinue = active && inView && (!needsScroll || scrolled)
   useEffect(() => {
     if (shouldContinue) continueCollect()
   }, [shouldContinue])

@@ -37,6 +37,14 @@ export function taskFeedback(
   if (!wasActive && !newWarning && !diagnosedStop) return
   const id = `task-${task.platform}-${task.startedAt}`
   const count = next.results.length
+  // 滚动加载的结果和失败都显示在列表末尾，弹通知只会打扰；首批失败和空结果仍要提示
+  if (
+    !task.warning &&
+    ((task.continued &&
+      ['completed', 'cancelled', 'error'].includes(task.status)) ||
+      (task.auto && task.status === 'completed' && count))
+  )
+    return
   if (task.silent && task.status === 'error') return
   if (task.status === 'error' && task.failure) {
     const messages: Record<string, string> = {
@@ -65,13 +73,6 @@ export function taskFeedback(
       message: task.action === 'connect' ? '登录失败' : '采集失败',
       detail: task.message,
     }
-  // 滚动加载的结果就接在列表末尾，每批弹通知只会打扰；失败和空结果仍要提示
-  if (
-    !task.warning &&
-    ((task.continued && ['completed', 'cancelled'].includes(task.status)) ||
-      (task.auto && task.status === 'completed' && count))
-  )
-    return
   if (task.action === 'collect' && task.status === 'completed')
     return {
       id,

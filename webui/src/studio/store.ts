@@ -67,6 +67,7 @@ interface StudioStore extends StudioState {
     kind?: 'start' | 'continue' | 'logout' | 'download',
   ) => void
   downloadFailure: string
+  creatorSearchOpen: boolean
   loginMode: LoginMode
   setLoginMode: (value: LoginMode) => boolean
   askBeforeDownload: boolean
@@ -151,6 +152,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
       return { requests }
     }),
   downloadFailure: '',
+  creatorSearchOpen: false,
   loginMode: 'qrcode',
   setLoginMode: (value) => {
     try {
@@ -393,8 +395,9 @@ export const useStudio = create<StudioStore>((set, get) => ({
       return
     }
     get().setRequest(platform, cursor ? 'continue' : 'start')
+    // 滚动续采不能关掉用户正在看的详情
     set({
-      selected: null,
+      selected: cursor ? get().selected : null,
       attempted: { ...get().attempted, [platform]: true },
     })
     get().updateView({ error: '', historyId: '' }, platform)
@@ -427,6 +430,13 @@ export const useStudio = create<StudioStore>((set, get) => ({
       })
     } catch (error) {
       if (silent) return
+      // 平台正被其他操作占用时，操作结束后续采会自动再次触发
+      if (
+        cursor &&
+        error instanceof Error &&
+        error.message.includes('请先结束当前任务')
+      )
+        return
       get().updateView(
         {
           error:

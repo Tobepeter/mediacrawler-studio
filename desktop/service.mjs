@@ -391,6 +391,17 @@ export class StudioService {
 
   async start(value) {
     const request = validateRequest(value)
+    const running = this.operations.get(request.platform)
+    if (running)
+      this.logger?.write('warn', 'crawler', 'start-rejected', {
+        platform: request.platform,
+        running: running.kind,
+        runningStatus: running.task?.status,
+        runningContinued: !!running.task?.continued,
+        action: request.action,
+        mode: request.mode,
+        cursor: !!request.cursor,
+      })
     this.assertAvailable(request.platform)
     const python =
       process.env.STUDIO_PYTHON ||
@@ -515,6 +526,13 @@ export class StudioService {
           } else if (event.type === 'creator') {
             const creator = creatorInfo(event.creator)
             if (creator) task.creator = creator
+          } else if (event.type === 'log') {
+            this.logger?.write(
+              event.level === 'warn' ? 'warn' : 'info',
+              'crawler',
+              event.event,
+              { platform: request.platform, ...event.detail },
+            )
           } else if (event.type === 'timing') {
             this.logger?.write('info', 'login', 'stage', {
               platform: request.platform,
@@ -635,6 +653,22 @@ export class StudioService {
       this.logger?.write('error', 'crawler', 'failed', {
         platform: task?.platform,
         message,
+        code: task?.failure?.code,
+        stage: task?.failure?.stage,
+        mode: task?.mode,
+        continued: !!task?.continued,
+      })
+    if (task.action === 'collect')
+      this.logger?.write('info', 'crawler', 'run-finished', {
+        platform: task.platform,
+        status,
+        mode: task.mode,
+        auto: task.auto,
+        continued: !!task.continued,
+        total: run.results.length,
+        added: run.results.length - (run.baseCount ?? 0),
+        milliseconds: Date.now() - task.startedAt,
+        hasMore: !!task.nextCursor,
       })
     if (release && this.operations.get(task.platform) === run)
       this.operations.delete(task.platform)

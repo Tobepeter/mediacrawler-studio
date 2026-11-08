@@ -111,23 +111,28 @@ def start_cooldown(path, rule, now=None):
         pass
 
 
-def paced(original, rule):
+def paced(original, rule, report=None):
     async def call(*args, **kwargs):
         path = state_path(rule)
         fresh = bool(rule.is_fresh and rule.is_fresh(args, kwargs))
-        await asyncio.sleep(reserve(path, rule, fresh))
+        wait = reserve(path, rule, fresh)
+        if report and wait >= 1:
+            report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=fresh)
+        await asyncio.sleep(wait)
         response = await original(*args, **kwargs)
         if rule.cooldown_seconds and isinstance(response, dict) and (response.get('search_nil_info') or {}).get('search_nil_type') == 'verify_check':
             # 继续请求只会加重风控，冷却期内直接本地拒绝
             start_cooldown(path, rule)
+            if report:
+                report('pacing-cooldown', key=rule.key, seconds=rule.cooldown_seconds)
             minutes = math.ceil(rule.cooldown_seconds / 60)
             raise CreatorError('SEARCH_VERIFICATION_REQUIRED', f'抖音要求验证，搜索暂停约 {minutes} 分钟', retry_after=rule.cooldown_seconds)
         return response
     return call
 
 
-def pace_client(client, platform):
+def pace_client(client, platform, report=None):
     for (owner, method), rule in RULES.items():
         original = getattr(client, method, None)
         if owner == platform and original is not None:
-            setattr(client, method, paced(original, rule))
+            setattr(client, method, paced(original, rule, report))

@@ -784,8 +784,13 @@ test('继续采集并入原批次并更新翻页位置', async () => {
     assert.equal(service.state.pages.dy.task.stalled, true)
     assert.equal(service.state.pages.dy.results.length, 1)
     script = emit('2', 'null')
+    const logs = []
+    service.logger = { write: (...entry) => logs.push(entry) }
     await start({ cursor: 'next' })
     await finished()
+    const finishedLog = logs.find((entry) => entry[2] === 'run-finished')[3]
+    assert.equal(finishedLog.added, 1)
+    assert.equal(finishedLog.continued, true)
     const merged = service.state.pages.dy
     assert.equal(merged.id, first.id)
     assert.deepEqual(

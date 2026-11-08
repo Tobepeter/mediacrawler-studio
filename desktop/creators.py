@@ -18,9 +18,9 @@ HOSTS = ('douyin.com', 'iesdouyin.com')
 class CreatorError(RuntimeError):
     """str(error) 给界面展示，code 与 candidates 给 CLI 的结构化错误"""
 
-    def __init__(self, code, message, candidates=None, retry_after=None):
+    def __init__(self, code, message, candidates=None, retry_after=None, cause=None):
         super().__init__(message)
-        self.code, self.candidates, self.retry_after = code, candidates or [], retry_after
+        self.code, self.candidates, self.retry_after, self.cause = code, candidates or [], retry_after, cause
 
 
 def invalid_cursor():
@@ -51,8 +51,8 @@ async def checked(call):
     from media_platform.douyin.exception import DataFetchError
     try:
         response = await call
-    except DataFetchError:
-        raise CreatorError('PLATFORM_ERROR', '抖音暂时没有返回数据，请稍后重试') from None
+    except DataFetchError as error:
+        raise CreatorError('PLATFORM_ERROR', '抖音暂时没有返回数据，请稍后重试', cause=str(error)[:300]) from None
     if not isinstance(response, dict):
         raise CreatorError('PLATFORM_ERROR', '抖音返回了无法识别的数据，请稍后重试')
     status = response.get('status_code', 0)
@@ -262,10 +262,17 @@ async def collect_creator_posts(runner, reference, cursor=None):
                 raise invalid_cursor()
     else:
         identity = await resolve_creator(runner, reference)
-        profile = await creator_profile(runner, identity)
-        runner.emit('creator', creator=profile)
-        runner.emit('state', status='running', message=f"正在获取 {profile['name']} 的作品")
-    position, skip, empty = state.get('m', ''), state.get('s', 0), 0
+        try:
+            profile = await creator_profile(runner, identity)
+        except CreatorError as error:
+            # 资料只用于展示，接口偶发失败时作品接口通常仍可用，不能因此中断采集
+            if error.code != 'PLATFORM_ERROR':
+                raise
+            runner.emit('log', level='warn', event='creator-profile-unavailable', detail={'cause': error.cause})
+        if profile:
+            runner.emit('creator', creator=profile)
+            runner.emit('state', status='running', message=f"正在获取 {profile['name']} 的作品")
+    position, skip, empty, announced = state.get('m', ''), state.get('s', 0), 0, False
     store = runner.store
 
     def publish(next_position=None, next_skip=0):
@@ -291,6 +298,11 @@ async def collect_creator_posts(runner, reference, cursor=None):
             empty += 1
             continue
         empty = 0
+        if not state and not profile and not announced:
+            announced = True
+            author = summarize({**(rows[0].get('author') or {}), 'sec_uid': identity}, 'video')
+            if author and author['name']:
+                runner.emit('creator', creator=author)
         for index in range(skip, len(rows)):
             if len(store.ids) >= store.limit:
                 publish(position, index)

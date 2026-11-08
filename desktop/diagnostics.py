@@ -6,6 +6,7 @@ from pathlib import Path
 def exception_detail(error):
     return {
         'name': type(error).__name__,
+        **{key: getattr(error, key) for key in ('code', 'cause') if getattr(error, key, None)},
         'frames': [
             {'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
             for frame in traceback.extract_tb(error.__traceback__)[-20:]
