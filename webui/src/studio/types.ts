@@ -13,7 +13,7 @@ export type TaskStatus =
 
 export interface CollectRequest {
   platform: Platform
-  mode: 'search' | 'link'
+  mode: 'search' | 'link' | 'creator'
   query: string
   limit: number
   action: 'collect' | 'connect'
@@ -61,7 +61,29 @@ export interface ContentItem {
   commentStatus?: CommentStatus
 }
 
+export interface CreatorSummary {
+  id: string
+  name: string
+  uniqueId: string
+  avatar: string
+  signature: string
+  followers: number | null
+  posts: number | null
+  verified: string
+  private: boolean
+  source: 'user' | 'video'
+  url: string
+}
+
+export interface CreatorPage {
+  items: CreatorSummary[]
+  nextCursor?: string
+  hasMore: boolean
+  cancelled?: boolean
+}
+
 export interface StudioTask extends CollectRequest {
+  creator?: { name: string; url: string }
   status: TaskStatus
   message: string
   startedAt: number
@@ -204,6 +226,11 @@ export interface StudioBridge {
   saveDraft(platform: Platform, form: PlatformForm): Promise<void>
   openHistory(id: string): Promise<Collection>
   clearResults(platform: Platform): Promise<void>
+  searchCreators?(
+    platform: Platform,
+    keyword: string,
+    cursor?: string,
+  ): Promise<CreatorPage>
   export(
     format: 'csv' | 'json',
     platform: Platform,

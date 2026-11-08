@@ -22,6 +22,7 @@ class DesktopCrawler:
         self.platform = request["platform"]
         self.account = AccountProfile(self.platform)
         self.xhs_details = {}  # 本次任务已取得的笔记详情，媒体补全后释放
+        self.dy_details = {}  # 主页列表已含完整视频信息，无需再逐条请求详情
         self.store = ResultStore(self.platform, request["limit"], emit, request.get("comments", False))
         config.PLATFORM = self.platform
         # 评论统一在正文完成后采集，避免原生 detail 路径重复请求
@@ -32,7 +33,7 @@ class DesktopCrawler:
         config.ENABLE_IP_PROXY = False
         config.ENABLE_WEIBO_FULL_TEXT = True
         config.MAX_CONCURRENCY_NUM = 1
-        config.CRAWLER_TYPE = "detail" if request["mode"] == "link" else "search"
+        config.CRAWLER_TYPE = {"link": "detail", "creator": "creator"}.get(request["mode"], "search")
         config.SAVE_DATA_OPTION = "studio"
         config.START_PAGE = 1
         config.CRAWLER_MAX_NOTES_COUNT = request["limit"]
@@ -158,6 +159,14 @@ class DesktopCrawler:
                 self.emit("login-required")
             self.emit("done", message="登录状态检查完成")
             return
+        if self.request["action"] == "creator-search":
+            from desktop.creators import CreatorError, search_creators
+            if not await self.session_confirmed():
+                raise CreatorError("AUTH_REQUIRED", "登录已失效，请重新扫码")
+            # 界面每次操作只发一个请求，更多结果由用户主动加载
+            self.emit("creators", **await search_creators(self, self.request["query"], self.request["limit"], self.request.get("cursor"), requests=1))
+            self.emit("done", message="搜索完成")
+            return
         await self.authenticate()
         if self.request["action"] == "connect":
             self.emit("done", message="已连接，登录状态会自动保存")
@@ -167,6 +176,9 @@ class DesktopCrawler:
             await self.detail()
             if not self.store.ids:
                 raise RuntimeError("未能获取这条作品，请检查链接是否完整、作品是否可访问")
+        elif self.request["mode"] == "creator":
+            from desktop.creators import collect_creator_posts
+            await collect_creator_posts(self, self.request["query"], self.request.get("cursor"))
         else:
             await self.search()
         if self.request.get('comments') and self.store.items:
@@ -192,7 +204,8 @@ class DesktopCrawler:
                 await enrich(self, item, self.request.get('quality', 'best'))
                 self.emit('item-update', item=item)
         count = len(self.store.ids)
-        self.emit("done", message=f"已获取 {count} 条内容" if count else "没有找到相关内容，试试其他关键词")
+        empty = "这位博主暂无可见作品" if self.request["mode"] == "creator" else "没有找到相关内容，试试其他关键词"
+        self.emit("done", message=f"已获取 {count} 条内容" if count else empty)
 
     async def detail(self):
         query = await resolve_link(self.request["query"], self.platform)
@@ -209,6 +222,9 @@ class DesktopCrawler:
             if video:
                 await self.save_bilibili(video)
         elif self.platform == "dy":
+            # 分享短链无法在输入时区分作品和主页，这里给出明确指引
+            if urlparse(query).hostname == "v.douyin.com" and "/user/" in await self.client.resolve_short_url(query):
+                raise RuntimeError("这是博主主页的分享链接，请粘贴主页完整链接或使用找博主")
             config.DY_SPECIFIED_ID_LIST = [query]
             await self.crawler.get_specified_awemes()
         elif self.platform == "xhs":

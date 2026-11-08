@@ -25,6 +25,21 @@ uv run mediacrawler collect --platform bili --url https://www.bilibili.com/video
 - `auth status` 在线检查已有登录；`auth logout` 先在平台页面执行退出并核查登录状态，再关闭浏览器、删除指定 CLI profile，其他账号和 Electron 不受影响
 - stdout 仅输出结果，默认 JSONL；`--format json` 输出数组。stderr 输出进度、二维码及错误
 
+## 博主（当前支持 dy）
+
+```sh
+uv run mediacrawler creator search --query 罗翔 --limit 10
+uv run mediacrawler creator posts --creator https://www.douyin.com/user/MS4w... --limit 50
+uv run mediacrawler creator posts --cursor <上次的 next_cursor> --limit 50
+```
+
+- `--creator` 接受主页链接、`v.douyin.com` 分享短链、sec_uid 或名称。名称必须在搜索首页唯一且完全匹配昵称或抖音号，否则返回 `CREATOR_AMBIGUOUS` / `CREATOR_NOT_FOUND` 和 `candidates`
+- stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`
+- 游标不透明，精确到页内位置，换 `--limit` 继续也不漏条，绑定关键词或博主，不匹配返回 `INVALID_CURSOR`。失败或风控时也会输出最近的游标，可稍后继续；跨次搜索可能出现重复候选，按 `id` 去重
+- search 的 `source=user` 是博主卡片，`source=video` 是相关视频作者，字段较少。抖音这条接口只返回混排结果，不等于平台完整的用户搜索
+- 搜索接口对频率敏感，短时间多次搜索会返回 `SEARCH_VERIFICATION_REQUIRED`，请隔一段时间再试；posts 单次最多 100 条，翻页间隔 1.5–3 秒
+- 主页按平台顺序返回，通常从新到旧，置顶作品可能排在最前。需要从早到晚学习时，翻完后按 `publishedAt` 排序
+
 ## 数据目录与并行
 
 默认 macOS `~/Library/Application Support/mediacrawler`，Linux `~/.local/share/mediacrawler`（遵循 XDG），Windows `%LOCALAPPDATA%/mediacrawler`

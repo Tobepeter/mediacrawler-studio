@@ -14,6 +14,8 @@ auth = typer.Typer(no_args_is_help=True)
 session = typer.Typer(no_args_is_help=True)
 app.add_typer(auth, name='auth')
 app.add_typer(session, name='session')
+creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品，当前支持 dy')
+app.add_typer(creator, name='creator')
 
 
 def profile_busy_message(platform, profile):
@@ -37,9 +39,10 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
             typer.echo(json.dumps({'type': 'platform', 'platform': platform, 'status': 'failed', 'policy': {**POLICY, 'qr_timeout_ms': options.get('qr_timeout_ms', POLICY['qr_timeout_ms'])},
                                   'error': {'code': 'TIMEOUT' if error.code == 'TASK_TIMEOUT' else 'UNKNOWN',
                                             'stage': 'worker', 'cause': error.code, 'retryable': True}}))
-        messages = {'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        messages = {'SEARCH_VERIFICATION_REQUIRED': '抖音要求验证，常见于短时间多次搜索，请稍后重试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
         typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
-                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR'), 'run_id': error.run_id}, ensure_ascii=False), err=True)
+                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'SEARCH_VERIFICATION_REQUIRED'), 'run_id': error.run_id,
+                               **({'candidates': error.candidates} if error.candidates else {})}, ensure_ascii=False), err=True)
         raise typer.Exit({'AUTH_REQUIRED': 3, 'PROFILE_BUSY': 4, 'TASK_TIMEOUT': 6, 'CANCELLED': 130}.get(error.code, 5))
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
@@ -76,6 +79,60 @@ def collect(platform: str = typer.Option(...), query: Optional[str] = None, url:
     options.pop('re', None)
     options.update(query=query or url, mode='link' if url else 'search')
     invoke('collect', **options)
+
+
+def creator_platform(platform):
+    from desktop.creators import PLATFORMS as supported
+    if platform not in supported:
+        raise typer.BadParameter('博主能力当前支持：' + ', '.join(supported))
+
+
+@creator.command('search')
+def creator_search(query: str = typer.Option(..., help='博主名称或关键词'), platform: str = 'dy',
+                   limit: int = typer.Option(10, min=1, max=50), cursor: Optional[str] = typer.Option(None, help='上一次输出的 next_cursor'),
+                   profile: str = 'default', data_dir: Optional[str] = None, non_interactive: bool = False,
+                   qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal / image / browser'),
+                   login_timeout: int = typer.Option(300, min=1), timeout: int = typer.Option(180, min=1),
+                   lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', verbose: bool = False):
+    """搜索博主，每行一个候选，末行 type=page 给出 next_cursor
+
+    抖音结果混合博主卡片（source=user）和相关视频作者（source=video）；后者字段较少，可能和名称不完全相关
+    示例：creator search --query 罗翔 --limit 10
+    """
+    creator_platform(platform)
+    if not query.strip():
+        raise typer.BadParameter('--query 不能为空')
+    invoke('creator-search', **dict(locals()))
+
+
+@creator.command('posts')
+def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', help='主页链接、分享短链、sec_uid 或完全匹配的名称'),
+                  cursor: Optional[str] = typer.Option(None, help='上一次输出的 next_cursor；可不再提供 --creator'),
+                  platform: str = 'dy', limit: int = typer.Option(20, min=1, max=100), profile: str = 'default',
+                  data_dir: Optional[str] = None, non_interactive: bool = False,
+                  qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal / image / browser'),
+                  login_timeout: int = typer.Option(300, min=1), timeout: int = typer.Option(900, min=1),
+                  lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', save: bool = False,
+                  output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
+                  quality: str = typer.Option('best', help='best、worst 或 720p 等'),
+                  media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
+                  include_source: bool = False, verbose: bool = False):
+    """按主页顺序翻页采集博主作品，末行 type=page 给出 next_cursor 与博主资料
+
+    单次最多 100 条，继续传 --cursor；has_more=false 表示已到末尾。翻页位置精确到页内，不漏条
+    示例：creator posts --creator https://www.douyin.com/user/MS4w... --limit 50
+    名称必须唯一且完全匹配，否则返回 CREATOR_AMBIGUOUS / CREATOR_NOT_FOUND 及 candidates
+    """
+    import re
+    creator_platform(platform)
+    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+        raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
+    if not reference and not cursor:
+        raise typer.BadParameter('需要 --creator 或 --cursor')
+    options = dict(locals())
+    options.pop('reference')
+    options.pop('re', None)
+    invoke('collect', mode='creator', query=reference or '', **options)
 
 
 @app.command('download')

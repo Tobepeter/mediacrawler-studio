@@ -98,6 +98,11 @@ async def execute(request, emit):
                     return None
                 crawler.setup = ready
                 crawler.authenticate = ready
+                if request['action'] == 'creator-search':
+                    from desktop.creators import search_creators
+                    page = await search_creators(crawler, request['query'], request['limit'], request.get('cursor'))
+                    emit('page', next_cursor=page['next_cursor'], has_more=page['has_more'])
+                    return page['items']
                 if request['action'] == 'download':
                     crawler.request['action'] = 'collect'
                 await crawler.run()
@@ -151,8 +156,9 @@ def main(path):
             items = asyncio.run(execute(request, emit))
         emit('complete', items=items)
     except Exception as error:
-        code = str(error)
+        from desktop.creators import CreatorError
+        code = error.code if isinstance(error, CreatorError) else str(error)
         if not code.isupper() or len(code) > 60:
             code = 'PLATFORM_ERROR'
-        emit('failure', code=code)
+        emit('failure', code=code, candidates=getattr(error, 'candidates', []))
         raise SystemExit(1)

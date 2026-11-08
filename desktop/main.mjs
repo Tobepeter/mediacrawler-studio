@@ -208,6 +208,9 @@ app
         }
       },
     )
+    handle('search-creators', (platform, keyword, cursor) =>
+      service.searchCreators(platform, keyword, cursor),
+    )
     handle('save-draft', (platform, form) => service.saveDraft(platform, form))
     handle('open-history', (id) => service.openHistory(id))
     handle('clear-results', (platform) => service.clearResults(platform))

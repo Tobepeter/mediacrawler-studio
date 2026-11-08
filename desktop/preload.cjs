@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('studio', {
     ipcRenderer.invoke('studio:detach-login', platform),
   focusLogin: () => ipcRenderer.invoke('studio:focus-login'),
   dismissLogin: () => ipcRenderer.invoke('studio:dismiss-login'),
+  searchCreators: (platform, keyword, cursor) =>
+    ipcRenderer.invoke('studio:search-creators', platform, keyword, cursor),
   saveDraft: (platform, form) =>
     ipcRenderer.invoke('studio:save-draft', platform, form),
   openHistory: (id) => ipcRenderer.invoke('studio:open-history', id),

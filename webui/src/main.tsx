@@ -8,6 +8,11 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import './index.css'
 import './i18n'
 
+if (import.meta.env.DEV)
+  void import('./studio/debug').then(({ installStudioDebug }) =>
+    installStudioDebug(),
+  )
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

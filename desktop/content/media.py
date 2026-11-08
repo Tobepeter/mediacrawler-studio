@@ -122,7 +122,7 @@ async def fetch(runner, record):
         selected_part = next((p for p in view.get('pages') or [] if p.get('cid') == cid), {})
         return {**raw, '_view': view, '_cid': cid}, selected_part.get('duration', view.get('duration'))
     if platform == 'dy':
-        raw = await client.get_video_by_id(identity)
+        raw = runner.dy_details.pop(record['id'], None) or await client.get_video_by_id(identity)
         duration = number((raw.get('video') or {}).get('duration'))
         return raw, duration / 1000 if duration is not None else None
     if platform == 'xhs':

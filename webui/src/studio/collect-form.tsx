@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
+import { CreatorSearch } from './creator-search'
+import { creatorLimit, creatorPresets, isCreatorUrl } from './creator-options'
 import { LoginGate } from './login-gate'
 import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
@@ -16,7 +18,7 @@ import {
   usePage,
   useStudio,
 } from './store'
-import type { Platform } from './types'
+import type { CreatorSummary, Platform } from './types'
 
 // 链接自动识别，基础控件使用默认尺寸
 export function CollectForm() {
@@ -44,10 +46,27 @@ export function CollectForm() {
     activeStatuses.includes(task.status)
   const account = accounts[form.platform] || 'unknown'
   const locked = account !== 'connected'
+  // 进入博主模式默认多采一些；离开时收回普通模式的上限
+  const limitFor = (mode: typeof form.mode) =>
+    mode === 'creator'
+      ? form.mode === 'creator'
+        ? form.limit
+        : Math.max(form.limit, 50)
+      : Math.min(form.limit, 100)
+  const chooseCreator = (creator: CreatorSummary) =>
+    updateForm({
+      query: creator.url,
+      mode: 'creator',
+      limit: limitFor('creator'),
+    })
   const updateQuery = (query: string) => {
-    const mode = /^https?:\/\//i.test(query.trim()) ? 'link' : 'search'
+    const mode = !/^https?:\/\//i.test(query.trim())
+      ? 'search'
+      : isCreatorUrl(query)
+        ? 'creator'
+        : 'link'
     let platform = form.platform
-    if (mode === 'link') {
+    if (mode !== 'search') {
       try {
         const host = new URL(query.trim()).hostname
         const hosts: Record<Platform, string[]> = {
@@ -71,7 +90,7 @@ export function CollectForm() {
         /* 输入中的链接保留到提交时校验 */
       }
     }
-    updateForm({ query, mode, platform })
+    updateForm({ query, mode, platform, limit: limitFor(mode) })
   }
   const cancel = async () => {
     try {
@@ -146,16 +165,24 @@ export function CollectForm() {
                   maxLength={2000}
                   disabled={busy || pending || locked}
                 />
+                <CreatorSearch
+                  key={`creators-${form.platform}`}
+                  platform={form.platform}
+                  disabled={blocked || locked}
+                  onSelect={chooseCreator}
+                />
                 <CollectOptions
                   key={form.platform}
                   disabled={busy || pending || locked}
                 />
               </div>
-              {form.mode === 'search' && (
+              {form.mode !== 'link' && (
                 <CountPicker
                   key={form.platform}
                   value={form.limit}
                   disabled={busy || pending || locked}
+                  max={form.mode === 'creator' ? creatorLimit : undefined}
+                  presets={form.mode === 'creator' ? creatorPresets : undefined}
                   onChange={(limit) => updateForm({ limit })}
                 />
               )}

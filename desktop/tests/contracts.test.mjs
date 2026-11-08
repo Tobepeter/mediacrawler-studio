@@ -152,3 +152,32 @@ test('平台筛选白名单，链接模式忽略筛选，拒绝跨平台与无�
     {},
   )
 })
+
+test('博主主页模式只接受完整主页链接并放宽数量', () => {
+  const base = {
+    platform: 'dy',
+    action: 'collect',
+    mode: 'creator',
+    limit: 200,
+  }
+  const query = 'https://www.douyin.com/user/MS4wLjABAAAAabc?from_tab_name=main'
+  assert.equal(validateRequest({ ...base, query }).limit, 200)
+  assert.deepEqual(validateRequest({ ...base, query }).filters, {})
+  for (const bad of [
+    'https://www.douyin.com/video/1',
+    'https://www.douyin.com/user/self',
+    'https://v.douyin.com/abc/',
+    'http://www.douyin.com/user/abc',
+    'https://evil.com/user/abc',
+  ])
+    assert.throws(() => validateRequest({ ...base, query: bad }), /主页/)
+  assert.throws(() => validateRequest({ ...base, query, limit: 201 }), /1–200/)
+  assert.throws(
+    () => validateRequest({ ...base, platform: 'bili', query }),
+    /主页/,
+  )
+  assert.throws(
+    () => validateRequest({ ...base, mode: 'search', query: 'x', limit: 101 }),
+    /1–100/,
+  )
+})

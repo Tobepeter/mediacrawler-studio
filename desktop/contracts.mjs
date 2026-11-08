@@ -65,6 +65,26 @@ export const platforms = {
   },
 }
 
+export const creatorPlatforms = ['dy']
+export const creatorLimit = 200
+
+// 仅完整主页链接；分享短链要解析后才知道是作品还是主页
+export function isCreatorUrl(value, platform = 'dy') {
+  if (!creatorPlatforms.includes(platform) || typeof value !== 'string')
+    return false
+  try {
+    const url = new URL(value.trim())
+    return (
+      url.protocol === 'https:' &&
+      /(^|\.)douyin\.com$/.test(url.hostname) &&
+      url.hostname !== 'v.douyin.com' &&
+      /^\/user\/(?!self\/?$)[^/]+\/?$/.test(url.pathname)
+    )
+  } catch {
+    return false
+  }
+}
+
 export function isPlatformUrl(value, platform) {
   try {
     const url = new URL(value)
@@ -93,14 +113,17 @@ export function validateRequest(value) {
   )
     throw new Error('不支持的登录方式')
   const query = typeof value.query === 'string' ? value.query.trim() : ''
-  const mode = value.mode === 'link' ? 'link' : 'search'
+  const mode = ['link', 'creator'].includes(value.mode) ? value.mode : 'search'
   const limit = Number(value.limit)
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-    throw new Error('采集数量需为 1–100 条')
+  const maximum = mode === 'creator' ? creatorLimit : 100
+  if (!Number.isInteger(limit) || limit < 1 || limit > maximum)
+    throw new Error(`采集数量需为 1–${maximum} 条`)
   if (value.action === 'collect') {
     if (!query || query.length > 2000) throw new Error('请输入关键词或作品链接')
     if (mode === 'link' && !isPlatformUrl(query, value.platform))
       throw new Error('请粘贴所选平台的 HTTPS 作品链接')
+    if (mode === 'creator' && !isCreatorUrl(query, value.platform))
+      throw new Error('请粘贴博主主页的完整链接')
   }
   for (const key of ['comments', 'replies']) {
     if (value[key] !== undefined && typeof value[key] !== 'boolean')

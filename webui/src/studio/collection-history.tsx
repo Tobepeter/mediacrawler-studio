@@ -79,7 +79,9 @@ export function CollectionHistory() {
               >
                 <span className='flex min-w-0 flex-1 flex-col gap-1'>
                   <span className='truncate'>
-                    {entry.task.query || t('之前的采集')}
+                    {entry.task.creator?.name ||
+                      entry.task.query ||
+                      t('之前的采集')}
                   </span>
                   <span className='flex flex-wrap items-center gap-x-3 gap-y-1 font-normal text-muted-foreground'>
                     <span className='inline-flex items-center gap-1'>

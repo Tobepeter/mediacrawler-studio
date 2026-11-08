@@ -16,8 +16,8 @@ from mediacrawler_cli.cleanup import clean, prune, KEEP_RUNS
 
 
 class CLIError(Exception):
-    def __init__(self, code, run_id=None):
-        self.code, self.run_id = code, run_id
+    def __init__(self, code, run_id=None, candidates=None):
+        self.code, self.run_id, self.candidates = code, run_id, candidates or []
         super().__init__(code)
 
 
@@ -73,6 +73,7 @@ def run(request):
     run_created = False
     process = None
     records = []
+    page = {'next_cursor': None, 'has_more': False}
     items = {}
     complete = False
     partial = False
@@ -144,6 +145,10 @@ def run(request):
                     complete = True
                 elif event['type'] == 'warning':
                     partial = True
+                elif event['type'] == 'page':
+                    page.update(next_cursor=event.get('next_cursor'), has_more=event.get('has_more') is True)
+                elif event['type'] == 'creator':
+                    page['creator'] = event.get('creator')
                 elif event['type'] == 'download-progress':
                     if request.get('verbose'):
                         print(json.dumps(event), file=sys.stderr)
@@ -152,7 +157,7 @@ def run(request):
                 elif event['type'] == 'state':
                     print(event.get('message', ''), file=sys.stderr)
                 elif event['type'] == 'failure':
-                    raise CLIError(event['code'], run_id)
+                    raise CLIError(event['code'], run_id, event.get('candidates'))
             except queue.Empty:
                 if process.poll() is not None and not reader.is_alive():
                     break
@@ -208,11 +213,16 @@ def run(request):
         finally:
             lock.release()
     values = list(items.values())
+    # 博主命令需要分页位置；失败时也输出，已取结果可从该位置继续
+    paged = request['action'] == 'creator-search' or request.get('mode') == 'creator'
+    summary = {'type': 'page', **page, 'count': len(values), 'complete': error is None}
     if request['format'] == 'json':
-        print(json.dumps(values, ensure_ascii=False))
+        print(json.dumps({'items': values, 'page': summary} if paged else values, ensure_ascii=False))
     else:
         for item in values:
             print(json.dumps(item, ensure_ascii=False))
+        if paged:
+            print(json.dumps(summary, ensure_ascii=False))
     if error:
         raise error
     return values

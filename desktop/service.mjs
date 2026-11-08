@@ -7,7 +7,14 @@ import { randomUUID } from 'node:crypto'
 import { StudioLibrary } from './library.mjs'
 import { DownloadJob } from './download-job.mjs'
 import path from 'node:path'
-import { platforms, validateRequest, validateFilters } from './contracts.mjs'
+import {
+  creatorLimit,
+  creatorPlatforms,
+  isCreatorUrl,
+  platforms,
+  validateRequest,
+  validateFilters,
+} from './contracts.mjs'
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -91,10 +98,10 @@ export class StudioService {
       !value ||
       typeof value.query !== 'string' ||
       value.query.length > 2000 ||
-      !['search', 'link'].includes(value.mode) ||
+      !['search', 'link', 'creator'].includes(value.mode) ||
       !Number.isInteger(value.limit) ||
       value.limit < 1 ||
-      value.limit > 100
+      value.limit > (value.mode === 'creator' ? creatorLimit : 100)
     )
       throw new Error('无效的页面输入')
     this.library.workspace.drafts[platform] = {
@@ -220,6 +227,106 @@ export class StudioService {
     const job = this.operations.get('dy')?.downloadJob
     if (typeof requestId === 'string' && job?.requestId === requestId)
       await job.cancel()
+  }
+
+  // 搜索博主与采集共用平台页面，走同一互斥；结果只回给调用方，不进历史
+  async searchCreators(platform, keyword, cursor) {
+    if (!creatorPlatforms.includes(platform))
+      throw new Error('该平台暂不支持博主搜索')
+    const query = typeof keyword === 'string' ? keyword.trim() : ''
+    if (!query || query.length > 100) throw new Error('请输入博主名称或关键词')
+    if (
+      cursor !== undefined &&
+      (typeof cursor !== 'string' || !cursor || cursor.length > 4096)
+    )
+      throw new Error('翻页位置无效，请重新搜索')
+    this.assertAvailable(platform)
+    if (this.state.accounts[platform] !== 'connected')
+      throw new Error('登录后才能搜索博主')
+    const python =
+      process.env.STUDIO_PYTHON ||
+      path.join(
+        this.root,
+        '.venv',
+        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+      )
+    if (!existsSync(python))
+      throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
+    const run = { kind: 'creator-search', child: null, cancelled: false }
+    const cancelled = { items: [], hasMore: false, cancelled: true }
+    this.operations.set(platform, run)
+    this.publish()
+    try {
+      await this.sessions?.stop(platform)
+      const targetId = await this.windows.prepare(platform)
+      if (run.cancelled) return cancelled
+      return await new Promise((resolve, reject) => {
+        const child = this.spawnProcess(
+          python,
+          ['-u', '-m', 'desktop.worker'],
+          {
+            cwd: this.root,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: {
+              ...process.env,
+              PYTHONUNBUFFERED: '1',
+              PYTHONIOENCODING: 'utf-8',
+            },
+          },
+        )
+        run.child = child
+        let result = null
+        let message = ''
+        const timer = setTimeout(() => {
+          message = '搜索超时，请重试'
+          child.kill('SIGKILL')
+        }, 45000)
+        const lines = createInterface({ input: child.stdout })
+        lines.on('line', (line) => {
+          try {
+            const event = JSON.parse(line)
+            if (event.type === 'creators') result = event
+            else if (event.type === 'error') message = event.message
+          } catch {
+            /* 非协议输出不进入页面 */
+          }
+        })
+        child.stderr.resume()
+        child.stdin.on('error', () => {})
+        child.once('error', (error) => {
+          this.logger?.write('error', 'crawler', 'spawn-failed', error)
+          clearTimeout(timer)
+          reject(new Error('采集进程无法启动，请检查 Python 环境'))
+        })
+        child.once('close', () => {
+          clearTimeout(timer)
+          lines.close()
+          if (run.cancelled) resolve(cancelled)
+          else if (result)
+            resolve({
+              items: Array.isArray(result.items) ? result.items : [],
+              nextCursor: result.next_cursor || undefined,
+              hasMore: result.has_more === true,
+            })
+          else reject(new Error(message || '搜索失败，请重试'))
+        })
+        child.stdin.end(
+          JSON.stringify({
+            platform,
+            action: 'creator-search',
+            mode: 'search',
+            query,
+            limit: 20,
+            cursor,
+            endpoint: this.endpoint,
+            targetId,
+          }) + '\n',
+        )
+      })
+    } finally {
+      this.operations.delete(platform)
+      this.publish()
+    }
   }
 
   async runMedia(record, options) {
@@ -364,6 +471,13 @@ export class StudioService {
               platform: request.platform,
               ...event.detail,
             })
+          } else if (event.type === 'creator') {
+            const url = event.creator?.url
+            if (typeof url === 'string' && isCreatorUrl(url))
+              task.creator = {
+                name: String(event.creator.name || '').slice(0, 100),
+                url,
+              }
           } else if (event.type === 'timing') {
             this.logger?.write('info', 'login', 'stage', {
               platform: request.platform,
@@ -515,6 +629,11 @@ export class StudioService {
     if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
     const run = this.operations.get(platform)
     if (!run) return
+    if (run.kind === 'creator-search') {
+      run.cancelled = true
+      run.child?.kill('SIGKILL')
+      return
+    }
     if (run.downloadJob) return run.downloadJob.cancel()
     if (run.kind === 'logout') return run.done?.catch(() => {})
     clearTimeout(run.loginTimer)

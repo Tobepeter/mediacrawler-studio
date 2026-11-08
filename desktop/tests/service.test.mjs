@@ -640,3 +640,101 @@ test('两平台同时采集，停止其中一个后另一个继续写入自己�
     await cleanup()
   }
 })
+
+const creatorScript = (body) => `process.stdin.once('data', () => { ${body} });`
+async function connectedDouyin(script) {
+  const context = await createService(script)
+  context.service.state.accounts.dy = 'connected'
+  return context
+}
+
+test('搜索博主占用同平台并返回分页结果', async () => {
+  const { service, cleanup } = await connectedDouyin(
+    creatorScript(
+      `console.log(JSON.stringify({type:'creators',items:[{id:'a'}],next_cursor:'n',has_more:true})); setTimeout(()=>{}, 50);`,
+    ),
+  )
+  try {
+    process.env.STUDIO_PYTHON = process.execPath
+    const pending = service.searchCreators('dy', ' 罗翔 ')
+    assert.equal(service.operations.get('dy').kind, 'creator-search')
+    await assert.rejects(service.searchCreators('dy', 'x'), /结束当前任务/)
+    assert.deepEqual(await pending, {
+      items: [{ id: 'a' }],
+      nextCursor: 'n',
+      hasMore: true,
+    })
+    assert.equal(service.busy, false)
+  } finally {
+    delete process.env.STUDIO_PYTHON
+    await cleanup()
+  }
+})
+
+test('搜索博主校验入口并透传失败原因', async () => {
+  const { service, cleanup } = await connectedDouyin(
+    creatorScript(
+      `console.log(JSON.stringify({type:'error',message:'抖音要求验证，请稍后重试'}));`,
+    ),
+  )
+  try {
+    process.env.STUDIO_PYTHON = process.execPath
+    await assert.rejects(service.searchCreators('bili', 'x'), /暂不支持/)
+    await assert.rejects(service.searchCreators('dy', '  '), /请输入/)
+    await assert.rejects(service.searchCreators('dy', 'x', 1), /翻页/)
+    delete service.state.accounts.dy
+    await assert.rejects(service.searchCreators('dy', 'x'), /登录后/)
+    service.state.accounts.dy = 'connected'
+    await assert.rejects(service.searchCreators('dy', 'x'), /要求验证/)
+    assert.equal(service.busy, false)
+  } finally {
+    delete process.env.STUDIO_PYTHON
+    await cleanup()
+  }
+})
+
+test('取消搜索博主立即释放平台', async () => {
+  const { service, cleanup } = await connectedDouyin(
+    creatorScript(`setInterval(() => {}, 1000);`),
+  )
+  try {
+    process.env.STUDIO_PYTHON = process.execPath
+    const pending = service.searchCreators('dy', 'x')
+    await until(() => service.operations.get('dy')?.child)
+    await service.cancel('dy')
+    assert.equal((await pending).cancelled, true)
+    assert.equal(service.busy, false)
+  } finally {
+    delete process.env.STUDIO_PYTHON
+    await cleanup()
+  }
+})
+
+test('采集任务记录博主名称，草稿接受博主模式', async () => {
+  const url = 'https://www.douyin.com/user/MS4wLjABAAAAabc'
+  const { service, cleanup } = await connectedDouyin(
+    creatorScript(
+      `console.log(JSON.stringify({type:'creator',creator:{name:'博主',url:${JSON.stringify(url)}}})); console.log(JSON.stringify({type:'done',message:'ok'}));`,
+    ),
+  )
+  try {
+    process.env.STUDIO_PYTHON = process.execPath
+    await service.saveDraft('dy', { query: url, mode: 'creator', limit: 200 })
+    await service.start({
+      platform: 'dy',
+      action: 'collect',
+      mode: 'creator',
+      query: url,
+      limit: 150,
+    })
+    await until(
+      () => service.state.tasks.dy?.status === 'completed' && !service.busy,
+    )
+    assert.deepEqual(service.state.tasks.dy.creator, { name: '博主', url })
+    assert.equal(service.state.tasks.dy.limit, 150)
+  } finally {
+    delete process.env.STUDIO_PYTHON
+    await service.persistence.catch(() => {})
+    await cleanup()
+  }
+})
