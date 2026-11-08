@@ -7,7 +7,17 @@ import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
 import { CreatorSearch } from './creator-search'
-import { creatorLimit, creatorPresets, isCreatorUrl } from './creator-options'
+import {
+  creatorLimit,
+  creatorPlatforms,
+  creatorPresets,
+  extractShareUrl,
+  isCreatorUrl,
+  isDouyinShortLink,
+  platformOfUrl,
+} from './creator-options'
+import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { LoginGate } from './login-gate'
 import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
@@ -53,44 +63,40 @@ export function CollectForm() {
         ? form.limit
         : Math.max(form.limit, 50)
       : Math.min(form.limit, 100)
-  const chooseCreator = (creator: CreatorSummary) =>
+  const [picked, setPicked] = useState<{ url: string; name: string }>()
+  const creatorName =
+    (picked?.url === form.query && picked.name) ||
+    (page?.task.query === form.query && page.task.creator?.name) ||
+    t('博主')
+  const chooseCreator = (creator: CreatorSummary) => {
+    setPicked({ url: creator.url, name: creator.name })
     updateForm({
       query: creator.url,
       mode: 'creator',
       limit: limitFor('creator'),
     })
-  const updateQuery = (query: string) => {
-    const mode = !/^https?:\/\//i.test(query.trim())
-      ? 'search'
-      : isCreatorUrl(query)
-        ? 'creator'
-        : 'link'
-    let platform = form.platform
-    if (mode !== 'search') {
-      try {
-        const host = new URL(query.trim()).hostname
-        const hosts: Record<Platform, string[]> = {
-          bili: ['bilibili.com', 'b23.tv'],
-          dy: ['douyin.com', 'iesdouyin.com'],
-          xhs: ['xiaohongshu.com', 'xhslink.com'],
-          zhihu: ['zhihu.com'],
-          wb: ['weibo.com', 'weibo.cn'],
-          tieba: ['tieba.baidu.com'],
-          ks: ['kuaishou.com', 'gifshow.com'],
-        }
-        for (const id of Object.keys(hosts) as Platform[]) {
-          if (
-            hosts[id].some(
-              (domain) => host === domain || host.endsWith(`.${domain}`),
-            )
-          )
-            platform = id
-        }
-      } catch {
-        /* 输入中的链接保留到提交时校验 */
-      }
-    }
+  }
+  const updateQuery = (input: string) => {
+    const query = extractShareUrl(input)
+    const url = /^https?:\/\//i.test(query.trim())
+    const mode = !url ? 'search' : isCreatorUrl(query) ? 'creator' : 'link'
+    const platform = (url && platformOfUrl(query)) || form.platform
     updateForm({ query, mode, platform, limit: limitFor(mode) })
+    if (isDouyinShortLink(query)) void expandShortLink(query)
+  }
+  // 短链要请求后才知道指向作品还是主页，是主页就原位换成完整链接
+  const expandShortLink = async (query: string) => {
+    const target = await window.studio
+      ?.resolveCreatorLink?.(query)
+      .catch(() => null)
+    const state = useStudio.getState()
+    if (!target || state.platform !== 'dy' || state.forms.dy.query !== query)
+      return
+    state.updateForm({
+      query: target,
+      mode: 'creator',
+      limit: Math.max(state.forms.dy.limit, 50),
+    })
   }
   const cancel = async () => {
     try {
@@ -152,12 +158,25 @@ export function CollectForm() {
               className='flex min-w-0 flex-wrap items-center justify-end gap-2 sm:h-9 sm:flex-nowrap'
             >
               <div className='flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1'>
+                {form.mode === 'creator' && (
+                  <Badge
+                    variant='secondary'
+                    className='max-w-40 shrink-0 truncate'
+                    title={creatorName}
+                  >
+                    {creatorName}
+                  </Badge>
+                )}
                 <Input
                   className='min-w-0 flex-1'
                   id='query'
                   aria-label={t('关键词或作品链接')}
                   placeholder={
-                    locked ? t('登录后即可采集') : t('关键词或作品链接')
+                    locked
+                      ? t('登录后即可采集')
+                      : creatorPlatforms.includes(form.platform)
+                        ? t('关键词、作品或博主主页链接')
+                        : t('关键词或作品链接')
                   }
                   value={form.query}
                   onChange={(event) => updateQuery(event.target.value)}

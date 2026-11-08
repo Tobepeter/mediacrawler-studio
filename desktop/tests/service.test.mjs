@@ -738,3 +738,47 @@ test('采集任务记录博主名称，草稿接受博主模式', async () => {
     await cleanup()
   }
 })
+
+test('继续采集并入原批次并更新翻页位置', async () => {
+  const url = 'https://www.douyin.com/user/MS4wLjABAAAAabc'
+  const emit = (id, cursor) =>
+    `console.log(JSON.stringify({type:'item',item:{id:'dy:${id}',title:'t',text:'',platform:'dy',url:'https://www.douyin.com/video/${id}',images:[]}})); console.log(JSON.stringify({type:'page',next_cursor:${cursor},has_more:${cursor !== 'null'}})); console.log(JSON.stringify({type:'done',message:'ok'}));`
+  const { service, cleanup } = await connectedDouyin(creatorScript(''))
+  let script = emit('1', `'next'`)
+  service.spawnProcess = () =>
+    spawn(process.execPath, ['-e', creatorScript(script)])
+  const finished = () =>
+    until(() => service.state.tasks.dy?.status === 'completed' && !service.busy)
+  const start = (extra) =>
+    service.start({
+      platform: 'dy',
+      action: 'collect',
+      mode: 'creator',
+      query: url,
+      limit: 5,
+      ...extra,
+    })
+  try {
+    process.env.STUDIO_PYTHON = process.execPath
+    await assert.rejects(start({ cursor: 'c' }), /重新开始/)
+    await start()
+    await finished()
+    const first = service.state.pages.dy
+    assert.equal(first.task.nextCursor, 'next')
+    script = emit('2', 'null')
+    await start({ cursor: 'next' })
+    await finished()
+    const merged = service.state.pages.dy
+    assert.equal(merged.id, first.id)
+    assert.deepEqual(
+      merged.results.map((item) => item.id),
+      ['dy:1', 'dy:2'],
+    )
+    assert.equal(merged.task.nextCursor, undefined)
+    assert.equal(merged.task.cursor, undefined)
+  } finally {
+    delete process.env.STUDIO_PYTHON
+    await service.persistence.catch(() => {})
+    await cleanup()
+  }
+})

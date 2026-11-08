@@ -125,6 +125,14 @@ export function validateRequest(value) {
     if (mode === 'creator' && !isCreatorUrl(query, value.platform))
       throw new Error('请粘贴博主主页的完整链接')
   }
+  if (
+    value.cursor !== undefined &&
+    (mode !== 'creator' ||
+      typeof value.cursor !== 'string' ||
+      !value.cursor ||
+      value.cursor.length > 4096)
+  )
+    throw new Error('翻页位置无效，请重新采集')
   for (const key of ['comments', 'replies']) {
     if (value[key] !== undefined && typeof value[key] !== 'boolean')
       throw new Error('采集选项无效')
@@ -141,6 +149,7 @@ export function validateRequest(value) {
     mode,
     query,
     limit: mode === 'link' ? 1 : limit,
+    ...(value.cursor ? { cursor: value.cursor } : {}),
   }
 }
 

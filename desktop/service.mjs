@@ -383,22 +383,32 @@ export class StudioService {
       )
     if (!existsSync(python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
+    // 继续采集写回同一批次，换博主或记录已清空时不能拼接
+    const previous = request.cursor ? this.state.pages[request.platform] : null
+    if (
+      request.cursor &&
+      (previous?.task.mode !== 'creator' ||
+        previous.task.query !== request.query)
+    )
+      throw new Error('采集记录已变化，请重新开始')
     const task = {
       ...request,
       status: 'checking',
       message: '正在检查登录状态',
       startedAt: Date.now(),
     }
+    delete task.cursor
+    if (previous) task.creator = previous.task.creator
     const run = {
       kind: request.action,
       task,
-      results: [],
+      results: previous ? [...previous.results] : [],
       stopRequested: false,
     }
     this.operations.set(request.platform, run)
     this.state.tasks[request.platform] = task
     if (request.action === 'collect') {
-      run.id = randomUUID()
+      run.id = previous?.id || randomUUID()
       this.library.workspace.selections[request.platform] = run.id
       this.save(run)
       this.trackSave(this.library.saveWorkspace())
@@ -471,6 +481,12 @@ export class StudioService {
               platform: request.platform,
               ...event.detail,
             })
+          } else if (event.type === 'page') {
+            task.nextCursor =
+              typeof event.next_cursor === 'string' &&
+              event.next_cursor.length <= 4096
+                ? event.next_cursor
+                : undefined
           } else if (event.type === 'creator') {
             const url = event.creator?.url
             if (typeof url === 'string' && isCreatorUrl(url))

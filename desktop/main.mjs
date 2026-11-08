@@ -20,6 +20,7 @@ import { StudioLogger, attachRendererLogs } from './logging/logger.mjs'
 import { appIcon } from './app-icon.mjs'
 import { installPlaybackHeaders } from './playback-headers.mjs'
 import { HealthCheck } from './health-check.mjs'
+import { resolveCreatorLink } from './share-links.mjs'
 import { CliInstall } from './cli-install.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -208,6 +209,7 @@ app
         }
       },
     )
+    handle('resolve-creator-link', (url) => resolveCreatorLink(url))
     handle('search-creators', (platform, keyword, cursor) =>
       service.searchCreators(platform, keyword, cursor),
     )

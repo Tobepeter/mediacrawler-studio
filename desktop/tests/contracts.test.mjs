@@ -181,3 +181,21 @@ test('博主主页模式只接受完整主页链接并放宽数量', () => {
     /1–100/,
   )
 })
+
+test('翻页位置只用于博主模式', () => {
+  const query = 'https://www.douyin.com/user/MS4wLjABAAAAabc'
+  const base = {
+    platform: 'dy',
+    action: 'collect',
+    mode: 'creator',
+    query,
+    limit: 5,
+  }
+  assert.equal(validateRequest({ ...base, cursor: 'c' }).cursor, 'c')
+  assert.equal('cursor' in validateRequest(base), false)
+  assert.throws(() => validateRequest({ ...base, cursor: 1 }), /翻页/)
+  assert.throws(
+    () => validateRequest({ ...base, mode: 'search', query: 'x', cursor: 'c' }),
+    /翻页/,
+  )
+})

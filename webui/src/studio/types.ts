@@ -20,6 +20,7 @@ export interface CollectRequest {
   comments?: boolean
   replies?: boolean
   filters?: Record<string, string>
+  cursor?: string
   silent?: boolean
   loginMode?: LoginMode
 }
@@ -84,6 +85,7 @@ export interface CreatorPage {
 
 export interface StudioTask extends CollectRequest {
   creator?: { name: string; url: string }
+  nextCursor?: string
   status: TaskStatus
   message: string
   startedAt: number
@@ -226,6 +228,7 @@ export interface StudioBridge {
   saveDraft(platform: Platform, form: PlatformForm): Promise<void>
   openHistory(id: string): Promise<Collection>
   clearResults(platform: Platform): Promise<void>
+  resolveCreatorLink?(url: string): Promise<string | null>
   searchCreators?(
     platform: Platform,
     keyword: string,

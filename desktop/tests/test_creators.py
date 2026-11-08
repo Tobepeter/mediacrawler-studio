@@ -55,6 +55,7 @@ def test_invalid_cursor_rejected(value):
     (f'www.douyin.com/user/{SEC}', ('id', SEC)),
     (f'https://www.iesdouyin.com/share/user/{SEC}', ('id', SEC)),
     ('https://v.douyin.com/abc/', ('short', 'https://v.douyin.com/abc/')),
+    ('7.5 复制打开抖音，看看【博主的主页】 https://v.douyin.com/abc/ 复制', ('short', 'https://v.douyin.com/abc/')),
     ('厚大.罗翔说刑法', ('name', '厚大.罗翔说刑法')),
 ])
 def test_parse_reference(value, expected):

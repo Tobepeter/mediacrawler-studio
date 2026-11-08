@@ -349,5 +349,10 @@
   "结果包含名称匹配的博主，以及相关视频的作者": "Results include matching creators and authors of related videos",
   "这是博主主页的分享链接，请粘贴主页完整链接或使用找博主": "This is a creator share link. Paste the full profile URL or use Find creators.",
   "{{value}} 粉丝": "{{value}} followers",
-  "{{value}} 作品": "{{value}} posts"
+  "{{value}} 作品": "{{value}} posts",
+  "博主": "Creator",
+  "关键词、作品或博主主页链接": "Keyword, post or creator URL",
+  "继续采集 {{count}} 条": "Collect {{count}} more",
+  "采集记录已变化，请重新开始": "The collection changed. Please start again.",
+  "翻页位置无效，请重新采集": "Invalid page position. Please collect again."
 }

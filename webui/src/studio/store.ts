@@ -79,7 +79,12 @@ interface StudioStore extends StudioState {
   restore: (id: string) => Promise<void>
   clearResults: () => Promise<void>
   cancelLogin: () => Promise<void>
-  start: (action?: 'collect' | 'connect', silent?: boolean) => Promise<void>
+  start: (
+    action?: 'collect' | 'connect',
+    silent?: boolean,
+    cursor?: string,
+  ) => Promise<void>
+  continueCreator: () => Promise<void>
 }
 
 export function platformBusy(state: StudioStore, platform = state.platform) {
@@ -322,7 +327,13 @@ export const useStudio = create<StudioStore>((set, get) => ({
     else if (window.studio?.stopLogin) await window.studio.stopLogin(platform)
     else await window.studio?.cancel(platform)
   },
-  start: async (action = 'collect', silent = false) => {
+  continueCreator: async () => {
+    const task = get().pages[get().platform]?.task
+    if (task?.mode !== 'creator' || !task.nextCursor) return
+    get().updateForm({ query: task.query, mode: 'creator', limit: task.limit })
+    await get().start('collect', false, task.nextCursor)
+  },
+  start: async (action = 'collect', silent = false, cursor) => {
     if (action === 'connect' && window.studio?.retryLogin) {
       const platform = get().platform
       get().updateView({ historyId: '' }, platform)
@@ -368,6 +379,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
         action,
         silent,
         loginMode: 'qrcode',
+        ...(cursor ? { cursor } : {}),
       })
     } catch (error) {
       if (silent) return

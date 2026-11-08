@@ -11,8 +11,9 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
-import { activeStatuses, platformNames, useStudio } from './store'
+import { activeStatuses, platformBusy, platformNames, useStudio } from './store'
 import type { Platform } from './types'
 import { openSource } from './content-detail'
 import { PlatformIcon } from './platform-icon'
@@ -48,6 +49,7 @@ const ResultItems = memo(function ResultItems({
   const patch = useStudio((state) => state.patch)
   const results = page?.results || []
   const active = activeStatuses.includes(page?.task.status || '')
+  const busy = useStudio((state) => platformBusy(state, platform))
   return (
     <>
       {!results.length ? (
@@ -146,6 +148,17 @@ const ResultItems = memo(function ResultItems({
               </Reveal>
             ))}
           </div>
+          {page?.task.mode === 'creator' && page.task.nextCursor && (
+            <div className='flex justify-center pt-6'>
+              <Button
+                variant='outline'
+                disabled={busy}
+                onClick={() => void useStudio.getState().continueCreator()}
+              >
+                {t('继续采集 {{count}} 条', { count: page.task.limit })}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </>

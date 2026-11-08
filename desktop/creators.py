@@ -151,6 +151,10 @@ async def search_creators(runner, keyword, limit=10, cursor=None, requests=SEARC
 
 def parse_reference(value):
     value = value.strip()
+    # App 分享的是整段文案，链接夹在中间
+    shared = re.search(r'https?://[^\s，。！？）】"\']+', value, re.I)
+    if shared and not re.match(r'[a-z]+://', value, re.I):
+        value = shared.group(0)
     if re.match(r'(www\.|v\.)?douyin\.com/', value, re.I):
         value = 'https://' + value
     if not value or len(value) > 2000:
