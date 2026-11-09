@@ -168,4 +168,6 @@ async def run_checks(runner):
         checks.skip('download', '详情没有拿到，跳过')
     # 搜索最容易触发验证，放在最后
     await checks.attempt('search', lambda: search_rows(runner), SEARCH_FLOOR)
+    # 体检本身也发请求，日志里要能和用户操作区分开
+    runner.emit('log', level='info', event='feature-check', detail={'platform': platform, 'results': {item['id']: item['status'] for item in checks.results}})
     return checks.results

@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import urlsplit
 
 from filelock import FileLock
 from platformdirs import user_data_path
@@ -197,12 +198,19 @@ def start_cooldown(path, rule, now=None):
         pass
 
 
+def request_label(original, args, kwargs):
+    """日志要能看出打的是哪个接口；底层 request 只留路径，查询串里可能有签名和令牌"""
+    name = getattr(original, '__name__', 'request')
+    url = kwargs.get('url') or (args[1] if len(args) > 1 else '')
+    return urlsplit(url).path if name == 'request' and isinstance(url, str) and url else name
+
+
 def paced(original, rule, report=None, limit=None):
-    def verification(path):
+    def verification(path, method):
         # 继续请求只会加重风控，冷却期内直接本地拒绝
         start_cooldown(path, rule)
         if report:
-            report('pacing-cooldown', key=rule.key, seconds=rule.cooldown_seconds)
+            report('pacing-cooldown', key=rule.key, seconds=rule.cooldown_seconds, method=method)
         minutes = math.ceil(rule.cooldown_seconds / 60)
         return CreatorError('SEARCH_VERIFICATION_REQUIRED', f'{rule.name}要求验证，访问暂停约 {minutes} 分钟', retry_after=rule.cooldown_seconds)
 
@@ -211,21 +219,38 @@ def paced(original, rule, report=None, limit=None):
             return await original(*args, **kwargs)
         path = state_path(rule)
         fresh = bool(rule.is_fresh and rule.is_fresh(args, kwargs))
-        wait = reserve(path, rule, fresh, limit=limit)
+        method = request_label(original, args, kwargs)
+
+        def record(outcome, waited=0, **extra):
+            # 每次真正发出或被本地拦下的请求都留一行，出问题时能还原完整时间线
+            if report:
+                report('platform-request', key=rule.key, method=method, fresh=fresh, waited=round(waited, 1), outcome=outcome, **extra)
+
+        try:
+            wait = reserve(path, rule, fresh, limit=limit)
+        except CreatorError as error:
+            record(error.code)
+            raise
         if report and wait >= 1:
             report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=fresh)
         await asyncio.sleep(wait)
         token = holding.set(True)
+        started = time.monotonic()
+        spent = lambda: round((time.monotonic() - started) * 1000)
         try:
             response = await original(*args, **kwargs)
         except Exception as error:
             if rule.is_blocked and rule.is_blocked(error):
-                raise verification(path) from None
+                record('verification', wait, milliseconds=spent())
+                raise verification(path, method) from None
+            record('error', wait, milliseconds=spent(), error=type(error).__name__)
             raise
         finally:
             holding.reset(token)
         if rule.cooldown_seconds and isinstance(response, dict) and (response.get('search_nil_info') or {}).get('search_nil_type') == 'verify_check':
-            raise verification(path)
+            record('verification', wait, milliseconds=spent())
+            raise verification(path, method)
+        record('ok', wait, milliseconds=spent())
         return response
     return call
 
