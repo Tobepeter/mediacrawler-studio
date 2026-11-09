@@ -18,6 +18,13 @@ creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其
 app.add_typer(creator, name='creator')
 
 
+# 排队太久宁可立刻报错，调用方按 retry_after 决定等不等，比闷头卡住好
+DEFAULT_MAX_WAIT = 3
+MAX_WAIT = typer.Option(DEFAULT_MAX_WAIT, '--max-wait', min=0, max=600,
+                        help='开始前最多排队多少秒，超过返回 RATE_WAIT_EXCEEDED 和 retry_after；任务开始后的翻页间隔不受影响')
+NO_THROTTLE = typer.Option(False, '--no-throttle', help='跳过本地节流直接请求，可能触发平台验证，只在排查时手动使用')
+
+
 def profile_busy_message(platform, profile):
     return f'{platform}/{profile} 正在使用中，可稍后重试或用 --profile 选择其他配置'
 
@@ -28,8 +35,11 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
     request = dict(action=action, platform=platform, profile=profile, data_dir=data_dir,
                    mode='search', query='', limit=5, comments=False, replies=False,
                    qr='terminal', login_timeout=300, timeout=900,
-                   non_interactive=False, lock_timeout=0, format='jsonl')
+                   non_interactive=False, lock_timeout=0, format='jsonl',
+                   max_wait=DEFAULT_MAX_WAIT, no_throttle=False)
     request.update(options)
+    if request['no_throttle']:
+        typer.echo('已跳过本地节流，这次请求可能触发平台验证', err=True)
     if request['qr'] not in ('terminal', 'image', 'browser') or request['format'] not in ('json', 'jsonl'):
         raise typer.BadParameter('login-mode 必须是 terminal/image/browser；format 必须是 json/jsonl')
     try:
@@ -39,9 +49,9 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
             typer.echo(json.dumps({'type': 'platform', 'platform': platform, 'status': 'failed', 'policy': {**POLICY, 'qr_timeout_ms': options.get('qr_timeout_ms', POLICY['qr_timeout_ms'])},
                                   'error': {'code': 'TIMEOUT' if error.code == 'TASK_TIMEOUT' else 'UNKNOWN',
                                             'stage': 'worker', 'cause': error.code, 'retryable': True}}))
-        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_WAIT_EXCEEDED': '排队时间超过 --max-wait，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
         typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
-                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'SEARCH_VERIFICATION_REQUIRED', 'RATE_LIMITED', 'RATE_COOLDOWN'), 'run_id': error.run_id,
+                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'SEARCH_VERIFICATION_REQUIRED', 'RATE_LIMITED', 'RATE_WAIT_EXCEEDED', 'RATE_COOLDOWN'), 'run_id': error.run_id,
                                **({'candidates': error.candidates} if error.candidates else {}),
                                **({'retry_after': error.retry_after} if error.retry_after else {})}, ensure_ascii=False), err=True)
         raise typer.Exit({'AUTH_REQUIRED': 3, 'PROFILE_BUSY': 4, 'TASK_TIMEOUT': 6, 'CANCELLED': 130}.get(error.code, 5))
@@ -59,7 +69,7 @@ def collect(platform: str = typer.Option(...), query: Optional[str] = None, url:
             quality: str = typer.Option('best', help='推荐画质：best、worst 或具体高度如 720p；保留全部候选，指定档位缺失不静默降级'),
             media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕、章节等能力；--no-media 保留为旧版兼容开关'),
             include_source: bool = typer.Option(False, help='附带上游标准化作品字段（不是账号信息或完整 HTTP 响应）'),
-            verbose: bool = typer.Option(False, '--verbose', '-v', help='额外阶段日志写到 stderr，不改变 JSON 结果')):
+            max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = typer.Option(False, '--verbose', '-v', help='额外阶段日志写到 stderr，不改变 JSON 结果')):
     """采集作品，默认返回完整能力与字幕正文，不自动下载视频、音频和图片
 
     示例：collect --platform bili --query Claude --limit 5 --quality worst
@@ -95,7 +105,7 @@ def creator_search(query: str = typer.Option(..., help='博主名称或关键词
                    profile: str = 'default', data_dir: Optional[str] = None, non_interactive: bool = False,
                    qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal / image / browser'),
                    login_timeout: int = typer.Option(300, min=1), timeout: int = typer.Option(180, min=1),
-                   lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', verbose: bool = False):
+                   lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """搜索博主，每行一个候选，末行 type=page 给出 next_cursor
 
     抖音结果混合博主卡片（source=user）和相关视频作者（source=video）；后者字段较少，可能和名称不完全相关
@@ -118,7 +128,7 @@ def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', hel
                   output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
                   quality: str = typer.Option('best', help='best、worst 或 720p 等'),
                   media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
-                  include_source: bool = False, verbose: bool = False):
+                  include_source: bool = False, max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """按主页顺序翻页采集博主作品，末行 type=page 给出 next_cursor 与博主资料
 
     单次最多 100 条，继续传 --cursor；has_more=false 表示已到末尾。翻页位置精确到页内，不漏条
@@ -148,7 +158,7 @@ def search_command(query: Optional[str] = typer.Option(None, help='关键词；�
                    output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
                    quality: str = typer.Option('best', help='best、worst 或 720p 等'),
                    media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
-                   include_source: bool = False, verbose: bool = False):
+                   include_source: bool = False, max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """按关键词分页采集作品，末行 type=page 给出 next_cursor
 
     --limit 是本次要多少条，--cursor 是从哪继续，两者独立；has_more=false 表示已到末尾
@@ -179,7 +189,7 @@ def download_command(source: Optional[str] = typer.Option(None, help='作品页�
                      variant_id: Optional[str] = typer.Option(None, help='--input 中指定媒体版本 ID'),
                      output_dir: Optional[str] = typer.Option(None, help='下载目录，每次创建独立子目录；默认 Downloads/MediaCrawler'),
                      non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码 / image 图片二维码 / browser 临时浏览器扫码；始终静音'),
-                     timeout: int = typer.Option(1800, min=1), verbose: bool = typer.Option(False, '--verbose', '-v')):
+                     timeout: int = typer.Option(1800, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = typer.Option(False, '--verbose', '-v')):
     """下载作品或已有媒体信息，共用桌面下载器，不自动安装 FFmpeg
 
     download --source '作品链接' --quality worst
@@ -253,7 +263,7 @@ def download_command(source: Optional[str] = typer.Option(None, help='作品页�
     invoke('download', platform, profile, data_dir, query=source or '', mode='link', limit=1,
            records=records, kind=kind, quality=quality, variant_id=variant_id,
            output_dir=output_dir, save=True, non_interactive=non_interactive, qr=qr,
-           timeout=timeout, verbose=verbose, format='json')
+           timeout=timeout, verbose=verbose, format='json', max_wait=max_wait, no_throttle=no_throttle)
 
 
 @auth.command('login')

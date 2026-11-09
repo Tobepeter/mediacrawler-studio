@@ -150,9 +150,9 @@ def locked(path):
     return FileLock(str(path) + '.lock', timeout=5)
 
 
-def reserve(path, rule, fresh, now=None, limit=None):
+def reserve(path, rule, fresh, now=None, limit=None, limit_code='FEED_BUSY'):
     """占用下一个可用时刻并返回需要等待的秒数；状态文件异常时放行，不阻断采集
-    limit 是后台请求能接受的等待上限，超过时不占名额，抛 FEED_BUSY"""
+    limit 是调用方能接受的等待上限，超过时不占名额，抛 limit_code"""
     now = time.time() if now is None else now
     try:
         with locked(path):
@@ -174,8 +174,8 @@ def reserve(path, rule, fresh, now=None, limit=None):
             full = rule.total_limit and len(total) >= rule.total_limit
             retry_after = max(start - now, recent[0] + rule.window_seconds - now if over else 0, total[0] + rule.window_seconds - now if full else 0)
             if limit is not None and retry_after > limit:
-                raise CreatorError('FEED_BUSY', '平台正忙，稍后再试', retry_after=math.ceil(retry_after))
-            if over or full or retry_after > MAX_WAIT_SECONDS:
+                raise CreatorError(limit_code, f'需要排队约 {math.ceil(retry_after)} 秒，稍后再试', retry_after=math.ceil(retry_after))
+            if over or full or retry_after > max(MAX_WAIT_SECONDS, limit or 0):
                 raise CreatorError('RATE_LIMITED', f'操作太频繁，请约 {math.ceil(retry_after)} 秒后再试', retry_after=math.ceil(retry_after))
             # 同一时间线上有的规则不设上限，不能把其他规则累计的记录清掉
             counters = {}
@@ -187,6 +187,42 @@ def reserve(path, rule, fresh, now=None, limit=None):
     except OSError:
         return 0
     return start - now
+
+
+def record_bypass(path, rule, fresh, now=None):
+    """跳过节流的请求也要记账，后面正常排队的调用才知道平台刚被访问过"""
+    now = time.time() if now is None else now
+    try:
+        with locked(path):
+            state = read_state(path)
+            counters = {}
+            for key, enabled in (('recent', rule.window_limit and fresh), ('total', rule.total_limit)):
+                if enabled:
+                    stamps = state.get(key)
+                    counters[key] = [*(stamps if isinstance(stamps, list) else []), now]
+            write_state(path, {**state, 'last_at': max(now, number(state.get('last_at'))), **counters})
+    except OSError:
+        pass
+
+
+# 命令行按次设置，桌面端不用：只限制开始前的排队，开始后的翻页间隔是任务自身节奏
+cli_policy = {'queue_limit': None, 'queued': False, 'bypass': False}
+
+
+def configure_cli(queue_limit=None, bypass=False):
+    cli_policy.update(queue_limit=queue_limit, queued=False, bypass=bypass)
+
+
+def take_turn(path, rule, fresh, limit=None):
+    """所有请求拿号的唯一入口，返回需要等待的秒数"""
+    if cli_policy['bypass']:
+        record_bypass(path, rule, fresh)
+        return 0
+    if limit is not None or cli_policy['queue_limit'] is None or cli_policy['queued']:
+        return reserve(path, rule, fresh, limit=limit)
+    wait = reserve(path, rule, fresh, limit=cli_policy['queue_limit'], limit_code='RATE_WAIT_EXCEEDED')
+    cli_policy['queued'] = True
+    return wait
 
 
 def start_cooldown(path, rule, now=None):
@@ -224,10 +260,10 @@ def paced(original, rule, report=None, limit=None):
         def record(outcome, waited=0, **extra):
             # 每次真正发出或被本地拦下的请求都留一行，出问题时能还原完整时间线
             if report:
-                report('platform-request', key=rule.key, method=method, fresh=fresh, waited=round(waited, 1), outcome=outcome, **extra)
+                report('platform-request', key=rule.key, method=method, fresh=fresh, waited=round(waited, 1), outcome=outcome, **({'bypassed': True} if cli_policy['bypass'] else {}), **extra)
 
         try:
-            wait = reserve(path, rule, fresh, limit=limit)
+            wait = take_turn(path, rule, fresh, limit)
         except CreatorError as error:
             record(error.code)
             raise
@@ -284,7 +320,7 @@ def pace_client(client, platform, report=None, limit=None):
 async def wait_turn(platform, report=None):
     """不走 client 的页面导航用这个排队，节奏和该平台的其他请求共用"""
     rule = PLATFORM_RULES[platform]
-    wait = reserve(state_path(rule), rule, False)
+    wait = take_turn(state_path(rule), rule, False)
     if report and wait >= 1:
         report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=False)
     await asyncio.sleep(wait)

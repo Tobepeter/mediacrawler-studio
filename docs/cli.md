@@ -70,7 +70,10 @@ uv run mediacrawler creator posts --platform bili --creator https://space.bilibi
 | B站其他请求（含视频详情） | 1–2.5 秒 | 无 |
 | 知乎、微博、贴吧、快手 | 2–4 秒 | 无 |
 
-- 命令会自动等待间隔，单次等待超过 30 秒或达到上限时返回 `RATE_LIMITED`
+- 桌面端、CLI 和体检共用同一份节奏和冷却，都由 `desktop/pacing.py` 统一放行；不经过这里的只有内嵌窗口的普通页面加载和媒体文件下载
+- 任务开始前最多排队 `--max-wait` 秒（默认 3，上限 600），超过立刻返回 `RATE_WAIT_EXCEEDED` 和 `retry_after`，不会闷头卡住；可以按 `retry_after` 重试，或调大 `--max-wait`
+- 任务开始后的翻页和详情按上表间隔自动等待，不受 `--max-wait` 影响；单次等待超过 30 秒（或 `--max-wait`，取较大值）或达到上限时返回 `RATE_LIMITED`
+- `--no-throttle` 跳过本地间隔、上限和冷却直接请求，只在排查时手动传。这些请求仍会计入节奏，平台返回验证时同样进入冷却，之后不带这个参数的调用要等冷却结束
 - 平台返回验证要求时返回 `SEARCH_VERIFICATION_REQUIRED`，之后 30 分钟内本地直接返回 `RATE_COOLDOWN`，不再请求平台。这些错误都带 `retry_after`（秒）
 - 其他接口不受此限制。需要纳入时在 `desktop/pacing.py` 的 `RULES` 增加一行
 
