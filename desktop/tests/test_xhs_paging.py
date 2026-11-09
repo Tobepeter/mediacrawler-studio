@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from desktop.creators import CreatorError, decode_cursor, encode_cursor
+from desktop.paging import CreatorError, decode_cursor, encode_cursor
 from desktop.pacing import PLATFORM_RULES, RULES, paced
 from desktop.xhs_paging import collect_creator, collect_search
 

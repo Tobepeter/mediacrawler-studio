@@ -11,8 +11,14 @@ const source = await readFile(
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: 'ESNext', target: 'ES2022' },
 })
+const capabilities = new URL('../platform-capabilities.json', import.meta.url)
 const { extractShareUrl, isShareShortLink, platformOfUrl } = await import(
-  `data:text/javascript,${encodeURIComponent(outputText)}`
+  `data:text/javascript,${encodeURIComponent(
+    outputText.replace(
+      /["']\.\.\/\.\.\/\.\.\/desktop\/platform-capabilities\.json["']/,
+      `'${capabilities}' with { type: 'json' }`,
+    ),
+  )}`
 )
 
 const redirect = (location) => async () => ({
@@ -101,6 +107,29 @@ test('小红书短链只在跳到主页时返回并保留访问参数', async ()
     await resolveCreatorLink(
       'https://xhslink.com/m/a',
       hit('https://evil.example/user/profile/abc'),
+    ),
+    null,
+  )
+})
+
+test('B站分享短链解析为主页，作品短链不改写', async () => {
+  const link = 'https://b23.tv/abc'
+  assert.equal(isShareShortLink(link), true)
+  assert.equal(
+    await resolveCreatorLink(
+      link,
+      redirect('https://space.bilibili.com/123?share_source=copy'),
+    ),
+    'https://space.bilibili.com/123',
+  )
+  assert.equal(
+    await resolveCreatorLink(link, redirect('https://m.bilibili.com/space/9')),
+    'https://space.bilibili.com/9',
+  )
+  assert.equal(
+    await resolveCreatorLink(
+      link,
+      redirect('https://www.bilibili.com/video/BV1xx'),
     ),
     null,
   )

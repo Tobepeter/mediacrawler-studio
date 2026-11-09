@@ -156,7 +156,7 @@ def main(path):
             items = asyncio.run(execute(request, emit))
         emit('complete', items=items)
     except Exception as error:
-        from desktop.creators import CreatorError
+        from desktop.paging import CreatorError
         code = error.code if isinstance(error, CreatorError) else str(error)
         if not code.isupper() or len(code) > 60:
             code = 'PLATFORM_ERROR'

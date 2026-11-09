@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-from desktop.creators import CreatorError, collect_creator_posts, collect_search_posts, decode_cursor, encode_cursor, parse_reference, search_creators
+from desktop.dy_paging import CreatorError, collect_creator, collect_search, decode_cursor, encode_cursor, parse_reference, search_creators
 
 SEC = 'MS4wLjABAAAA' + 'a' * 30
 
@@ -139,13 +139,13 @@ async def test_empty_response_body_is_structured_error():
 async def test_posts_limit_inside_page_then_resume_exactly():
     client = post_client([batch(0, 18, cursor='p2'), batch(18, 18, cursor='p3'), batch(18, 18, cursor='p3')])
     task = runner(client, 20)
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert len(task.store.ids) == 20
     assert task.dy_details['dy:0']['aweme_id'] == '0'
     last = pages(task)[-1]
     assert last['has_more'] is True
     resumed = runner(client, 3)
-    await collect_creator_posts(resumed, '', last['next_cursor'])
+    await collect_creator(resumed, '', last['next_cursor'])
     assert sorted(resumed.store.ids) == ['dy:20', 'dy:21', 'dy:22']
     assert client.get_user_aweme_posts.await_args.args == (SEC, 'p2')
     assert client.get_user_info.await_count == 1
@@ -155,7 +155,7 @@ async def test_posts_limit_inside_page_then_resume_exactly():
 async def test_posts_limit_on_page_boundary_points_to_next_page():
     client = post_client([batch(0, 18, cursor='p2')])
     task = runner(client, 18)
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert client.get_user_aweme_posts.await_count == 1
     assert decode_cursor(pages(task)[-1]['next_cursor'], 'posts')['m'] == 'p2'
 
@@ -163,7 +163,7 @@ async def test_posts_limit_on_page_boundary_points_to_next_page():
 @pytest.mark.asyncio
 async def test_posts_end_of_list():
     task = runner(post_client([batch(0, 5, 0, '0')]))
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert pages(task)[-1] == {'has_more': False, 'next_cursor': None}
 
 
@@ -171,7 +171,7 @@ async def test_posts_end_of_list():
 async def test_empty_pages_keep_resume_position_and_warn():
     client = post_client([batch(0, 18, cursor='p2'), *[batch(0, 0, cursor='p2') for _ in range(3)]])
     task = runner(client, 30)
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert 'warning' in [kind for kind, _ in task.events]
     last = pages(task)[-1]
     assert last['has_more'] and decode_cursor(last['next_cursor'], 'posts')['m'] == 'p2'
@@ -182,7 +182,7 @@ async def test_empty_pages_keep_resume_position_and_warn():
 async def test_repeating_platform_cursor_stops():
     client = post_client([batch(0, 18, cursor='p2'), batch(18, 18, cursor='p2')])
     task = runner(client, 100)
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert client.get_user_aweme_posts.await_count == 2
     assert 'warning' in [kind for kind, _ in task.events]
     assert pages(task)[-1]['has_more'] is False
@@ -192,10 +192,10 @@ async def test_repeating_platform_cursor_stops():
 async def test_private_creator_and_empty_public_creator():
     private = {'sec_uid': SEC, 'nickname': '私密', 'secret': 1}
     with pytest.raises(CreatorError) as error:
-        await collect_creator_posts(runner(post_client([batch(0, 0, 0)], private)), SEC)
+        await collect_creator(runner(post_client([batch(0, 0, 0)], private)), SEC)
     assert error.value.code == 'CREATOR_PRIVATE'
     task = runner(post_client([batch(0, 0, 0)]))
-    await collect_creator_posts(task, SEC)
+    await collect_creator(task, SEC)
     assert not task.store.ids and pages(task)[-1]['has_more'] is False
 
 
@@ -204,7 +204,7 @@ async def test_missing_creator():
     client = post_client([])
     client.get_user_info = AsyncMock(return_value={'status_code': 0, 'user': None})
     with pytest.raises(CreatorError) as error:
-        await collect_creator_posts(runner(client), SEC)
+        await collect_creator(runner(client), SEC)
     assert error.value.code == 'CREATOR_NOT_FOUND'
 
 
@@ -212,7 +212,7 @@ async def test_missing_creator():
 async def test_cursor_for_other_creator_rejected():
     cursor = encode_cursor('posts', c=SEC, m='p', s=0)
     with pytest.raises(CreatorError) as error:
-        await collect_creator_posts(runner(post_client([])), 'MS4wLjABAAAA' + 'b' * 30, cursor)
+        await collect_creator(runner(post_client([])), 'MS4wLjABAAAA' + 'b' * 30, cursor)
     assert error.value.code == 'INVALID_CURSOR'
 
 
@@ -225,7 +225,7 @@ async def test_name_requires_single_exact_match(rows, code):
     client = post_client([])
     client.search_info_by_keyword = AsyncMock(return_value=search_page(rows, more=0))
     with pytest.raises(CreatorError) as error:
-        await collect_creator_posts(runner(client), '同名')
+        await collect_creator(runner(client), '同名')
     assert error.value.code == code and error.value.candidates
 
 
@@ -234,7 +234,7 @@ async def test_exact_name_and_unique_id_resolve():
     client = post_client([batch(0, 1, 0)], {'sec_uid': 'a', 'nickname': '博主'})
     client.search_info_by_keyword = AsyncMock(return_value=search_page([card('a', '博主'), video('b', '博主二号')], more=0))
     task = runner(client)
-    await collect_creator_posts(task, '博主')
+    await collect_creator(task, '博主')
     assert client.get_user_aweme_posts.await_args.args[0] == 'a'
     assert [data['creator']['id'] for kind, data in task.events if kind == 'creator'] == ['a']
 
@@ -245,11 +245,11 @@ async def test_short_link_resolution(target, ok):
     client = post_client([batch(0, 1, 0)])
     client.resolve_short_url = AsyncMock(return_value=target)
     if ok:
-        await collect_creator_posts(runner(client), 'https://v.douyin.com/abc/')
+        await collect_creator(runner(client), 'https://v.douyin.com/abc/')
         assert client.get_user_aweme_posts.await_args.args[0] == SEC
     else:
         with pytest.raises(CreatorError):
-            await collect_creator_posts(runner(client), 'https://v.douyin.com/abc/')
+            await collect_creator(runner(client), 'https://v.douyin.com/abc/')
 
 
 def keyword_client(batches):
@@ -266,12 +266,12 @@ def keyword_page(start, size, more=1, logid='log'):
 async def test_search_cursor_resumes_without_gap_or_repeat():
     client = keyword_client([keyword_page(0, 10), keyword_page(10, 10), keyword_page(10, 10), keyword_page(20, 3, more=0)])
     task = runner(client, limit=15)
-    await collect_search_posts(task, '罗翔')
+    await collect_search(task, '罗翔')
     assert len(task.store.ids) == 15
     assert client.search_info_by_keyword.await_args_list[1].kwargs == {'offset': 10, 'search_id': 'log'}
     cursor = pages(task)[-1]['next_cursor']
     next_task = runner(client, limit=20)
-    await collect_search_posts(next_task, '罗翔', cursor)
+    await collect_search(next_task, '罗翔', cursor)
     assert sorted(map(int, (key.split(':')[1] for key in next_task.store.ids))) == list(range(15, 23))
     assert pages(next_task)[-1] == {'has_more': False, 'next_cursor': None}
 
@@ -280,7 +280,7 @@ async def test_search_cursor_resumes_without_gap_or_repeat():
 async def test_search_batch_ending_on_page_boundary_continues_from_next_page():
     client = keyword_client([keyword_page(0, 10), keyword_page(10, 10)])
     task = runner(client, limit=20)
-    await collect_search_posts(task, '罗翔')
+    await collect_search(task, '罗翔')
     state = decode_cursor(pages(task)[-1]['next_cursor'], 'search')
     assert (state['o'], state['s']) == (20, 0)
 
@@ -288,14 +288,14 @@ async def test_search_batch_ending_on_page_boundary_continues_from_next_page():
 @pytest.mark.asyncio
 async def test_search_cursor_bound_to_keyword():
     with pytest.raises(CreatorError) as error:
-        await collect_search_posts(runner(keyword_client([])), '别的词', encode_cursor('search', q='罗翔', o=10, i='', s=0))
+        await collect_search(runner(keyword_client([])), '别的词', encode_cursor('search', q='罗翔', o=10, i='', s=0))
     assert error.value.code == 'INVALID_CURSOR'
 
 
 @pytest.mark.asyncio
 async def test_search_cursor_alone_supplies_keyword():
     client = keyword_client([keyword_page(0, 3, more=0)])
-    await collect_search_posts(runner(client), '', encode_cursor('search', q='罗翔', o=10, i='log', s=0))
+    await collect_search(runner(client), '', encode_cursor('search', q='罗翔', o=10, i='log', s=0))
     assert client.search_info_by_keyword.await_args.args == ('罗翔',)
 
 
@@ -305,7 +305,7 @@ async def test_profile_failure_keeps_collecting_and_names_creator_from_posts():
     client = post_client([{'status_code': 0, 'has_more': 0, 'max_cursor': '', 'aweme_list': [{'aweme_id': '1', 'author': {'nickname': '作者'}}]}])
     client.get_user_info = AsyncMock(side_effect=DataFetchError('blocked'))
     task = runner(client)
-    await collect_creator_posts(task, f'https://www.douyin.com/user/{SEC}')
+    await collect_creator(task, f'https://www.douyin.com/user/{SEC}')
     assert task.store.ids == {'dy:1'}
     assert [data['creator']['name'] for kind, data in task.events if kind == 'creator'] == ['作者']
     assert [data['detail']['cause'] for kind, data in task.events if kind == 'log'] == ['blocked']
@@ -316,5 +316,5 @@ async def test_profile_auth_failure_still_stops():
     client = post_client([])
     client.get_user_info = AsyncMock(return_value={'status_code': 8})
     with pytest.raises(CreatorError) as error:
-        await collect_creator_posts(runner(client), f'https://www.douyin.com/user/{SEC}')
+        await collect_creator(runner(client), f'https://www.douyin.com/user/{SEC}')
     assert error.value.code == 'AUTH_REQUIRED'

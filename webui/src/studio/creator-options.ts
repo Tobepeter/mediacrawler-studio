@@ -1,8 +1,10 @@
+import capabilities from '../../../desktop/platform-capabilities.json'
 import type { Platform } from './types'
 
-export const creatorPlatforms: readonly Platform[] = ['dy', 'xhs']
-export const creatorSearchPlatforms: readonly Platform[] = ['dy']
-export const creatorLimit = 200
+export const creatorPlatforms = capabilities.creator as readonly Platform[]
+export const creatorSearchPlatforms =
+  capabilities.creatorSearch as readonly Platform[]
+export const creatorLimit = capabilities.creatorLimit
 export const creatorPresets = [20, 50, 100, 200] as const
 export const autoBatchSize = 20
 
@@ -15,32 +17,16 @@ export const isAutoForm = (form: {
   form.mode !== 'link' &&
   form.auto !== false
 
-// 与主进程校验保持一致；分享短链无法在输入时区分作品和主页
+// 规则与主进程共用；分享短链无法在输入时区分作品和主页
+const creatorUrls = Object.values(capabilities.creatorUrl).map(
+  (pattern) => new RegExp(pattern, 'i'),
+)
+
 export function isCreatorUrl(value: string) {
-  try {
-    const url = new URL(value.trim())
-    if (url.protocol !== 'https:') return false
-    if (/(^|\.)xiaohongshu\.com$/.test(url.hostname))
-      return /^\/user\/profile\/[^/]+\/?$/.test(url.pathname)
-    return (
-      /(^|\.)douyin\.com$/.test(url.hostname) &&
-      url.hostname !== 'v.douyin.com' &&
-      /^\/user\/(?!self\/?$)[^/]+\/?$/.test(url.pathname)
-    )
-  } catch {
-    return false
-  }
+  return creatorUrls.some((pattern) => pattern.test(value.trim()))
 }
 
-export const platformHosts: Record<Platform, string[]> = {
-  bili: ['bilibili.com', 'b23.tv'],
-  dy: ['douyin.com', 'iesdouyin.com'],
-  xhs: ['xiaohongshu.com', 'xhslink.com'],
-  zhihu: ['zhihu.com'],
-  wb: ['weibo.com', 'weibo.cn'],
-  tieba: ['tieba.baidu.com'],
-  ks: ['kuaishou.com', 'gifshow.com'],
-}
+export const platformHosts = capabilities.hosts as Record<Platform, string[]>
 
 export function platformOfUrl(value: string): Platform | undefined {
   try {
@@ -60,7 +46,7 @@ export function isShareShortLink(value: string) {
     const url = new URL(value.trim())
     return (
       url.protocol === 'https:' &&
-      ['v.douyin.com', 'xhslink.com', 'www.xhslink.com'].includes(url.hostname)
+      capabilities.shareHosts.includes(url.hostname)
     )
   } catch {
     return false

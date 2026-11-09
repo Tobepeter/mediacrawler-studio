@@ -35,11 +35,10 @@ async def test_search_only_fetches_requested_details(monkeypatch):
         return {"video_id": aid}
 
     monkeypatch.setattr(bilibili, "update_bilibili_video", runner.store.store_content)
-    runner.client = SimpleNamespace(search_video_by_keyword=search)
-    runner.crawler = SimpleNamespace(get_video_info_task=detail)
+    runner.client = SimpleNamespace(search_video_by_keyword=search, get_video_info=detail)
     await runner.search()
     assert fetched == [0, 1]
-    assert len(emitted) == 2
+    assert len([value for value in emitted if 'item' in value]) == 2
 
 
 @pytest.mark.asyncio

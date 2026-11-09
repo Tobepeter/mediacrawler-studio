@@ -16,7 +16,19 @@ function xhsCreator(target) {
     : null
 }
 
+// 只保留 UID，分享链接带的来源参数没有用
+function biliCreator(target) {
+  const match =
+    target.hostname === 'space.bilibili.com'
+      ? target.pathname.match(/^\/(\d+)/)
+      : target.hostname === 'm.bilibili.com'
+        ? target.pathname.match(/^\/space\/(\d+)/)
+        : null
+  return match ? `https://space.bilibili.com/${match[1]}` : null
+}
+
 const resolvers = {
+  'b23.tv': biliCreator,
   'v.douyin.com': douyinCreator,
   'xhslink.com': xhsCreator,
   'www.xhslink.com': xhsCreator,

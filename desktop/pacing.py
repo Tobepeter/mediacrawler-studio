@@ -21,7 +21,7 @@ from typing import Callable, Optional
 from filelock import FileLock
 from platformdirs import user_data_path
 
-from desktop.creators import CreatorError
+from desktop.paging import CreatorError
 
 MAX_WAIT_SECONDS = 30
 # 一次业务调用只算一次访问：外层已占用名额时，内层底层请求不再重复等待
@@ -32,7 +32,7 @@ def first_search_page(args, kwargs):
     return not kwargs.get('offset', args[1] if len(args) > 1 else 0)
 
 
-def first_xhs_page(args, kwargs):
+def first_page(args, kwargs):
     return kwargs.get('page', 1) == 1
 
 
@@ -48,6 +48,12 @@ def xhs_blocked(error):
     return isinstance(error, (IPBlockError, PlatformAccessError)) or 'CAPTCHA appeared' in str(error)
 
 
+def bili_blocked(error):
+    # 412 是整段 HTML，到不了 JSON 解析，只能从错误文本里认
+    message = str(unwrapped(error))
+    return any(text in message for text in ('请求被拦截', '风控校验失败', '请求过于频繁', '412'))
+
+
 @dataclass(frozen=True)
 class Rule:
     key: str
@@ -61,7 +67,13 @@ class Rule:
     is_blocked: Optional[Callable] = None
 
 
+# B 站 412 通常几分钟到半小时解除，冷却比小红书短
+BILI_COOLDOWN = dict(cooldown_seconds=900, name='B站', is_blocked=bili_blocked)
 RULES = {
+    # B 站共用一条时间线，搜索、主页和详情都算同一个用户在连续操作
+    ('bili', 'search_video_by_keyword'): Rule(key='bili', fresh_gap=(4, 7), page_gap=(3, 6), is_fresh=first_page, window_limit=30, window_seconds=600, **BILI_COOLDOWN),
+    ('bili', 'search_user_by_keyword'): Rule(key='bili', fresh_gap=(4, 7), page_gap=(3, 6), is_fresh=first_page, window_limit=30, window_seconds=600, **BILI_COOLDOWN),
+    ('bili', 'get_creator_videos'): Rule(key='bili', page_gap=(3, 6), **BILI_COOLDOWN),
     ('dy', 'search_info_by_keyword'): Rule(
         # 换关键词约等于用户看完一屏结果再搜下一个，翻页约等于看完一屏再向下滚动
         # 3-6 秒翻页时，几分钟内连续采几批就会触发验证（2026-11-09 实际遇到）
@@ -71,7 +83,7 @@ RULES = {
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),
     # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
     ('xhs', 'get_note_by_keyword'): Rule(
-        key='xhs', fresh_gap=(8, 12), page_gap=(4, 7), is_fresh=first_xhs_page,
+        key='xhs', fresh_gap=(8, 12), page_gap=(4, 7), is_fresh=first_page,
         window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked,
     ),
     ('xhs', 'get_notes_by_creator'): Rule(key='xhs', page_gap=(3, 6), cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
@@ -81,7 +93,7 @@ RULES = {
 # 每个平台的基础节奏，互不影响；一个平台被风控不牵连其他平台
 XHS_COOLDOWN = dict(cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked)
 PLATFORM_RULES = {
-    'bili': Rule(key='bili', page_gap=(1, 2.5), name='B站'),
+    'bili': Rule(key='bili', page_gap=(1, 2.5), **BILI_COOLDOWN),
     'dy': Rule(key='dy', page_gap=(1.5, 3), name='抖音'),
     'xhs': Rule(key='xhs', page_gap=(2, 3.5), **XHS_COOLDOWN),
     'zhihu': Rule(key='zhihu', page_gap=(2, 4), name='知乎'),

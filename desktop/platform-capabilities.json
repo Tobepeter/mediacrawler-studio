@@ -1,0 +1,20 @@
+{
+  "creator": ["bili", "dy", "xhs"],
+  "creatorSearch": ["bili", "dy"],
+  "creatorLimit": 200,
+  "hosts": {
+    "bili": ["bilibili.com", "b23.tv"],
+    "dy": ["douyin.com", "iesdouyin.com"],
+    "xhs": ["xiaohongshu.com", "xhslink.com"],
+    "zhihu": ["zhihu.com"],
+    "wb": ["weibo.com", "weibo.cn"],
+    "tieba": ["tieba.baidu.com"],
+    "ks": ["kuaishou.com", "gifshow.com"]
+  },
+  "creatorUrl": {
+    "bili": "^https://space\\.bilibili\\.com/\\d+(?:/[^?#]*)?(?:[?#].*)?$",
+    "dy": "^https://(?!v\\.)(?:[\\w-]+\\.)*douyin\\.com/user/(?!self/?(?:[?#]|$))[^/?#]+/?(?:[?#].*)?$",
+    "xhs": "^https://(?:[\\w-]+\\.)*xiaohongshu\\.com/user/profile/[^/?#]+/?(?:[?#].*)?$"
+  },
+  "shareHosts": ["b23.tv", "v.douyin.com", "xhslink.com", "www.xhslink.com"]
+}

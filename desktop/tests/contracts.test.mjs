@@ -207,7 +207,7 @@ test('小红书博主主页走博主模式，搜索博主仍只支持抖音', ()
   assert.equal(request.cursor, 'c')
 })
 
-test('翻页位置和自动模式只用于抖音博主与关键词', () => {
+test('翻页位置和自动模式只用于支持分页的平台', () => {
   const query = 'https://www.douyin.com/user/MS4wLjABAAAAabc'
   const base = {
     platform: 'dy',
@@ -224,11 +224,11 @@ test('翻页位置和自动模式只用于抖音博主与关键词', () => {
   assert.equal(validateRequest({ ...search, auto: true }).auto, true)
   assert.equal(validateRequest({ ...search, auto: false }).auto, false)
   assert.throws(
-    () => validateRequest({ ...search, platform: 'bili', cursor: 'c' }),
+    () => validateRequest({ ...search, platform: 'zhihu', cursor: 'c' }),
     /翻页/,
   )
   assert.equal(
-    'auto' in validateRequest({ ...search, platform: 'bili', auto: true }),
+    'auto' in validateRequest({ ...search, platform: 'zhihu', auto: true }),
     false,
   )
   assert.equal(
@@ -241,4 +241,30 @@ test('翻页位置和自动模式只用于抖音博主与关键词', () => {
       }),
     false,
   )
+})
+
+test('B站博主主页按 UID 识别，分页和自动模式可用', () => {
+  for (const url of [
+    'https://space.bilibili.com/123',
+    'https://space.bilibili.com/123/upload/video',
+    'https://space.bilibili.com/123?spm_id_from=333',
+  ])
+    assert.equal(isCreatorUrl(url, 'bili'), true, url)
+  for (const url of [
+    'http://space.bilibili.com/123',
+    'https://space.bilibili.com/abc',
+    'https://www.bilibili.com/video/BV1xx',
+  ])
+    assert.equal(isCreatorUrl(url, 'bili'), false, url)
+  const request = validateRequest({
+    platform: 'bili',
+    action: 'collect',
+    mode: 'creator',
+    query: 'https://space.bilibili.com/123',
+    limit: 20,
+    cursor: 'c',
+    auto: true,
+  })
+  assert.equal(request.cursor, 'c')
+  assert.equal(request.auto, true)
 })

@@ -196,6 +196,17 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.get(uri, post_data)
 
+    async def search_user_by_keyword(self, keyword: str, page: int = 1, page_size: int = 20) -> Dict:
+        """search creators by keyword"""
+        uri = "/x/web-interface/wbi/search/type"
+        post_data = {
+            "search_type": "bili_user",
+            "keyword": keyword,
+            "page": page,
+            "page_size": page_size,
+        }
+        return await self.get(uri, post_data)
+
     async def get_video_info(self, aid: Union[int, None] = None, bvid: Union[str, None] = None) -> Dict:
         """
         Bilibli web video detail api, choose one parameter between aid and bvid
@@ -429,7 +440,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             "mid": creator_id,
             "pn": pn,
             "ps": ps,
-            "order": order_mode,
+            "order": order_mode.value,
         }
         return await self.get(uri, post_data)
 

@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
 from desktop.pacing import pace_client
+from desktop.paging import CREATOR_PLATFORMS
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
@@ -24,6 +25,7 @@ class DesktopCrawler:
         self.account = AccountProfile(self.platform)
         self.xhs_details = {}  # 本次任务已取得的笔记详情，媒体补全后释放
         self.dy_details = {}  # 主页列表已含完整视频信息，无需再逐条请求详情
+        self.bili_details = {}  # 列表阶段已取得的视频详情，媒体补全时复用
         self.store = ResultStore(self.platform, request["limit"], emit, request.get("comments", False))
         config.PLATFORM = self.platform
         # 评论统一在正文完成后采集，避免原生 detail 路径重复请求
@@ -179,12 +181,8 @@ class DesktopCrawler:
             if not self.store.ids:
                 raise RuntimeError("未能获取这条作品，请检查链接是否完整、作品是否可访问")
         elif self.request["mode"] == "creator":
-            if self.platform == "xhs":
-                from desktop.xhs_paging import collect_creator
-                await collect_creator(self, self.request["query"], self.request.get("cursor"))
-            else:
-                from desktop.creators import collect_creator_posts
-                await collect_creator_posts(self, self.request["query"], self.request.get("cursor"))
+            from desktop.creators import collect_creator
+            await collect_creator(self, self.request["query"], self.request.get("cursor"))
         else:
             await self.search()
         if self.request.get('comments') and self.store.items:
@@ -253,6 +251,17 @@ class DesktopCrawler:
             if key in self.store.items:
                 self.xhs_details[key] = note
 
+    async def collect_bili_video(self, aid):
+        from media_platform.bilibili.exception import DataFetchError
+        # 节奏由 desktop.pacing 统一控制；单条取不到时跳过，风控错误不是这个类型，会继续向上抛
+        try:
+            video = await self.client.get_video_info(aid=aid)
+        except (DataFetchError, KeyError):
+            return
+        if video:
+            await self.save_bilibili(video)
+            self.bili_details[f'bili:{aid}'] = video
+
     async def save_bilibili(self, video):
         from store.bilibili import update_bilibili_video
         view = video.get("View", {})
@@ -263,29 +272,8 @@ class DesktopCrawler:
     async def search(self):
         from desktop.search_options import search_options
         options = search_options(self.platform, self.request.get('filters'))
-        if self.platform not in ('bili', 'dy', 'xhs'):
+        if self.platform not in CREATOR_PLATFORMS:
             await ExtraCollector(self).search()
             return
-        if self.platform == "dy":
-            from desktop.creators import collect_search_posts
-            await collect_search_posts(self, self.request["query"], self.request.get("cursor"), options)
-            return
-        if self.platform == "xhs":
-            from desktop.xhs_paging import collect_search
-            await collect_search(self, self.request["query"], self.request.get("cursor"), options)
-            return
-        # 按需取详情，避免原生批次最少 10/20 条超过用户所选数量
-        query = self.request["query"]
-        semaphore = asyncio.Semaphore(1)
-        for page in range(1, 11):
-            response = await self.client.search_video_by_keyword(query, page=page, **options)
-            posts = response.get("result") or []
-            for post in posts:
-                item = await self.crawler.get_video_info_task(aid=post.get("aid"), bvid="", semaphore=semaphore)
-                if item:
-                    await self.save_bilibili(item)
-                if len(self.store.ids) >= self.request["limit"]:
-                    return
-            if not posts or response.get("has_more") is False or response.get("has_more") == 0:
-                break
-            await asyncio.sleep(2)
+        from desktop.creators import collect_search
+        await collect_search(self, self.request["query"], self.request.get("cursor"), options)

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
-from desktop.creators import CreatorError
+from desktop.paging import CreatorError
 from desktop.pacing import RULES, Rule, first_search_page, pace_client, read_state, reserve, start_cooldown, state_path
 
 SEARCH = Rule(key='t', fresh_gap=(10, 10), page_gap=(3, 3), is_fresh=first_search_page, window_limit=3, window_seconds=600, cooldown_seconds=1800)

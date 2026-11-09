@@ -679,7 +679,7 @@ test('搜索博主校验入口并透传失败原因', async () => {
   )
   try {
     process.env.STUDIO_PYTHON = process.execPath
-    await assert.rejects(service.searchCreators('bili', 'x'), /暂不支持/)
+    await assert.rejects(service.searchCreators('xhs', 'x'), /暂不支持/)
     await assert.rejects(service.searchCreators('dy', '  '), /请输入/)
     await assert.rejects(service.searchCreators('dy', 'x', 1), /翻页/)
     delete service.state.accounts.dy

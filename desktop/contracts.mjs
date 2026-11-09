@@ -1,4 +1,5 @@
 import searchOptions from './search-options.json' with { type: 'json' }
+import capabilities from './platform-capabilities.json' with { type: 'json' }
 
 export function validateFilters(platform, filters = {}) {
   const fields = searchOptions[platform]
@@ -24,71 +25,59 @@ export const platforms = {
     name: 'B站',
     url: 'https://www.bilibili.com',
     cookie: 'SESSDATA',
-    hosts: ['bilibili.com', 'b23.tv'],
+    hosts: capabilities.hosts.bili,
   },
   dy: {
     name: '抖音',
     url: 'https://www.douyin.com',
     cookie: 'sessionid',
-    hosts: ['douyin.com', 'iesdouyin.com'],
+    hosts: capabilities.hosts.dy,
   },
   xhs: {
     name: '小红书',
     url: 'https://www.xiaohongshu.com',
     cookie: 'web_session',
-    hosts: ['xiaohongshu.com', 'xhslink.com'],
+    hosts: capabilities.hosts.xhs,
   },
   zhihu: {
     name: '知乎',
     url: 'https://www.zhihu.com',
     cookie: 'z_c0',
-    hosts: ['zhihu.com'],
+    hosts: capabilities.hosts.zhihu,
   },
   wb: {
     name: '微博',
     url: 'https://www.weibo.com',
     cookie: 'SUB',
     cookieUrls: ['https://www.weibo.com', 'https://m.weibo.cn'],
-    hosts: ['weibo.com', 'weibo.cn'],
+    hosts: capabilities.hosts.wb,
   },
   tieba: {
     name: '贴吧',
     url: 'https://tieba.baidu.com',
     cookie: 'BDUSS',
-    hosts: ['tieba.baidu.com'],
+    hosts: capabilities.hosts.tieba,
   },
   ks: {
     name: '快手',
     url: 'https://www.kuaishou.com',
     cookie: 'passToken',
-    hosts: ['kuaishou.com', 'gifshow.com'],
+    hosts: capabilities.hosts.ks,
   },
 }
 
-export const creatorPlatforms = ['dy', 'xhs']
-export const creatorSearchPlatforms = ['dy']
-export const creatorLimit = 200
+export const creatorPlatforms = capabilities.creator
+export const creatorSearchPlatforms = capabilities.creatorSearch
+export const creatorLimit = capabilities.creatorLimit
 
 // 仅完整主页链接；分享短链要解析后才知道是作品还是主页
 export function isCreatorUrl(value, platform = 'dy') {
-  if (!creatorPlatforms.includes(platform) || typeof value !== 'string')
-    return false
-  try {
-    const url = new URL(value.trim())
-    if (url.protocol !== 'https:') return false
-    if (platform === 'xhs')
-      return (
-        /(^|\.)xiaohongshu\.com$/.test(url.hostname) &&
-        /^\/user\/profile\/[^/]+\/?$/.test(url.pathname)
-      )
-    return (
-      /(^|\.)douyin\.com$/.test(url.hostname) &&
-      url.hostname !== 'v.douyin.com' &&
-      /^\/user\/(?!self\/?$)[^/]+\/?$/.test(url.pathname)
-    )
-  } catch {
-    return false
-  }
+  const pattern = capabilities.creatorUrl[platform]
+  return (
+    typeof value === 'string' &&
+    !!pattern &&
+    new RegExp(pattern, 'i').test(value.trim())
+  )
 }
 
 export function isPlatformUrl(value, platform) {

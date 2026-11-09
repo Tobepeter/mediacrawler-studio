@@ -40,11 +40,13 @@ uv run mediacrawler search --cursor <上次的 next_cursor> --limit 50
 uv run mediacrawler creator search --query 罗翔 --limit 10
 uv run mediacrawler creator posts --creator https://www.douyin.com/user/MS4w... --limit 50
 uv run mediacrawler creator posts --cursor <上次的 next_cursor> --limit 50
+uv run mediacrawler creator posts --platform bili --creator https://space.bilibili.com/163637592 --limit 20
 ```
 
 - `--creator` 接受主页链接、`v.douyin.com` 分享短链、App 整段分享文案、sec_uid 或名称。名称必须在搜索首页唯一且完全匹配昵称或抖音号，否则返回 `CREATOR_AMBIGUOUS` / `CREATOR_NOT_FOUND` 和 `candidates`
 - stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`
 - 游标不透明，精确到页内位置，换 `--limit` 继续也不漏条，绑定关键词或博主，不匹配返回 `INVALID_CURSOR`。失败或风控时也会输出最近的游标，可稍后继续；跨次搜索可能出现重复候选，按 `id` 去重
+- B站（`--platform bili`）支持 `creator search`、`creator posts` 和 `search`，`--creator` 接受 `space.bilibili.com` 主页链接、`b23.tv` 短链、UID 或完全匹配的昵称
 - search 的 `source=user` 是博主卡片，`source=video` 是相关视频作者，字段较少。抖音这条接口只返回混排结果，不等于平台完整的用户搜索
 - 敏感接口经统一节流，见下方“访问节奏”；posts 单次最多 100 条
 - 主页按平台顺序返回，通常从新到旧，置顶作品可能排在最前。需要从早到晚学习时，翻完后按 `publishedAt` 排序
@@ -63,7 +65,9 @@ uv run mediacrawler creator posts --cursor <上次的 next_cursor> --limit 50
 | 小红书主页翻页 | 3–6 秒 | 无 |
 | 抖音其他请求 | 1.5–3 秒 | 无 |
 | 小红书其他请求（含笔记详情） | 2–3.5 秒 | 无 |
-| B站 | 1–2.5 秒 | 无 |
+| B站新搜索、博主搜索 | 4–7 秒 | 10 分钟 30 次 |
+| B站搜索翻页、主页翻页 | 3–6 秒 | 不计入上限 |
+| B站其他请求（含视频详情） | 1–2.5 秒 | 无 |
 | 知乎、微博、贴吧、快手 | 2–4 秒 | 无 |
 
 - 命令会自动等待间隔，单次等待超过 30 秒或达到上限时返回 `RATE_LIMITED`
