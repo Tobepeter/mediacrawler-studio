@@ -78,7 +78,7 @@ export class StudioService {
     this.feed = new FeedScheduler({
       platforms: feedPlatforms,
       cache: new JsonCache(path.join(this.dataDir, 'cache'), 'feed', {
-        version: 2,
+        version: 3,
         ttlMs: feedCacheTtl,
         logger: this.logger,
       }),

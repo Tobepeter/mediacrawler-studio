@@ -42,6 +42,7 @@ class ResultStore:
         self.emit = emit
         self.ids = set()
         self.full_text = {}
+        self.author_urls = {}
         self.media = {}
         self.items = {}
         self.comments = comments
@@ -52,6 +53,8 @@ class ResultStore:
             content_item = {**content_item, 'image_list': self.media.get(key, [])}
         item = normalize(content_item, self.platform)
         item["text"] = self.full_text.get(item["id"], item["text"])
+        if self.author_urls.get(item["id"]):
+            item["authorUrl"] = self.author_urls[item["id"]]
         if item["id"] in self.ids or len(self.ids) >= self.limit:
             return
         from desktop.content.schema import initialize, metadata

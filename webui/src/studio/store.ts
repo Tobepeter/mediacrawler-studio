@@ -6,8 +6,10 @@ import { create } from 'zustand'
 import { toast } from 'sonner'
 import {
   autoBatchSize,
+  creatorPlatforms,
   creatorSearchPlatforms,
   isAutoForm,
+  isCreatorUrl,
 } from './creator-options'
 import { taskFeedback } from './task-feedback'
 import type {
@@ -55,6 +57,14 @@ const readDownloadPrompt = () => {
   }
 }
 
+export interface AuthorTrip {
+  url: string
+  name: string
+  pageId?: string
+  scroll: number
+  form: PlatformForm
+}
+
 interface StudioStore extends StudioState {
   platform: Platform
   forms: Record<Platform, PlatformForm>
@@ -75,6 +85,10 @@ interface StudioStore extends StudioState {
   // 点作者名时要搜的名字，由找博主弹窗接走后清空
   creatorLookup: string
   searchAuthor: (name: string) => void
+  // 从作品点进博主后记下来处，一步回到刚才看的位置
+  authorTrips: Partial<Record<Platform, AuthorTrip>>
+  openAuthor: (item: ContentItem) => Promise<void>
+  leaveAuthor: () => Promise<void>
   loginMode: LoginMode
   setLoginMode: (value: LoginMode) => boolean
   askBeforeDownload: boolean
@@ -118,6 +132,27 @@ export function platformBlocked(state: StudioStore, platform = state.platform) {
     (!!state.working[platform] && !isContinuing(state.tasks[platform]))
   )
 }
+
+const mainScroller = () =>
+  document
+    .querySelector('main')
+    ?.closest<HTMLElement>('[data-radix-scroll-area-viewport]')
+
+// 内容切换和渲染不同步，等目标页面出现后再定位，最多等半秒
+function scrollWhen(ready: () => boolean, top: number) {
+  let frames = 30
+  const step = () => {
+    const scroller = mainScroller()
+    if (scroller && ready()) {
+      scroller.scrollTop = top
+      if (Math.abs(scroller.scrollTop - top) <= 1) return
+    }
+    if (--frames > 0) requestAnimationFrame(step)
+  }
+  if (top) requestAnimationFrame(step)
+}
+
+const profilePath = (url: string) => url.split(/[?#]/)[0].replace(/\/$/, '')
 
 function taskSnapshot(state: StudioState, platform: Platform) {
   return {
@@ -184,6 +219,70 @@ export const useStudio = create<StudioStore>((set, get) => ({
       limit: Math.min(forms[platform].limit, 100),
     })
     void start()
+  },
+  authorTrips: {},
+  openAuthor: async (item) => {
+    const { platform, forms, pages, history } = get()
+    const url = item.authorUrl
+    if (!url || !creatorPlatforms.includes(platform) || !isCreatorUrl(url)) {
+      get().searchAuthor(item.author)
+      return
+    }
+    // 看过的博主直接打开记录，不再请求平台；小红书的 token 每次不同，只比主页路径
+    const seen = history.find(
+      ({ task, count }) =>
+        task.platform === platform &&
+        task.mode === 'creator' &&
+        !!count &&
+        profilePath(task.query) === profilePath(url),
+    )
+    const trip: AuthorTrip = {
+      url: seen?.task.query || url,
+      name: item.author,
+      pageId: pages[platform]?.id,
+      scroll: mainScroller()?.scrollTop || 0,
+      form: forms[platform],
+    }
+    set((state) => ({
+      selected: null,
+      authorTrips: { ...state.authorTrips, [platform]: trip },
+    }))
+    if (seen) {
+      await get().stopContinuation(platform)
+      await get().restore(seen.id)
+      return
+    }
+    get().updateForm({
+      query: url,
+      mode: 'creator',
+      // 只是看看这个人，先来一批，往下滚再继续，不沿用手选的条数
+      auto: true,
+    })
+    await get().start()
+  },
+  leaveAuthor: async () => {
+    const { platform, authorTrips } = get()
+    const trip = authorTrips[platform]
+    if (!trip) return
+    // 博主作品可能还在采集，先停下，否则平台被占着回不去
+    await halt(platform)
+    try {
+      if (trip.pageId) await get().restore(trip.pageId)
+      else await get().clearResults()
+    } catch {
+      toast.error(t('无法返回，请从历史记录打开'), { id: 'author-back' })
+      return
+    }
+    get().updateForm(trip.form)
+    set((state) => {
+      const authorTrips = { ...state.authorTrips }
+      delete authorTrips[platform]
+      return { authorTrips }
+    })
+    scrollWhen(() => {
+      const page = get().pages[platform]
+      return trip.pageId ? page?.id === trip.pageId : !page
+    }, trip.scroll)
   },
   loginMode: 'qrcode',
   setLoginMode: (value) => {
@@ -375,21 +474,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
   },
   // 后台续采不占用表单，用户发起别的操作时让路，等平台真正空闲
   stopContinuation: async (platform = get().platform) => {
-    const task = get().tasks[platform]
-    if (!isContinuing(task)) return
-    await window.studio?.cancel(platform)
-    await new Promise<void>((resolve) => {
-      const finish = () => {
-        clearTimeout(timer)
-        unsubscribe()
-        resolve()
-      }
-      const timer = setTimeout(finish, 10000)
-      const unsubscribe = useStudio.subscribe(() => {
-        if (!platformBusy(get(), platform)) finish()
-      })
-      if (!platformBusy(get(), platform)) finish()
-    })
+    if (isContinuing(get().tasks[platform])) await halt(platform)
   },
   start: async (action = 'collect', silent = false, cursor) => {
     if (action === 'connect' && window.studio?.retryLogin) {
@@ -497,6 +582,25 @@ export const useStudio = create<StudioStore>((set, get) => ({
     }
   },
 }))
+
+// 结束平台上的任务并等它真正退出
+async function halt(platform: Platform) {
+  const { getState, subscribe } = useStudio
+  if (!platformBusy(getState(), platform)) return
+  await window.studio?.cancel(platform).catch(() => {})
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timer)
+      unsubscribe()
+      resolve()
+    }
+    const timer = setTimeout(finish, 10000)
+    const unsubscribe = subscribe(() => {
+      if (!platformBusy(getState(), platform)) finish()
+    })
+    if (!platformBusy(getState(), platform)) finish()
+  })
+}
 
 export const useForm = () => useStudio((state) => state.forms[state.platform])
 export const usePage = () => useStudio((state) => state.pages[state.platform])

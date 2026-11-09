@@ -38,6 +38,11 @@ def more_pages(page, response):
     return page + 1 if not is_index(total) or page < total else None
 
 
+def author_url(owner):
+    mid = (owner or {}).get('mid')
+    return f'{SPACE}{mid}' if mid else ''
+
+
 def summarize_row(row):
     identity = str(row.get('mid') or '')
     if not identity:
@@ -207,6 +212,6 @@ async def load_feed(runner, cursor=None):
         if row.get('goto') == 'av' and row.get('id') and row.get('bvid'):
             items.append(feed_record(
                 'bili', row['id'], plain(row.get('title')), (row.get('owner') or {}).get('name'),
-                f"https://www.bilibili.com/video/{row['bvid']}", row.get('pic'), (row.get('stat') or {}).get('like'), 'video',
+                f"https://www.bilibili.com/video/{row['bvid']}", row.get('pic'), (row.get('stat') or {}).get('like'), 'video', author_url(row.get('owner')),
             ))
     return {'items': items, 'next_cursor': encode_cursor('bili-feed', p=page + 1), 'has_more': True}

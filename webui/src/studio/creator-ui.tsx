@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { platformBlocked, useStudio } from './store'
-import type { CreatorInfo } from './types'
+import type { ContentItem, CreatorInfo } from './types'
 
 export function CreatorAvatar(props: {
   name: string
@@ -37,22 +37,31 @@ export function useCreatorStats() {
 // 旧记录里的昵称是脱敏过的，拿去搜也找不到人
 const maskedName = /^(\*|.\*|.\*{3}.)$/u
 
-// 对这个人感兴趣时点名字直接搜；平台忙或没登录时只显示名字
-export function AuthorName({ name }: { name: string }) {
+// 对这个人感兴趣时点名字直接进主页，没有主页地址才按名字搜
+// 平台忙、没登录或已经在博主页时只显示名字
+export function AuthorName({ item }: { item: ContentItem }) {
+  const { author: name, authorUrl } = item
   const { t } = useTranslation('studio')
-  const searchAuthor = useStudio((state) => state.searchAuthor)
+  const openAuthor = useStudio((state) => state.openAuthor)
   const available = useStudio(
     (state) =>
-      state.accounts[state.platform] === 'connected' && !platformBlocked(state),
+      state.accounts[state.platform] === 'connected' &&
+      state.pages[state.platform]?.task.mode !== 'creator' &&
+      !platformBlocked(state),
   )
-  if (!name || !window.studio || !available || maskedName.test(name))
+  if (
+    !name ||
+    !window.studio ||
+    !available ||
+    (!authorUrl && maskedName.test(name))
+  )
     return <span className='truncate'>{name || t('未知作者')}</span>
   return (
     <button
       type='button'
       className='min-w-0 truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-      title={t('搜索这位博主')}
-      onClick={() => searchAuthor(name)}
+      title={authorUrl ? t('查看这位博主的作品') : t('搜索这位博主')}
+      onClick={() => void openAuthor(item)}
     >
       {name}
     </button>
@@ -69,6 +78,22 @@ function OpenCreator({ url, className }: { url: string; className?: string }) {
       onClick={() => void window.studio?.openSource(url)}
     >
       <ArrowUpRight />
+    </IconButton>
+  )
+}
+
+export function AuthorBack(props: { fromPage: boolean; disabled?: boolean }) {
+  const { t } = useTranslation('studio')
+  const leaveAuthor = useStudio((state) => state.leaveAuthor)
+  return (
+    <IconButton
+      variant='ghost'
+      className='shrink-0'
+      label={props.fromPage ? t('返回刚才的结果') : t('返回推荐')}
+      disabled={props.disabled}
+      onClick={() => void leaveAuthor()}
+    >
+      <ArrowLeft />
     </IconButton>
   )
 }

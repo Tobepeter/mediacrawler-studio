@@ -129,7 +129,7 @@ export function ContentDetail() {
                           {selected.title}
                         </DialogTitle>
                         <DialogDescription className='flex items-center justify-between gap-2'>
-                          <AuthorName name={selected.author} />
+                          <AuthorName item={selected} />
                           <span className='inline-flex shrink-0 items-center gap-1'>
                             <Heart className='size-4' />
                             {selected.likes}

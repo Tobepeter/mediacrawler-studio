@@ -8,6 +8,7 @@ from desktop import bili_paging, dy_paging, xhs_paging
 from desktop.creators import load_feed
 from desktop.paging import CreatorError, decode_cursor
 from desktop.pacing import RULES
+from desktop.result_store import ResultStore
 
 
 def task(platform, **client):
@@ -147,3 +148,29 @@ def test_names_are_kept_and_length_is_limited():
     assert len(item['author']) == AUTHOR_LIMIT
     record = bili_paging.feed_record('bili', '1', '长' * 300, '名' * 200, 'https://x', '', 0, 'video')
     assert len(record['title']) == TITLE_LIMIT and len(record['author']) == AUTHOR_LIMIT
+
+
+def test_author_homepage_needs_identity_and_xhs_token():
+    assert bili_paging.author_url({'mid': 42}) == 'https://space.bilibili.com/42'
+    assert bili_paging.author_url({}) == ''
+    assert dy_paging.author_url({'sec_uid': 'MS4'}) == 'https://www.douyin.com/user/MS4'
+    assert dy_paging.author_url({'sec_uid': ''}) == ''
+    # 小红书主页没有 token 拿不到笔记，宁可没有地址，由界面退回搜索
+    assert xhs_paging.author_url({'user_id': 'u1', 'xsec_token': 'T='}, 'pc_note') == 'https://www.xiaohongshu.com/user/profile/u1?xsec_token=T=&xsec_source=pc_note'
+    assert xhs_paging.author_url({'user_id': 'u1'}, 'pc_note') == ''
+
+
+def test_feed_record_only_carries_author_url_when_known():
+    assert 'authorUrl' not in bili_paging.feed_record('bili', '1', 't', 'a', 'https://x', '', 0, 'video')
+    assert bili_paging.feed_record('bili', '1', 't', 'a', 'https://x', '', 0, 'video', 'https://space.bilibili.com/1')['authorUrl'] == 'https://space.bilibili.com/1'
+
+
+@pytest.mark.asyncio
+async def test_result_store_attaches_author_url():
+    events = []
+    store = ResultStore('bili', 5, lambda kind, **data: events.append(data))
+    store.author_urls['bili:1'] = 'https://space.bilibili.com/9'
+    await store.store_content({'video_id': '1', 'title': 'a', 'nickname': 'n'})
+    await store.store_content({'video_id': '2', 'title': 'b', 'nickname': 'm'})
+    assert events[0]['item']['authorUrl'] == 'https://space.bilibili.com/9'
+    assert 'authorUrl' not in events[1]['item']

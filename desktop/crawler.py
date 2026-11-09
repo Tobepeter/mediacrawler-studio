@@ -10,7 +10,9 @@ from desktop.paging import CREATOR_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
+from desktop.bili_paging import author_url as bili_author_url
 from desktop.result_store import ResultStore
+from desktop.xhs_paging import author_url as xhs_author_url
 from desktop.comments import CommentCollector
 from desktop.page_context import PageContext
 from desktop.native_platforms import create_native
@@ -261,8 +263,9 @@ class DesktopCrawler:
             note_id=note_id, xsec_source=source, xsec_token=token, semaphore=semaphore,
         )
         if note:
-            await update_xhs_note(note)
             key = f"xhs:{note.get('note_id')}"
+            self.store.author_urls[key] = xhs_author_url(note.get('user'), 'pc_note')
+            await update_xhs_note(note)
             if key in self.store.items:
                 self.xhs_details[key] = note
 
@@ -282,6 +285,7 @@ class DesktopCrawler:
         view = video.get("View", {})
         # 原生 JSON 存储截断简介到 500 字，桌面保留原始正文
         self.store.full_text[f"bili:{view.get('aid')}"] = view.get("desc", "")
+        self.store.author_urls[f"bili:{view.get('aid')}"] = bili_author_url(view.get('owner'))
         await update_bilibili_video(video)
 
     async def search(self):

@@ -51,6 +51,8 @@ export interface ContentItem {
   title: string
   text: string
   author: string
+  // 博主主页；旧记录和链接采集可能没有，此时按名字搜
+  authorUrl?: string
   url: string
   images: string[]
   likes: string

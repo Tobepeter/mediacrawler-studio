@@ -38,6 +38,11 @@ def avatar_url(user):
     return ''
 
 
+def author_url(user):
+    identity = (user or {}).get('sec_uid')
+    return f'https://www.douyin.com/user/{identity}' if isinstance(identity, str) and identity else ''
+
+
 def summarize(user, source):
     identity = user.get('sec_uid') or ''
     if not isinstance(identity, str) or not identity:
@@ -46,7 +51,7 @@ def summarize(user, source):
     followers = count(user.get('follower_count'))
     # 视频卡片里的作者只有基础字段，0 粉丝代表平台未返回
     return creator_summary(
-        'dy', identity, str(user.get('nickname') or ''), f'https://www.douyin.com/user/{identity}', source,
+        'dy', identity, str(user.get('nickname') or ''), author_url(user), source,
         uniqueId='' if unique == '0' else unique, avatar=avatar_url(user), signature=str(user.get('signature') or ''),
         followers=followers if followers or source == 'user' else None, likes=count(user.get('total_favorited')),
         posts=count(user.get('aweme_count')), verified=str(user.get('custom_verify') or user.get('enterprise_verify_reason') or ''),
@@ -181,8 +186,9 @@ async def collect_search(runner, query, cursor=None, options=None):
         mix = (post.get('aweme_mix_info') or {}).get('mix_items') or []
         item = post.get('aweme_info') or (mix[0] if mix else None)
         if item:
-            await update_douyin_aweme(item)
             key = f"dy:{item.get('aweme_id')}"
+            runner.store.author_urls[key] = author_url(item.get('author'))
+            await update_douyin_aweme(item)
             if key in runner.store.items:
                 runner.dy_details[key] = item
 
@@ -251,7 +257,7 @@ async def load_feed(runner, cursor=None):
             items.append(feed_record(
                 'dy', identity, str(row.get('desc') or '')[:80], (row.get('author') or {}).get('nickname'),
                 f'https://www.douyin.com/video/{identity}', extract_card_cover_url(row), (row.get('statistics') or {}).get('digg_count'),
-                'note' if row.get('images') else 'video',
+                'note' if row.get('images') else 'video', author_url(row.get('author')),
             ))
     more = response.get('has_more') not in (False, 0)
     return {'items': items, 'next_cursor': encode_cursor('dy-feed', p=page + 1) if more else None, 'has_more': more}

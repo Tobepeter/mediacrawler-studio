@@ -7,7 +7,7 @@ import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
 import { CreatorSearch } from './creator-search'
-import { CreatorField } from './creator-ui'
+import { AuthorBack, CreatorField } from './creator-ui'
 import {
   creatorLimit,
   creatorPlatforms,
@@ -48,6 +48,7 @@ export function CollectForm() {
     switchPlatform,
     restore,
     history,
+    authorTrips,
   } = useStudio()
   const form = useForm()
   const page = usePage()
@@ -74,10 +75,16 @@ export function CollectForm() {
   const [picked, setPicked] = useState<CreatorInfo>()
   // 从主页切回输入时才需要抢焦点，首屏不打扰
   const [cleared, setCleared] = useState(false)
+  // 输入换了别的内容后来处自动失效，不用到处清理
+  const trip = (() => {
+    const value = authorTrips[form.platform]
+    return value?.url === form.query ? value : undefined
+  })()
   const creator =
     (picked?.url === form.query && picked) ||
     (page?.task.query === form.query && page.task.creator) ||
     history.find((entry) => entry.task.query === form.query)?.task.creator ||
+    (trip && { name: trip.name, url: trip.url }) ||
     undefined
   const chooseCreator = (summary: CreatorSummary) => {
     setPicked(summary)
@@ -183,6 +190,12 @@ export function CollectForm() {
               className='flex min-w-0 flex-wrap items-center justify-end gap-2 sm:h-9 sm:flex-nowrap'
             >
               <div className='flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1'>
+                {trip && (
+                  <AuthorBack
+                    fromPage={!!trip.pageId}
+                    disabled={!!requests[form.platform]}
+                  />
+                )}
                 {form.mode === 'creator' ? (
                   <CreatorField
                     url={form.query}
@@ -192,7 +205,7 @@ export function CollectForm() {
                         ? page.results.length
                         : undefined
                     }
-                    disabled={busy || pending || locked}
+                    disabled={busy || pending || locked || !!trip}
                     onClear={clearQuery}
                   />
                 ) : (

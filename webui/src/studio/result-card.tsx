@@ -75,7 +75,7 @@ export function ResultCard(props: {
               </span>
             )
           ) : (
-            <AuthorName name={item.author} />
+            <AuthorName item={item} />
           )}
           {item.commentStatus && (
             <span

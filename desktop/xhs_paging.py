@@ -45,6 +45,11 @@ def creator_url(user_id, token, source):
     return f'{PROFILE}{user_id}?xsec_token={token}&xsec_source={source}'
 
 
+def author_url(user, source):
+    identity, token = (user or {}).get('user_id'), (user or {}).get('xsec_token')
+    return creator_url(identity, token, source) if identity and token else ''
+
+
 def announce(runner, row, identity, token, source):
     user = row.get('user') or {}
     name = user.get('nickname') or user.get('nick_name')
@@ -112,7 +117,7 @@ async def load_feed(runner, cursor=None):
             'xhs', row['id'], card.get('display_title'), user.get('nickname') or user.get('nick_name'),
             f"https://www.xiaohongshu.com/explore/{row['id']}?xsec_token={token}&xsec_source=pc_feed",
             cover.get('url_default') or cover.get('url_pre') or cover.get('url'), (card.get('interact_info') or {}).get('liked_count'),
-            'video' if card.get('type') == 'video' else 'note',
+            'video' if card.get('type') == 'video' else 'note', author_url(user, 'pc_feed'),
         ))
     following = str(response.get('cursor_score') or '')
     more = bool(rows and following)
