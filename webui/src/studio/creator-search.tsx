@@ -106,6 +106,19 @@ export function CreatorSearch(props: {
   const [keyword, setKeyword] = useState('')
   const [submitted, setSubmitted] = useState('')
   const search = useCreatorSearch(platform, submitted)
+  // 点作者名直接打开并开搜，先等后台续采退出，否则平台还被占着
+  const lookup = useStudio((state) => state.creatorLookup)
+  useEffect(() => {
+    if (!lookup) return
+    const studio = useStudio.getState()
+    studio.patch({ creatorLookup: '', creatorSearchOpen: true })
+    setKeyword(lookup)
+    setSubmitted('')
+    setOpen(true)
+    void studio.stopContinuation(platform).then(() => {
+      if (useStudio.getState().creatorSearchOpen) setSubmitted(lookup)
+    })
+  }, [lookup, platform])
   const items = search.data?.items ?? []
   const firstLoading = search.isFetching && !items.length
   // 同一时间只发一页，失败或整页重复时停下，不自动重试对频率敏感的接口

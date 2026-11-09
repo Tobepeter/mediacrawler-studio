@@ -3,6 +3,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { platformBlocked, useStudio } from './store'
 import type { CreatorInfo } from './types'
 
 export function CreatorAvatar(props: {
@@ -31,6 +32,31 @@ export function useCreatorStats() {
       creator.posts != null &&
         t('{{value}} 作品', { value: compact.format(creator.posts) }),
     ].filter(Boolean) as string[]
+}
+
+// 旧记录里的昵称是脱敏过的，拿去搜也找不到人
+const maskedName = /^(\*|.\*|.\*{3}.)$/u
+
+// 对这个人感兴趣时点名字直接搜；平台忙或没登录时只显示名字
+export function AuthorName({ name }: { name: string }) {
+  const { t } = useTranslation('studio')
+  const searchAuthor = useStudio((state) => state.searchAuthor)
+  const available = useStudio(
+    (state) =>
+      state.accounts[state.platform] === 'connected' && !platformBlocked(state),
+  )
+  if (!name || !window.studio || !available || maskedName.test(name))
+    return <span className='truncate'>{name || t('未知作者')}</span>
+  return (
+    <button
+      type='button'
+      className='min-w-0 truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+      title={t('搜索这位博主')}
+      onClick={() => searchAuthor(name)}
+    >
+      {name}
+    </button>
+  )
 }
 
 function OpenCreator({ url, className }: { url: string; className?: string }) {

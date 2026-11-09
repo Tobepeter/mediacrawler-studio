@@ -4,7 +4,11 @@ import { recordLoginOutcome } from './login-health'
 import { t, translateMessage } from '@/i18n/studio'
 import { create } from 'zustand'
 import { toast } from 'sonner'
-import { autoBatchSize, isAutoForm } from './creator-options'
+import {
+  autoBatchSize,
+  creatorSearchPlatforms,
+  isAutoForm,
+} from './creator-options'
 import { taskFeedback } from './task-feedback'
 import type {
   CollectRequest,
@@ -68,6 +72,9 @@ interface StudioStore extends StudioState {
   ) => void
   downloadFailure: string
   creatorSearchOpen: boolean
+  // 点作者名时要搜的名字，由找博主弹窗接走后清空
+  creatorLookup: string
+  searchAuthor: (name: string) => void
   loginMode: LoginMode
   setLoginMode: (value: LoginMode) => boolean
   askBeforeDownload: boolean
@@ -99,6 +106,16 @@ export const isContinuing = (task?: StudioTask) =>
 export function platformBusy(state: StudioStore, platform = state.platform) {
   return (
     state.pending || !!state.requests[platform] || !!state.working[platform]
+  )
+}
+
+// 滚动续采在后台进行，不算占用，用户发起别的操作时它会让路
+export function platformBlocked(state: StudioStore, platform = state.platform) {
+  const request = state.requests[platform]
+  return (
+    state.pending ||
+    (!!request && request !== 'continue') ||
+    (!!state.working[platform] && !isContinuing(state.tasks[platform]))
   )
 }
 
@@ -153,6 +170,21 @@ export const useStudio = create<StudioStore>((set, get) => ({
     }),
   downloadFailure: '',
   creatorSearchOpen: false,
+  creatorLookup: '',
+  // 不支持搜博主的平台退回关键词搜索，同样是立刻看到这个人的相关内容
+  searchAuthor: (name) => {
+    const { platform, forms, updateForm, start } = get()
+    if (creatorSearchPlatforms.includes(platform)) {
+      set({ selected: null, creatorLookup: name })
+      return
+    }
+    updateForm({
+      query: name,
+      mode: 'search',
+      limit: Math.min(forms[platform].limit, 100),
+    })
+    void start()
+  },
   loginMode: 'qrcode',
   setLoginMode: (value) => {
     try {

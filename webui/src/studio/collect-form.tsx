@@ -25,7 +25,7 @@ import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
 import {
   activeStatuses,
-  isContinuing,
+  platformBlocked,
   platformNames,
   useForm,
   usePage,
@@ -52,12 +52,11 @@ export function CollectForm() {
   const form = useForm()
   const page = usePage()
   const task = tasks[form.platform]
-  // 滚动续采在后台进行，不锁定表单，也不把采集按钮切成停止
-  const continuing = isContinuing(task)
   const pending =
     clearing ||
     (!!requests[form.platform] && requests[form.platform] !== 'continue')
-  const blocked = pending || (!!working[form.platform] && !continuing)
+  // 滚动续采不锁定表单，也不把采集按钮切成停止
+  const blocked = useStudio((state) => platformBlocked(state, form.platform))
   const busy =
     blocked &&
     task?.platform === form.platform &&

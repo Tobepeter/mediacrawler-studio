@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { platformNames, useStudio } from './store'
 import type { ContentItem } from './types'
+import { AuthorName } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 import { biliPlayer, DetailMedia } from './detail-media'
 import { DetailBody } from './detail-body'
@@ -128,7 +129,7 @@ export function ContentDetail() {
                           {selected.title}
                         </DialogTitle>
                         <DialogDescription className='flex items-center justify-between gap-2'>
-                          {selected.author || t('未知作者')}
+                          <AuthorName name={selected.author} />
                           <span className='inline-flex shrink-0 items-center gap-1'>
                             <Heart className='size-4' />
                             {selected.likes}

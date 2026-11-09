@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { openSource } from './content-detail'
+import { AuthorName } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 import { platformNames, useStudio } from './store'
 import type { ContentItem } from './types'
@@ -74,7 +75,7 @@ export function ResultCard(props: {
               </span>
             )
           ) : (
-            <span className='truncate'>{item.author || t('未知作者')}</span>
+            <AuthorName name={item.author} />
           )}
           {item.commentStatus && (
             <span
