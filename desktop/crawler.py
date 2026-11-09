@@ -175,7 +175,7 @@ class DesktopCrawler:
             self.emit("done", message="推荐已更新")
             return
         if self.request["action"] == "creator-search":
-            from desktop.creators import CreatorError, search_creators
+            from desktop.creators import search_creators
             if not await self.session_confirmed():
                 raise CreatorError("AUTH_REQUIRED", "登录已失效，请重新扫码")
             # 界面每次操作只发一个请求，更多结果由用户主动加载

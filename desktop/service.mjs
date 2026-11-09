@@ -78,11 +78,14 @@ export class StudioService {
     this.feed = new FeedScheduler({
       platforms: feedPlatforms,
       cache: new JsonCache(path.join(this.dataDir, 'cache'), 'feed', {
+        version: 2,
         ttlMs: feedCacheTtl,
         logger: this.logger,
       }),
       status: (platform) => this.state.accounts[platform],
-      busy: (platform) => this.operations.has(platform),
+      busy: (platform) =>
+        this.operations.has(platform) || this.details.has(platform),
+      account: (platform) => this.state.profiles[platform]?.nickname || '',
       fetch: (platform, cursor, run) => this.fetchFeed(platform, cursor, run),
       logger: this.logger,
     })

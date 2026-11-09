@@ -92,7 +92,8 @@ RULES = {
     ('bili', 'get_home_feed'): Rule(key='bili', fresh_gap=(4, 7), page_gap=(3, 6), is_fresh=first_page, window_limit=30, window_seconds=600, **BILI_COOLDOWN),
     ('dy', 'get_home_feed'): Rule(key='dy-search', fresh_gap=(4, 8), page_gap=(6, 10), is_fresh=first_page, window_limit=20, window_seconds=600, total_limit=30, cooldown_seconds=1800),
     ('xhs', 'get_home_feed'): Rule(key='xhs', fresh_gap=(4, 8), page_gap=(4, 7), is_fresh=first_feed_page, window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
-    ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),
+    # 抖音共用一条时间线，验证后详情、评论、主页也要一起停；文件名沿用 dy-search，升级时不丢正在进行的冷却
+    ('dy', 'get_user_aweme_posts'): Rule(key='dy-search', page_gap=(2, 4)),
     # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
     ('xhs', 'get_note_by_keyword'): Rule(
         key='xhs', fresh_gap=(8, 12), page_gap=(4, 7), is_fresh=first_page,
@@ -106,7 +107,7 @@ RULES = {
 XHS_COOLDOWN = dict(cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked)
 PLATFORM_RULES = {
     'bili': Rule(key='bili', page_gap=(1, 2.5), **BILI_COOLDOWN),
-    'dy': Rule(key='dy', page_gap=(1.5, 3), name='抖音'),
+    'dy': Rule(key='dy-search', page_gap=(1.5, 3), name='抖音'),
     'xhs': Rule(key='xhs', page_gap=(2, 3.5), **XHS_COOLDOWN),
     'zhihu': Rule(key='zhihu', page_gap=(2, 4), name='知乎'),
     'wb': Rule(key='wb', page_gap=(2, 4), name='微博'),
@@ -174,7 +175,13 @@ def reserve(path, rule, fresh, now=None, limit=None):
                 raise CreatorError('FEED_BUSY', '平台正忙，稍后再试', retry_after=math.ceil(retry_after))
             if over or full or retry_after > MAX_WAIT_SECONDS:
                 raise CreatorError('RATE_LIMITED', f'操作太频繁，请约 {math.ceil(retry_after)} 秒后再试', retry_after=math.ceil(retry_after))
-            write_state(path, {**state, 'last_at': start, 'recent': recent + [start] if fresh and rule.window_limit else recent, 'total': total + [start] if rule.total_limit else total})
+            # 同一时间线上有的规则不设上限，不能把其他规则累计的记录清掉
+            counters = {}
+            if rule.window_limit:
+                counters['recent'] = recent + [start] if fresh else recent
+            if rule.total_limit:
+                counters['total'] = total + [start]
+            write_state(path, {**state, 'last_at': start, **counters})
     except OSError:
         return 0
     return start - now

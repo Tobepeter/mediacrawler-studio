@@ -38,7 +38,7 @@ export class FeedScheduler {
       if (status === 'connected') {
         if (!this.seen.has(platform)) {
           this.seen.add(platform)
-          if (!this.cache.has(platform)) this.want(platform)
+          if (!this.stored(platform)) this.want(platform)
         }
       } else if (status !== 'saved') this.reset(platform)
       const run = this.runs.get(platform)
@@ -58,7 +58,8 @@ export class FeedScheduler {
         return stored
       }
       const running = this.runs.get(platform)
-      if (running?.background) return this.join(platform, running)
+      if (running?.background && !running.cancelled)
+        return this.join(platform, running)
     }
     this.abort(platform)
     const run = { background: false, child: null, cancelled: false }
@@ -111,11 +112,19 @@ export class FeedScheduler {
     this.quietUntil.set(platform, this.now() + this.quietMs)
   }
 
+  // 重新扫码可能换了账号，昵称对不上的缓存不能用
+  stored(platform) {
+    const entry = this.cache.get(platform)
+    if (entry?.account !== this.account(platform)) return null
+    return Array.isArray(entry.page?.items) && entry.page.items.length
+      ? entry.page
+      : null
+  }
+
   take(platform) {
-    const page = this.cache.get(platform)
-    if (page === undefined) return null
+    const page = this.stored(platform)
     this.cache.delete(platform)
-    return Array.isArray(page?.items) && page.items.length ? page : null
+    return page
   }
 
   // 首屏已经在后台取了，接上同一个请求，平台只收到一次
@@ -170,7 +179,12 @@ export class FeedScheduler {
   }
 
   async prefetch(platform) {
-    const run = { background: true, child: null, cancelled: false }
+    const run = {
+      background: true,
+      child: null,
+      cancelled: false,
+      account: this.account(platform),
+    }
     this.runs.set(platform, run)
     this.wanted.delete(platform)
     let page
@@ -204,7 +218,7 @@ export class FeedScheduler {
     else if (page.cancelled) {
       if (run.requeue) this.wanted.add(platform)
     } else if (page.items.length && !run.cancelled)
-      this.cache.set(platform, page)
+      this.cache.set(platform, { account: run.account, page })
   }
 
   retry(platform) {

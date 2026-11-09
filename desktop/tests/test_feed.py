@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -110,3 +111,26 @@ async def test_feed_detail_failure_keeps_card(monkeypatch):
     monkeypatch.setattr(crawler_module, 'DesktopCrawler', Fake)
     result = await detail.load_detail({'id': 'dy:1', 'platform': 'dy', 'url': 'u', 'title': '卡片', 'feed': True}, None)
     assert result['code'] == 'failed' and result['item']['title'] == '卡片'
+
+
+def test_background_busy_is_reported_as_a_page(monkeypatch):
+    from desktop.crawler import DesktopCrawler
+    events = []
+    crawler = DesktopCrawler.__new__(DesktopCrawler)
+    crawler.request = {'action': 'feed'}
+    crawler.emit = lambda kind, **data: events.append((kind, data))
+    crawler.setup = AsyncMock()
+    monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('FEED_BUSY', 'x')))
+    asyncio.run(crawler.run())
+    assert ('feed', {'items': [], 'next_cursor': None, 'has_more': False, 'busy': True}) in events
+
+
+def test_feed_errors_keep_their_message(monkeypatch):
+    from desktop.crawler import DesktopCrawler
+    crawler = DesktopCrawler.__new__(DesktopCrawler)
+    crawler.request = {'action': 'feed'}
+    crawler.emit = lambda kind, **data: None
+    crawler.setup = AsyncMock()
+    monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '暂停访问')))
+    with pytest.raises(CreatorError, match='暂停访问'):
+        asyncio.run(crawler.run())

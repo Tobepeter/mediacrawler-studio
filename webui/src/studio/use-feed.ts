@@ -1,5 +1,6 @@
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { feedPlatforms } from './creator-options'
 import { mergePages } from './merge-pages'
 import { queryClient } from './query-client'
 import { useStudio } from './store'
@@ -27,6 +28,16 @@ function request(
 
 const selectFeed = (data: InfiniteData<FeedPage>) => mergePages(data.pages)
 
+// 换账号或退出后，上个账号的推荐不能留着；列表可能被搜索结果替换而没有挂载，放在组件外监听
+useStudio.subscribe((state, previous) => {
+  for (const platform of feedPlatforms)
+    if (
+      previous.accounts[platform] === 'connected' &&
+      state.accounts[platform] !== 'connected'
+    )
+      queryClient.removeQueries({ queryKey: feedKey(platform) })
+})
+
 // 切到这个平台且已登录才向主进程要第一页，后台预取和缓存由主进程调度；
 // 一次运行内不重新验证，无限列表重新验证会逐页重放，等于在狂刷接口
 export function useFeed(platform: Platform) {
@@ -37,10 +48,6 @@ export function useFeed(platform: Platform) {
   useEffect(() => {
     if (current) void window.studio?.focusFeed?.(platform).catch(noop)
   }, [current, platform])
-  useEffect(() => {
-    // 换账号或退出后，上个账号的推荐不能留着
-    if (!connected) queryClient.removeQueries({ queryKey: feedKey(platform) })
-  }, [connected, platform])
   return useInfiniteQuery({
     queryKey: feedKey(platform),
     enabled: connected && current && !!window.studio?.loadFeed,

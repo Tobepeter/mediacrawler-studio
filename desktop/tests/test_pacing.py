@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
 from desktop.paging import CreatorError
-from desktop.pacing import RULES, Rule, first_search_page, pace_client, read_state, reserve, start_cooldown, state_path
+from desktop.pacing import PLATFORM_RULES, RULES, Rule, first_search_page, pace_client, read_state, reserve, start_cooldown, state_path
 
 SEARCH = Rule(key='t', fresh_gap=(10, 10), page_gap=(3, 3), is_fresh=first_search_page, window_limit=3, window_seconds=600, cooldown_seconds=1800)
 PAGES = Rule(key='p', page_gap=(2, 2))
@@ -26,6 +26,23 @@ def test_background_gives_up_without_taking_the_slot(path):
         reserve(path, PAGES, False, now=1000, limit=1)
     assert caught.value.code == 'FEED_BUSY'
     assert reserve(path, PAGES, False, now=1000) == 2
+
+
+def test_rule_without_limits_keeps_shared_counters(path):
+    limited = Rule(key='s', page_gap=(1, 1), fresh_gap=(1, 1), is_fresh=first_search_page, window_limit=2, window_seconds=100, total_limit=9)
+    plain = Rule(key='s', page_gap=(1, 1))
+    reserve(path, limited, True, now=1000)
+    reserve(path, plain, False, now=1010)
+    reserve(path, limited, True, now=1020)
+    reserve(path, plain, False, now=1030)
+    with pytest.raises(CreatorError) as caught:
+        reserve(path, limited, True, now=1040)
+    assert caught.value.code == 'RATE_LIMITED'
+
+
+def test_douyin_cooldown_covers_every_request():
+    keys = {RULES['dy', method].key for method in ('search_info_by_keyword', 'get_home_feed', 'get_user_aweme_posts')}
+    assert keys == {PLATFORM_RULES['dy'].key}
 
 
 def test_total_limit_counts_page_turns(path):
