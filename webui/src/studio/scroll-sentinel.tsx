@@ -4,14 +4,18 @@ import { useInView } from 'react-intersection-observer'
 // 列表每次变化都重新挂载：inView 由观察器异步更新，沿用旧值会在追加后多请求一批
 // 新实例从不可见开始，观察器首次回调给出真实位置，内容没填满时也会继续
 // needsScroll 时必须有用户的真实滚动才触发，不能一打开就访问平台
+// fillViewport 例外：内容没铺满可视区时根本滚不动，先补到铺满为止，之后仍等滚动
 export function ScrollSentinel(props: {
   active: boolean
   needsScroll: boolean
+  fillViewport?: boolean
   onReach: () => void
   children: ReactNode
 }) {
-  const { active, needsScroll, onReach, children } = props
+  const { active, needsScroll, fillViewport, onReach, children } = props
   const [scrolled, setScrolled] = useState(false)
+  const [short, setShort] = useState(false)
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
   const [root, setRoot] = useState<Element | null>(null)
   const { ref, inView } = useInView({
     root,
@@ -19,9 +23,10 @@ export function ScrollSentinel(props: {
     skip: !root,
   })
   const anchor = useCallback(
-    (node: HTMLDivElement | null) => {
-      ref(node)
-      setRoot(node?.closest('[data-radix-scroll-area-viewport]') ?? null)
+    (element: HTMLDivElement | null) => {
+      ref(element)
+      setNode(element)
+      setRoot(element?.closest('[data-radix-scroll-area-viewport]') ?? null)
     },
     [ref],
   )
@@ -34,7 +39,22 @@ export function ScrollSentinel(props: {
     root.addEventListener('scroll', mark, { passive: true })
     return () => root.removeEventListener('scroll', mark)
   }, [root, needsScroll])
-  const shouldContinue = active && inView && (!needsScroll || scrolled)
+  useEffect(() => {
+    if (!root || !node || !fillViewport) {
+      setShort(false)
+      return
+    }
+    // 哨兵紧跟列表末尾，它的顶部还在可视区内就说明内容没铺满
+    const measure = () =>
+      setShort(
+        node.getBoundingClientRect().top < root.getBoundingClientRect().bottom,
+      )
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [root, node, fillViewport])
+  const shouldContinue = active && inView && (!needsScroll || scrolled || short)
   useEffect(() => {
     if (shouldContinue) onReach()
   }, [shouldContinue, onReach])

@@ -21,6 +21,8 @@ const placeholders = Array.from({ length: 10 }, (_, index) => index)
 export function FeedList({ platform }: { platform: Platform }) {
   const { t } = useTranslation('studio')
   const feed = useFeed(platform)
+  // 隐藏的 Tab 量不出高度，切回来时重新量
+  const current = useStudio((state) => state.platform === platform)
   const route = useStudioRoute()
   const paused = useStudio(
     (state) => !!state.selected || state.creatorSearchOpen,
@@ -74,6 +76,7 @@ export function FeedList({ platform }: { platform: Platform }) {
           route !== 'history'
         }
         needsScroll
+        fillViewport={current}
         onReach={loadMore}
       >
         {feed.isFetchNextPageError ? (
