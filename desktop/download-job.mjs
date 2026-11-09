@@ -48,7 +48,7 @@ export class DownloadJob {
           timedOut = true
           void this.cancel()
         },
-        request.kind === 'playback' ? 45000 : 30 * 60 * 1000,
+        ['playback', 'detail'].includes(request.kind) ? 45000 : 30 * 60 * 1000,
       )
       const lines = createInterface({ input: child.stdout })
       lines.on('line', (line) => {
@@ -64,11 +64,12 @@ export class DownloadJob {
           if (event.type === 'download-result') result = event
           if (event.type === 'download-error') {
             code = event.code
-            this.logger?.write('error', 'media', 'failed', {
-              platform: request.record.platform,
-              kind: request.kind,
-              code,
-            })
+            if (code !== 'cancelled')
+              this.logger?.write('error', 'media', 'failed', {
+                platform: request.record.platform,
+                kind: request.kind,
+                code,
+              })
           }
         } catch {
           /* 上游日志不进入界面 */

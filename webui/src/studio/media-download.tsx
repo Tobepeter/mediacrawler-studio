@@ -22,6 +22,7 @@ import {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import { videoQualities } from './media-options'
+import { useDetailMedia } from './use-detail-media'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
 
@@ -31,6 +32,8 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const busy = useStudio((state) => platformBusy(state, item.platform))
   const [downloading, setDownloading] = useState(false)
   const qualities = videoQualities(item)
+  // 清晰度还在取时“自动”已经能下，不用等
+  const loadingQualities = useDetailMedia(item)
   const video =
     item.contentType === 'video' ||
     item.media?.variants?.some((variant) => variant.kind === 'video')
@@ -122,7 +125,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
               </DropdownMenuItem>
             )}
             {canDownloadVideo &&
-              (qualities.length > 1 ? (
+              (qualities.length > 1 || loadingQualities ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                     <Film />
@@ -141,6 +144,12 @@ export function MediaDownload({ item }: { item: ContentItem }) {
                           {quality.toUpperCase()}
                         </DropdownMenuItem>
                       ))}
+                      {loadingQualities && (
+                        <DropdownMenuItem disabled>
+                          <Loader2 className='animate-spin motion-reduce:animate-none' />
+                          {t('正在获取清晰度')}
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>

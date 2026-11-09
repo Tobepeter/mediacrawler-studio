@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('studio', {
   stopLogin: (platform) => ipcRenderer.invoke('studio:stop-login', platform),
   resolveVideo: (platform, id, requestId) =>
     ipcRenderer.invoke('studio:resolve-video', platform, id, requestId),
+  loadDetail: (platform, id) =>
+    ipcRenderer.invoke('studio:load-detail', platform, id),
+  cancelDetail: (platform, id) =>
+    ipcRenderer.invoke('studio:cancel-detail', platform, id),
   cancelVideo: (requestId) =>
     ipcRenderer.invoke('studio:cancel-video', requestId),
   clearSessions: () => ipcRenderer.invoke('studio:clear-sessions'),

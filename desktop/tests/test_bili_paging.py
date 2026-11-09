@@ -181,3 +181,13 @@ async def test_block_starts_shared_cooldown(tmp_path, monkeypatch):
     with pytest.raises(CreatorError) as error:
         await paced(AsyncMock(), RULES[('bili', 'search_video_by_keyword')])('词')
     assert error.value.code == 'RATE_COOLDOWN'
+
+
+def test_bili_batches_defer_media_but_single_links_keep_it():
+    from desktop.crawler import DesktopCrawler
+    make = lambda platform, mode: DesktopCrawler({'platform': platform, 'mode': mode, 'limit': 1, 'query': 'x', 'action': 'collect'}, None, lambda *a, **k: None)
+    assert make('bili', 'search').defer_media() is True
+    assert make('bili', 'creator').defer_media() is True
+    assert not make('bili', 'link').defer_media()
+    assert not make('dy', 'search').defer_media()
+    assert not make('xhs', 'creator').defer_media()

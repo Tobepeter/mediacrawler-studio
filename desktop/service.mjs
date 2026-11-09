@@ -45,6 +45,7 @@ export class StudioService {
     if (this.operations.has(platform)) throw new Error('请先结束当前任务')
   }
 
+  details = new Map()
   persistence = Promise.resolve()
   state = {
     policy: healthPolicy,
@@ -242,6 +243,71 @@ export class StudioService {
     return { urls: result.urls || [], code: result.code }
   }
 
+  get python() {
+    return (
+      process.env.STUDIO_PYTHON ||
+      path.join(
+        this.root,
+        '.venv',
+        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+      )
+    )
+  }
+
+  mediaJob(platform, requestId) {
+    return new DownloadJob({
+      platform,
+      python: this.python,
+      root: this.root,
+      endpoint: this.endpoint,
+      windows: this.windows,
+      spawnProcess: this.spawnProcess,
+      requestId,
+      logger: this.logger,
+    })
+  }
+
+  // 只读补全，不占平台互斥：采集和下载可以同时进行，同平台只保留最新一次
+  async loadDetail(platform, id) {
+    if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
+    await this.details.get(platform)?.cancel()
+    const page = this.state.pages[platform]
+    const record = page?.results?.find((item) => item.id === id)
+    if (!record) return { code: 'unavailable' }
+    if (!existsSync(this.python)) return { code: 'environment' }
+    const job = this.mediaJob(platform)
+    job.itemId = id
+    this.details.set(platform, job)
+    try {
+      const result = await job.run({ record, kind: 'detail' })
+      if (result.item?.id === id && result.item.platform === platform)
+        this.applyDetail(platform, page.id, result.item)
+      return { code: result.code }
+    } finally {
+      if (this.details.get(platform) === job) this.details.delete(platform)
+    }
+  }
+
+  async cancelDetail(platform, id) {
+    const job = this.details.get(platform)
+    if (job?.itemId === id) await job.cancel()
+  }
+
+  applyDetail(platform, pageId, item) {
+    // 采集进行中结果在 run 上，否则在当前页；已切到别的记录就不写回
+    const run = [
+      this.operations.get(platform),
+      this.state.pages[platform],
+    ].find((value) => value?.id === pageId && value.results)
+    const index = run?.results.findIndex((value) => value.id === item.id) ?? -1
+    if (index === -1) return
+    run.results[index] = { ...run.results[index], ...item }
+    this.save(run)
+    this.publish()
+  }
+
   async cancelVideo(requestId) {
     const job = this.operations.get('dy')?.downloadJob
     if (typeof requestId === 'string' && job?.requestId === requestId)
@@ -262,13 +328,7 @@ export class StudioService {
     this.assertAvailable(platform)
     if (this.state.accounts[platform] !== 'connected')
       throw new Error('登录后才能搜索博主')
-    const python =
-      process.env.STUDIO_PYTHON ||
-      path.join(
-        this.root,
-        '.venv',
-        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-      )
+    const python = this.python
     if (!existsSync(python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
     const run = { kind: 'creator-search', child: null, cancelled: false }
@@ -350,29 +410,13 @@ export class StudioService {
 
   async runMedia(record, options) {
     const { kind } = options
-    const python =
-      process.env.STUDIO_PYTHON ||
-      path.join(
-        this.root,
-        '.venv',
-        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-      )
-    if (!existsSync(python))
+    if (!existsSync(this.python))
       return {
         saved: 0,
         total: kind === 'images' ? record.images.length : 1,
         code: 'environment',
       }
-    const job = new DownloadJob({
-      platform: record.platform,
-      python,
-      root: this.root,
-      endpoint: this.endpoint,
-      windows: this.windows,
-      spawnProcess: this.spawnProcess,
-      requestId: options.requestId,
-      logger: this.logger,
-    })
+    const job = this.mediaJob(record.platform, options.requestId)
     this.operations.set(record.platform, { kind, downloadJob: job })
     this.publish()
     try {
@@ -404,13 +448,7 @@ export class StudioService {
         cursor: !!request.cursor,
       })
     this.assertAvailable(request.platform)
-    const python =
-      process.env.STUDIO_PYTHON ||
-      path.join(
-        this.root,
-        '.venv',
-        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-      )
+    const python = this.python
     if (!existsSync(python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
     // 继续采集写回同一批次，换博主或记录已清空时不能拼接
@@ -694,6 +732,7 @@ export class StudioService {
   }
 
   async stopAll() {
+    await Promise.all([...this.details.values()].map((job) => job.cancel()))
     await Promise.all(
       [...this.operations.keys()].map((platform) => this.cancel(platform)),
     )

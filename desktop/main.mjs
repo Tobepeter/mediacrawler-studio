@@ -150,6 +150,10 @@ app
       service.resolveVideo(platform, id, requestId),
     )
     handle('cancel-video', (requestId) => service.cancelVideo(requestId))
+    handle('load-detail', (platform, id) => service.loadDetail(platform, id))
+    handle('cancel-detail', (platform, id) =>
+      service.cancelDetail(platform, id),
+    )
     handle('clear-sessions', () => service.clearSessions())
     handle('logout', (platform) => {
       if (typeof platform !== 'string') throw new Error('不支持的平台')

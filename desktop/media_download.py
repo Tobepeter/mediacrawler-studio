@@ -74,18 +74,28 @@ async def download_record(request, emit, page=None):
     variant_id = request.get('variant_id')
     has_context = page is not None or request.get('runner') is not None
     can_refresh = kind == 'video' and has_context and quality == 'best' and not variant_id
+    # 指定清晰度时不能换成别的档位，地址失效或还没取到就重新取一份再选
+    can_requery = kind == 'video' and has_context and quality != 'best' and not variant_id
     items, fallback = None, False
+
+    async def requery():
+        from desktop.content.detail import refreshed
+        fresh = await refreshed(record, page, request.get('runner'), quality)
+        return fresh, choose_items(fresh, quality, None)
+
     if kind == 'video' and (record.get('media') or {}).get('variants'):
         try:
             items = choose_items(record, 'best' if record['id'] == 'direct' else quality, variant_id)
         except RuntimeError:
-            if not can_refresh:
+            if not can_refresh and not can_requery:
                 raise
-            fallback = True
+            fallback = can_refresh
     if kind == 'video' and not items:
         if not has_context:
             raise RuntimeError('unavailable')
-        if quality != 'best' or variant_id:
+        if can_requery:
+            record, items = await requery()
+        elif quality != 'best' or variant_id:
             raise RuntimeError('quality_unavailable')
     if can_refresh and items and items[0].is_dash and not is_available():
         fallback = True
@@ -97,6 +107,9 @@ async def download_record(request, emit, page=None):
             and result.get('code') in ('expired', 'unavailable', 'network', 'failed', 'ffmpeg_required')):
         fallback = True
         result = await download_media({**current, 'record': {**record, 'media': None}, 'items': None}, emit, page)
+    elif can_requery and items and not result['saved'] and result.get('code') in ('expired', 'unavailable', 'network', 'failed'):
+        record, items = await requery()
+        result = await download_media({**current, 'record': record, 'items': items}, emit, page)
     result.update(fallback=fallback, requestedQuality=quality,
                   mediaUrl=items[0].url if items and not fallback else None)
     return result

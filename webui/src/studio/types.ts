@@ -217,6 +217,8 @@ export interface StudioBridge {
     requestId: string,
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
+  loadDetail?(platform: Platform, id: string): Promise<{ code: string }>
+  cancelDetail?(platform: Platform, id: string): Promise<void>
   clearSessions(): Promise<{ localOnly: boolean }>
   logout(platform: Platform): Promise<{ localOnly: boolean }>
   downloadMedia(

@@ -202,7 +202,7 @@ class DesktopCrawler:
                     self.store.comment_state(item, 'error')
             if failed:
                 self.emit('warning', message='部分评论未取全，正文与已有评论已保留')
-        if not self.request.get('_defer_enrichment'):
+        if not self.defer_media():
             from desktop.content.media import enrich
             for item in self.store.items.values():
                 await enrich(self, item, self.request.get('quality', 'best'))
@@ -210,6 +210,10 @@ class DesktopCrawler:
         count = len(self.store.ids)
         empty = "这位博主暂无可见作品" if self.request["mode"] == "creator" else "没有找到相关内容，试试其他关键词"
         self.emit("done", message=f"已获取 {count} 条内容" if count else empty)
+
+    def defer_media(self):
+        # B 站每条要多发两次请求，地址还会过期，批量采集时留到打开详情或下载再取
+        return self.request.get('_defer_enrichment') or (self.platform == 'bili' and self.request['mode'] != 'link')
 
     async def detail(self):
         query = await resolve_link(self.request["query"], self.platform)

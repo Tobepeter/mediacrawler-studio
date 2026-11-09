@@ -182,6 +182,9 @@ async def collect_search(runner, query, cursor=None, options=None):
         item = post.get('aweme_info') or (mix[0] if mix else None)
         if item:
             await update_douyin_aweme(item)
+            key = f"dy:{item.get('aweme_id')}"
+            if key in runner.store.items:
+                runner.dy_details[key] = item
 
     await walk(runner, fetch, save, publish, offset, state.get('s', 0), max_pages=SEARCH_MAX_REQUESTS, **LABEL)
 

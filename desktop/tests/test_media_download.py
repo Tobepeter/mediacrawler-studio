@@ -190,3 +190,43 @@ async def test_download_disk_failure_and_cancel_do_not_refresh(tmp_path, monkeyp
     result = await download.download_record(value, lambda *a, **k: None, SimpleNamespace())
     assert result['code'] == code and not result['fallback']
     transfer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_specific_quality_requeries_when_stored_address_fails(monkeypatch):
+    from desktop import media_download
+    from desktop.content import detail
+    stored = {'id': 'bili:1', 'platform': 'bili', 'url': 'https://www.bilibili.com/video/av1', 'contentType': 'video', 'media': {'variants': [{'id': 'old'}]}}
+    fresh = {**stored, 'media': {'variants': [{'id': 'new'}]}}
+    attempts = []
+
+    async def download(request, emit, page):
+        attempts.append(request['items'])
+        return {'saved': 1 if len(attempts) == 2 else 0, 'total': 1, 'code': '' if len(attempts) == 2 else 'expired'}
+
+    async def refreshed(record, page, runner, quality):
+        return fresh
+    monkeypatch.setattr(media_download, 'download_media', download)
+    monkeypatch.setattr(detail, 'refreshed', refreshed)
+    monkeypatch.setattr('media_downloader.selection.choose_items', lambda record, quality, variant: [SimpleNamespace(url=record['media']['variants'][0]['id'], is_dash=False)])
+    result = await media_download.download_record({'record': stored, 'kind': 'video', 'quality': '720p', 'runner': object()}, lambda *a, **k: None)
+    assert [items[0].url for items in attempts] == ['old', 'new']
+    assert result['saved'] == 1
+
+
+@pytest.mark.asyncio
+async def test_specific_quality_without_variants_fetches_first(monkeypatch):
+    from desktop import media_download
+    from desktop.content import detail
+    stored = {'id': 'bili:1', 'platform': 'bili', 'url': 'https://www.bilibili.com/video/av1', 'contentType': 'video'}
+
+    async def refreshed(record, page, runner, quality):
+        return {**stored, 'media': {'variants': [{'id': 'new'}]}}
+
+    async def download(request, emit, page):
+        return {'saved': 1, 'total': 1, 'code': '', 'used': request['items']}
+    monkeypatch.setattr(media_download, 'download_media', download)
+    monkeypatch.setattr(detail, 'refreshed', refreshed)
+    monkeypatch.setattr('media_downloader.selection.choose_items', lambda record, quality, variant: [SimpleNamespace(url=record['media']['variants'][0]['id'], is_dash=False)])
+    result = await media_download.download_record({'record': stored, 'kind': 'video', 'quality': '720p', 'runner': object()}, lambda *a, **k: None)
+    assert result['used'][0].url == 'new'

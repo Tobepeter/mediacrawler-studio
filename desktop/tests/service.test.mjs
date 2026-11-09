@@ -805,3 +805,34 @@ test('继续采集并入原批次并更新翻页位置', async () => {
     await cleanup()
   }
 })
+
+test('详情补全写回当前记录，已切换记录或未登录时不写', async () => {
+  const service = Object.create(StudioService.prototype)
+  Object.assign(service, {
+    details: new Map(),
+    operations: new Map(),
+    state: { accounts: { bili: 'saved' }, pages: {} },
+    publish() {},
+    trackSave() {},
+    library: { saveRun: async () => {} },
+  })
+  assert.deepEqual(await service.loadDetail('bili', 'bili:1'), {
+    code: 'login',
+  })
+  const results = [{ id: 'bili:1', platform: 'bili', title: '标题' }]
+  service.state.pages.bili = { id: 'r1', task: { platform: 'bili' }, results }
+  service.applyDetail('bili', 'r1', {
+    id: 'bili:1',
+    platform: 'bili',
+    media: { status: 'available', variants: [] },
+  })
+  const saved = service.state.pages.bili.results[0]
+  assert.equal(saved.title, '标题')
+  assert.equal(saved.media.status, 'available')
+  service.applyDetail('bili', 'other', {
+    id: 'bili:1',
+    platform: 'bili',
+    media: { status: 'failed', variants: [] },
+  })
+  assert.equal(service.state.pages.bili.results[0].media.status, 'available')
+})

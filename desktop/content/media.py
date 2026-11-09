@@ -106,7 +106,7 @@ async def fetch(runner, record):
     identity = record['id'].split(':')[-1]
     if platform == 'bili':
         from media_platform.bilibili.media import DASH_FNVAL
-        detail = runner.bili_details.pop(record['id'], None) or await runner.crawler.get_video_info_task(aid=int(identity), bvid='', semaphore=asyncio.Semaphore(1))
+        detail = runner.bili_details.pop(record['id'], None) or await client.get_video_info(aid=int(identity))
         view = (detail or {}).get('View') or {}
         part = parse_qs(urlparse(record['url']).query).get('p', ['1'])[0]
         cid = view.get('cid')
