@@ -836,3 +836,48 @@ test('详情补全写回当前记录，已切换记录或未登录时不写', as
   })
   assert.equal(service.state.pages.bili.results[0].media.status, 'available')
 })
+
+test('推荐流按平台互不影响，新请求取消旧请求，只留在内存里', async () => {
+  const service = Object.create(StudioService.prototype)
+  const kills = []
+  Object.assign(service, {
+    feeds: new Map(),
+    feedItems: new Map(),
+    details: new Map(),
+    operations: new Map(),
+    state: { accounts: { bili: 'connected', dy: 'saved' }, pages: {} },
+  })
+  await assert.rejects(service.loadFeed('zhihu'), /暂不支持/)
+  await assert.rejects(service.loadFeed('dy'), /登录后/)
+  const old = {
+    child: { kill: (signal) => kills.push(signal) },
+    cancelled: false,
+  }
+  service.feeds.set('bili', old)
+  service.cancelFeed('bili')
+  service.cancelFeed('dy')
+  assert.equal(old.cancelled, true)
+  assert.deepEqual(kills, ['SIGTERM'])
+
+  const item = (id) => ({ id, platform: 'bili', title: id })
+  service.rememberFeed('bili', [item('a'), item('b')], true)
+  service.rememberFeed('bili', [item('c'), { id: 'x', platform: 'dy' }], false)
+  assert.deepEqual([...service.feedItems.get('bili').keys()], ['a', 'b', 'c'])
+  assert.equal(service.findItem('bili', 'c').title, 'c')
+  service.rememberFeed('bili', [item('d')], true)
+  assert.equal(service.findItem('bili', 'a'), undefined)
+  assert.equal(service.state.pages.bili, undefined)
+
+  service.state.pages.bili = {
+    id: 'r',
+    task: {},
+    results: [{ id: 'd', platform: 'bili', title: '结果页' }],
+  }
+  assert.equal(service.findItem('bili', 'd').title, '结果页')
+  service.rememberFeed(
+    'bili',
+    Array.from({ length: 700 }, (_, index) => item(`n${index}`)),
+    true,
+  )
+  assert.equal(service.feedItems.get('bili').size, 600)
+})

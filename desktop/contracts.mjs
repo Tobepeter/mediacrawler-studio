@@ -68,6 +68,7 @@ export const platforms = {
 
 export const creatorPlatforms = capabilities.creator
 export const creatorSearchPlatforms = capabilities.creatorSearch
+export const feedPlatforms = capabilities.feed
 export const creatorLimit = capabilities.creatorLimit
 
 // 仅完整主页链接；分享短链要解析后才知道是作品还是主页

@@ -3,6 +3,7 @@ import base64
 import binascii
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from itertools import count as forever
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 CAPABILITIES = json.loads(Path(__file__).with_name('platform-capabilities.json').read_text())
 CREATOR_PLATFORMS = tuple(CAPABILITIES['creator'])
 CREATOR_SEARCH_PLATFORMS = tuple(CAPABILITIES['creatorSearch'])
+FEED_PLATFORMS = tuple(CAPABILITIES['feed'])
 EMPTY_PAGE_RETRIES = 2
 
 
@@ -57,6 +59,22 @@ def creator_summary(platform, identity, name, url, source='user', **fields):
         'type': 'creator', 'platform': platform, 'id': identity, 'name': name, 'url': url, 'source': source,
         'uniqueId': '', 'avatar': '', 'signature': '', 'followers': None, 'likes': None, 'posts': None,
         'verified': '', 'private': False, **fields,
+    }
+
+
+def https_url(value):
+    if not isinstance(value, str):
+        return ''
+    return f'https:{value}' if value.startswith('//') else f'https://{value[7:]}' if value.startswith('http://') else value
+
+
+def feed_record(platform, identity, title, author, url, cover, likes, content_type):
+    """推荐流卡片只用列表接口自带的字段，正文和媒体在打开详情时补"""
+    image = https_url(cover)
+    return {
+        'id': f'{platform}:{identity}', 'platform': platform, 'title': title or '未命名作品', 'text': '', 'author': author or '',
+        'images': [image] if image.startswith('https://') else [], 'url': url, 'likes': str(likes or 0),
+        'collectedAt': datetime.now(timezone.utc).isoformat(), 'contentType': content_type, 'feed': True,
     }
 
 

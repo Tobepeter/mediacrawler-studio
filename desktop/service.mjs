@@ -10,6 +10,7 @@ import path from 'node:path'
 import {
   creatorLimit,
   creatorSearchPlatforms,
+  feedPlatforms,
   isCreatorUrl,
   platforms,
   validateRequest,
@@ -34,6 +35,8 @@ function creatorInfo(value, platform) {
   }
 }
 
+const feedMemoryLimit = 600
+
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
   operations = new Map()
@@ -46,6 +49,8 @@ export class StudioService {
   }
 
   details = new Map()
+  feeds = new Map()
+  feedItems = new Map()
   persistence = Promise.resolve()
   state = {
     policy: healthPolicy,
@@ -212,9 +217,7 @@ export class StudioService {
   mediaItem(platform, id, kind) {
     this.assertAvailable(platform)
     if (!['images', 'video'].includes(kind)) throw new Error('不支持的操作')
-    const item = this.state.pages[platform]?.results?.find(
-      (item) => item.id === id,
-    )
+    const item = this.findItem(platform, id)
     if (!item || item.platform !== platform) throw new Error('历史记录不存在')
     if (kind === 'images' && !item.images?.length)
       throw new Error('没有可下载的图片')
@@ -274,7 +277,7 @@ export class StudioService {
     if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
     await this.details.get(platform)?.cancel()
     const page = this.state.pages[platform]
-    const record = page?.results?.find((item) => item.id === id)
+    const record = this.findItem(platform, id)
     if (!record) return { code: 'unavailable' }
     if (!existsSync(this.python)) return { code: 'environment' }
     const job = this.mediaJob(platform)
@@ -282,8 +285,14 @@ export class StudioService {
     this.details.set(platform, job)
     try {
       const result = await job.run({ record, kind: 'detail' })
-      if (result.item?.id === id && result.item.platform === platform)
-        this.applyDetail(platform, page.id, result.item)
+      if (result.item?.id !== id || result.item.platform !== platform)
+        return { code: result.code || 'failed' }
+      if (this.feedItems.get(platform)?.get(id) === record) {
+        const item = { ...record, ...result.item }
+        this.feedItems.get(platform).set(id, item)
+        return { code: result.code, item }
+      }
+      this.applyDetail(platform, page?.id, result.item)
       return { code: result.code }
     } finally {
       if (this.details.get(platform) === job) this.details.delete(platform)
@@ -332,80 +341,141 @@ export class StudioService {
     if (!existsSync(python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
     const run = { kind: 'creator-search', child: null, cancelled: false }
-    const cancelled = { items: [], hasMore: false, cancelled: true }
     this.operations.set(platform, run)
     this.publish()
     try {
       await this.sessions?.stop(platform)
       const targetId = await this.windows.prepare(platform)
-      if (run.cancelled) return cancelled
-      return await new Promise((resolve, reject) => {
-        const child = this.spawnProcess(
-          python,
-          ['-u', '-m', 'desktop.worker'],
-          {
-            cwd: this.root,
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              PYTHONUNBUFFERED: '1',
-              PYTHONIOENCODING: 'utf-8',
-            },
-          },
-        )
-        run.child = child
-        let result = null
-        let message = ''
-        const timer = setTimeout(() => {
-          message = '搜索超时，请重试'
-          child.kill('SIGKILL')
-        }, 45000)
-        const lines = createInterface({ input: child.stdout })
-        lines.on('line', (line) => {
-          try {
-            const event = JSON.parse(line)
-            if (event.type === 'creators') result = event
-            else if (event.type === 'error') message = event.message
-          } catch {
-            /* 非协议输出不进入页面 */
-          }
-        })
-        child.stderr.resume()
-        child.stdin.on('error', () => {})
-        child.once('error', (error) => {
-          this.logger?.write('error', 'crawler', 'spawn-failed', error)
-          clearTimeout(timer)
-          reject(new Error('采集进程无法启动，请检查 Python 环境'))
-        })
-        child.once('close', () => {
-          clearTimeout(timer)
-          lines.close()
-          if (run.cancelled) resolve(cancelled)
-          else if (result)
-            resolve({
-              items: Array.isArray(result.items) ? result.items : [],
-              nextCursor: result.next_cursor || undefined,
-              hasMore: result.has_more === true,
-            })
-          else reject(new Error(message || '搜索失败，请重试'))
-        })
-        child.stdin.end(
-          JSON.stringify({
-            platform,
-            action: 'creator-search',
-            mode: 'search',
-            query,
-            limit: 20,
-            cursor,
-            endpoint: this.endpoint,
-            targetId,
-          }) + '\n',
-        )
+      if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
+      return await this.queryWorker(run, 'creators', '搜索', {
+        platform,
+        action: 'creator-search',
+        mode: 'search',
+        query,
+        limit: 20,
+        cursor,
+        targetId,
       })
     } finally {
       this.operations.delete(platform)
       this.publish()
     }
+  }
+
+  // 一次性查询 worker：结果只回给调用方，取消时返回 cancelled，不进历史
+  queryWorker(run, resultEvent, label, payload) {
+    return new Promise((resolve, reject) => {
+      const child = this.spawnProcess(
+        this.python,
+        ['-u', '-m', 'desktop.worker'],
+        {
+          cwd: this.root,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            PYTHONUNBUFFERED: '1',
+            PYTHONIOENCODING: 'utf-8',
+          },
+        },
+      )
+      run.child = child
+      let result = null
+      let message = ''
+      const timer = setTimeout(() => {
+        message = `${label}超时，请重试`
+        child.kill('SIGKILL')
+      }, 45000)
+      const lines = createInterface({ input: child.stdout })
+      lines.on('line', (line) => {
+        try {
+          const event = JSON.parse(line)
+          if (event.type === resultEvent) result = event
+          else if (event.type === 'error') message = event.message
+        } catch {
+          /* 非协议输出不进入页面 */
+        }
+      })
+      child.stderr.resume()
+      child.stdin.on('error', () => {})
+      child.once('error', (error) => {
+        this.logger?.write('error', 'crawler', 'spawn-failed', error)
+        clearTimeout(timer)
+        reject(new Error('采集进程无法启动，请检查 Python 环境'))
+      })
+      child.once('close', () => {
+        clearTimeout(timer)
+        lines.close()
+        if (run.cancelled)
+          resolve({ items: [], hasMore: false, cancelled: true })
+        else if (result)
+          resolve({
+            items: Array.isArray(result.items) ? result.items : [],
+            nextCursor: result.next_cursor || undefined,
+            hasMore: result.has_more === true,
+          })
+        else reject(new Error(message || `${label}失败，请重试`))
+      })
+      child.stdin.end(
+        JSON.stringify({ ...payload, endpoint: this.endpoint }) + '\n',
+      )
+    })
+  }
+
+  // 推荐流只读、不跳转页面，不占平台互斥；同平台只保留最新一次
+  async loadFeed(platform, cursor) {
+    if (!feedPlatforms.includes(platform)) throw new Error('该平台暂不支持推荐')
+    if (
+      cursor !== undefined &&
+      (typeof cursor !== 'string' || !cursor || cursor.length > 4096)
+    )
+      throw new Error('翻页位置无效，请重试')
+    if (this.state.accounts[platform] !== 'connected')
+      throw new Error('登录后才能查看推荐')
+    if (!existsSync(this.python))
+      throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
+    this.cancelFeed(platform)
+    const run = { child: null, cancelled: false }
+    this.feeds.set(platform, run)
+    try {
+      const targetId = await this.windows.prepare(platform)
+      if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
+      const page = await this.queryWorker(run, 'feed', '获取推荐', {
+        platform,
+        action: 'feed',
+        mode: 'search',
+        query: '',
+        limit: 20,
+        cursor,
+        targetId,
+      })
+      if (!page.cancelled) this.rememberFeed(platform, page.items, !cursor)
+      return page
+    } finally {
+      if (this.feeds.get(platform) === run) this.feeds.delete(platform)
+    }
+  }
+
+  cancelFeed(platform) {
+    const run = this.feeds.get(platform)
+    if (!run) return
+    run.cancelled = true
+    run.child?.kill('SIGTERM')
+  }
+
+  // 卡片数据只留在内存，供详情和下载按 ID 找回，不写历史
+  rememberFeed(platform, items, reset) {
+    const known = reset ? new Map() : this.feedItems.get(platform) || new Map()
+    for (const item of items)
+      if (item?.id && item.platform === platform) known.set(item.id, item)
+    while (known.size > feedMemoryLimit) known.delete(known.keys().next().value)
+    this.feedItems.set(platform, known)
+  }
+
+  findItem(platform, id) {
+    return (
+      this.state.pages[platform]?.results?.find((item) => item.id === id) ||
+      this.feedItems.get(platform)?.get(id)
+    )
   }
 
   async runMedia(record, options) {
@@ -733,6 +803,7 @@ export class StudioService {
 
   async stopAll() {
     await Promise.all([...this.details.values()].map((job) => job.cancel()))
+    for (const platform of this.feeds.keys()) this.cancelFeed(platform)
     await Promise.all(
       [...this.operations.keys()].map((platform) => this.cancel(platform)),
     )

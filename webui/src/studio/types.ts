@@ -38,6 +38,13 @@ export interface ContentComment {
 export type CommentStatus =
   'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
+export interface FeedPage {
+  items: ContentItem[]
+  nextCursor?: string
+  hasMore: boolean
+  cancelled?: boolean
+}
+
 export interface ContentItem {
   id: string
   platform: Platform
@@ -49,6 +56,7 @@ export interface ContentItem {
   likes: string
   collectedAt: string
   contentType?: string
+  feed?: boolean
   media?: {
     status: string
     variants: {
@@ -217,7 +225,12 @@ export interface StudioBridge {
     requestId: string,
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
-  loadDetail?(platform: Platform, id: string): Promise<{ code: string }>
+  loadDetail?(
+    platform: Platform,
+    id: string,
+  ): Promise<{ code: string; item?: ContentItem }>
+  loadFeed?(platform: Platform, cursor?: string): Promise<FeedPage>
+  cancelFeed?(platform: Platform): Promise<void>
   cancelDetail?(platform: Platform, id: string): Promise<void>
   clearSessions(): Promise<{ localOnly: boolean }>
   logout(platform: Platform): Promise<{ localOnly: boolean }>

@@ -160,6 +160,22 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         headers = headers or self.headers
         return await self.request(method="POST", url=f"{self._host}{uri}", data=data, headers=headers)
 
+    async def get_home_feed(self, page: int = 1, count: int = 20) -> Dict:
+        """get the recommended feed shown on the jingxuan page"""
+        data = {
+            "module_id": 3003101,
+            "count": count,
+            "filterGids": "",
+            "presented_ids": "",
+            "refresh_index": page,
+            "refer_id": "",
+            "refer_type": 10,
+            "awemePcRecRawData": '{"is_client":false}',
+            "Seo-Flag": 0,
+            "tag_id": "",
+        }
+        return await self.post("/aweme/v2/web/module/feed/", data)
+
     async def pong(self, browser_context: BrowserContext) -> bool:
         local_storage = await self.playwright_page.evaluate("() => window.localStorage")
         if local_storage.get("HasUserLogin", "") == "1":

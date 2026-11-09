@@ -226,6 +226,24 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             method="GET", url=full_url, headers=headers
         )
 
+    async def get_home_feed(self, cursor: str = "", index: int = 0, num: int = 20) -> Dict:
+        """get the recommended feed shown on the explore page"""
+        data = {
+            "cursor_score": cursor,
+            "num": num,
+            "refresh_type": 1 if not cursor else 3,
+            "note_index": index,
+            "unread_begin_note_id": "",
+            "unread_end_note_id": "",
+            "unread_note_count": 0,
+            "category": "homefeed_recommend",
+            "search_key": "",
+            "need_num": max(num - 8, 1),
+            "image_formats": ["jpg", "webp", "avif"],
+            "need_filter_image": False,
+        }
+        return await self.post("/api/sns/web/v1/homefeed", data)
+
     async def post(self, uri: str, data: dict, **kwargs) -> Dict:
         """
         POST request, signs request headers

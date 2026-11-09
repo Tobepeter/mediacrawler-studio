@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('studio', {
   stopLogin: (platform) => ipcRenderer.invoke('studio:stop-login', platform),
   resolveVideo: (platform, id, requestId) =>
     ipcRenderer.invoke('studio:resolve-video', platform, id, requestId),
+  loadFeed: (platform, cursor) =>
+    ipcRenderer.invoke('studio:load-feed', platform, cursor),
+  cancelFeed: (platform) => ipcRenderer.invoke('studio:cancel-feed', platform),
   loadDetail: (platform, id) =>
     ipcRenderer.invoke('studio:load-detail', platform, id),
   cancelDetail: (platform, id) =>

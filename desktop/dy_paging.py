@@ -3,7 +3,7 @@ import re
 from urllib.parse import urlparse
 
 from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, announce_profile, count, creator_summary, decode_cursor,
-                            encode_cursor, invalid_cursor, is_index, pick_by_name, walk)
+                            encode_cursor, feed_record, invalid_cursor, is_index, pick_by_name, walk)
 
 SEARCH_REQUESTS_PER_CALL = 3
 SEARCH_PAGE_SIZE = 10
@@ -233,3 +233,24 @@ async def collect_creator(runner, reference, cursor=None):
             runner.dy_details[key] = aweme
 
     await walk(runner, fetch, save, publish, state.get('m', ''), state.get('s', 0), empty_retries=EMPTY_PAGE_RETRIES, **LABEL)
+
+
+async def load_feed(runner, cursor=None):
+    from media_platform.douyin.media import extract_cover_url
+    state = decode_cursor(cursor, 'dy-feed')
+    page = state.get('p', 1)
+    if not is_index(page, 1):
+        raise invalid_cursor()
+    response = await checked(runner.client.get_home_feed(page=page))
+    items = []
+    for row in response.get('aweme_list') or []:
+        identity = row.get('aweme_id')
+        # 直播间卡片没有作品 ID
+        if identity and not row.get('cell_room'):
+            items.append(feed_record(
+                'dy', identity, str(row.get('desc') or '')[:80], (row.get('author') or {}).get('nickname'),
+                f'https://www.douyin.com/video/{identity}', extract_cover_url(row), (row.get('statistics') or {}).get('digg_count'),
+                'note' if row.get('images') else 'video',
+            ))
+    more = response.get('has_more') not in (False, 0)
+    return {'items': items, 'next_cursor': encode_cursor('dy-feed', p=page + 1) if more else None, 'has_more': more}

@@ -1,6 +1,7 @@
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
 import { queryClient } from './query-client'
-import type { CreatorPage, CreatorSummary, Platform } from './types'
+import { mergePages } from './merge-pages'
+import type { CreatorPage, Platform } from './types'
 
 const queryKey = ['creator-search'] as const
 const noop = () => {}
@@ -38,20 +39,8 @@ function request(
 }
 
 // 接口是混排结果，不同页可能重复；整页都重复时 stalled，交给用户决定是否继续
-function selectCreators(data: InfiniteData<CreatorPage>) {
-  const seen = new Set<string>()
-  let added = 0
-  const items: CreatorSummary[] = data.pages.flatMap((page) => {
-    added = 0
-    return page.items.filter((item) => {
-      if (seen.has(item.id)) return false
-      seen.add(item.id)
-      added++
-      return true
-    })
-  })
-  return { items, stalled: added === 0 }
-}
+const selectCreators = (data: InfiniteData<CreatorPage>) =>
+  mergePages(data.pages)
 
 export function useCreatorSearch(platform: Platform, keyword: string) {
   return useInfiniteQuery({

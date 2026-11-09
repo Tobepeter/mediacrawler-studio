@@ -11,6 +11,7 @@ import { CreatorField } from './creator-ui'
 import {
   creatorLimit,
   creatorPlatforms,
+  feedPlatforms,
   creatorPresets,
   extractShareUrl,
   isAutoForm,
@@ -91,6 +92,9 @@ export function CollectForm() {
   const clearQuery = () => {
     setCleared(true)
     updateForm({ query: '', mode: 'search', limit: limitFor('search') })
+    // 清空输入即回到推荐流；结果仍在历史里
+    if (page && feedPlatforms.includes(form.platform))
+      void useStudio.getState().clearResults()
   }
   const updateQuery = (input: string) => {
     const query = extractShareUrl(input)

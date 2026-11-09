@@ -1,7 +1,7 @@
 """小红书关键词搜索与博主主页的游标分页；列表只有摘要，每条笔记再取一次详情"""
 import asyncio
 
-from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, creator_summary, decode_cursor, encode_cursor, invalid_cursor,
+from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, creator_summary, decode_cursor, encode_cursor, feed_record, invalid_cursor,
                             is_index, walk)
 
 MAX_PAGES = 10
@@ -90,3 +90,30 @@ async def collect_creator(runner, reference, cursor=None):
         await runner.collect_xhs_note(row.get('note_id'), row.get('xsec_source') or 'pc_user', row.get('xsec_token'), semaphore)
 
     await walk(runner, fetch, save, publish, position, skip, empty_retries=EMPTY_PAGE_RETRIES, **LABEL)
+
+
+async def load_feed(runner, cursor=None):
+    from media_platform.xhs.exception import DataFetchError
+    state = decode_cursor(cursor, 'xhs-feed')
+    position, index = state.get('c', ''), state.get('i', 0)
+    if not valid_text(position) or not is_index(index):
+        raise invalid_cursor()
+    try:
+        response = await runner.client.get_home_feed(cursor=position, index=index)
+    except DataFetchError as error:
+        raise CreatorError('PLATFORM_ERROR', '小红书暂时没有返回数据，请稍后重试', cause=str(error)[:300]) from None
+    rows = [row for row in response.get('items') or [] if row.get('model_type') == 'note' and row.get('id')]
+    items = []
+    for row in rows:
+        card = row.get('note_card') or {}
+        user, cover = card.get('user') or {}, card.get('cover') or {}
+        token = row.get('xsec_token') or ''
+        items.append(feed_record(
+            'xhs', row['id'], card.get('display_title'), user.get('nickname') or user.get('nick_name'),
+            f"https://www.xiaohongshu.com/explore/{row['id']}?xsec_token={token}&xsec_source=pc_feed",
+            cover.get('url_default') or cover.get('url_pre') or cover.get('url'), (card.get('interact_info') or {}).get('liked_count'),
+            'video' if card.get('type') == 'video' else 'note',
+        ))
+    following = str(response.get('cursor_score') or '')
+    more = bool(rows and following)
+    return {'items': items, 'next_cursor': encode_cursor('xhs-feed', c=following, i=index + len(rows)) if more else None, 'has_more': more}

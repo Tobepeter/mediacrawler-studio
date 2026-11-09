@@ -1,3 +1,4 @@
+import { ipcFailure as failure } from './ipc-failure'
 import {
   useCallback,
   useEffect,
@@ -24,14 +25,6 @@ import { CreatorAvatar, useCreatorStats } from './creator-ui'
 import { useStudio } from './store'
 import { settleCreatorSearch, useCreatorSearch } from './use-creator-search'
 import type { CreatorSummary, Platform } from './types'
-
-const failure = (error: unknown) =>
-  error instanceof Error
-    ? error.message.replace(
-        /^Error invoking remote method '[^']+': Error: /,
-        '',
-      )
-    : '搜索失败，请重试'
 
 function CreatorRow(props: {
   name: string

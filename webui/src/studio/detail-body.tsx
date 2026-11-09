@@ -1,3 +1,4 @@
+import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from 'react-i18next'
 import { Heart, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -7,6 +8,22 @@ import type { ContentComment, ContentItem } from './types'
 export function DetailBody({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
 
+  // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
+  if (item.feed && !item.text && !item.media)
+    return (
+      <div className='space-y-2' role='status' aria-busy='true'>
+        <span className='sr-only'>{t('加载中')}</span>
+        <Skeleton className='h-4 w-full' />
+        <Skeleton className='h-4 w-full' />
+        <Skeleton className='h-4 w-2/3' />
+      </div>
+    )
+  if (item.feed && !item.text && item.media?.status === 'failed')
+    return (
+      <p className='text-sm text-muted-foreground'>
+        {t('正文暂时没有加载出来，可以查看原文')}
+      </p>
+    )
   const body = (
     <p className='whitespace-pre-wrap break-words text-sm leading-relaxed'>
       {item.text || t('这条作品没有正文')}

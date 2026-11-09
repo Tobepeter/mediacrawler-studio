@@ -163,6 +163,11 @@ class DesktopCrawler:
                 self.emit("login-required")
             self.emit("done", message="登录状态检查完成")
             return
+        if self.request["action"] == "feed":
+            from desktop.creators import load_feed
+            self.emit("feed", **await load_feed(self, self.request.get("cursor")))
+            self.emit("done", message="推荐已更新")
+            return
         if self.request["action"] == "creator-search":
             from desktop.creators import CreatorError, search_creators
             if not await self.session_confirmed():

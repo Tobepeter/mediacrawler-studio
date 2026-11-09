@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { creatorPlatforms } from './creator-options'
 import { useStudio } from './store'
+import { updateFeedItem } from './use-feed'
 import type { ContentItem } from './types'
 
 const noop = () => {}
@@ -26,7 +27,15 @@ export function useDetailMedia(item: ContentItem) {
         () => void window.studio?.cancelDetail?.(platform, id).catch(noop),
         { once: true },
       )
-      return window.studio!.loadDetail!(platform, id)
+      return window.studio!.loadDetail!(platform, id).then((result) => {
+        // 推荐流不在页面记录里，要由这里写回详情和列表
+        if (result.item) {
+          updateFeedItem(result.item)
+          if (useStudio.getState().selected?.id === id)
+            useStudio.getState().patch({ selected: result.item })
+        }
+        return result
+      })
     },
   }).isFetching
 }

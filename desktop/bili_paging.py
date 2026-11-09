@@ -4,7 +4,7 @@ import re
 from urllib.parse import urlparse
 
 from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, announce_profile, count, creator_summary, decode_cursor,
-                            encode_cursor, invalid_cursor, is_index, pick_by_name, walk)
+                            encode_cursor, feed_record, https_url, invalid_cursor, is_index, pick_by_name, walk)
 
 SEARCH_MAX_PAGES = 10
 SEARCH_REQUESTS_PER_CALL = 3
@@ -28,10 +28,6 @@ async def checked(call):
     return response
 
 
-def https(url):
-    return f'https:{url}' if isinstance(url, str) and url.startswith('//') else url if isinstance(url, str) else ''
-
-
 def plain(value):
     return html.unescape(re.sub(r'<[^>]+>', '', str(value or '')))
 
@@ -49,7 +45,7 @@ def summarize_row(row):
     official = row.get('official_verify') or {}
     return creator_summary(
         'bili', identity, plain(row.get('uname')), SPACE + identity,
-        avatar=https(row.get('upic')), signature=plain(row.get('usign')), followers=count(row.get('fans')),
+        avatar=https_url(row.get('upic')), signature=plain(row.get('usign')), followers=count(row.get('fans')),
         posts=count(row.get('videos')), verified=str(official.get('desc') or ''),
     )
 
@@ -135,7 +131,7 @@ async def creator_profile(runner, identity):
     official = card.get('Official') or {}
     return creator_summary(
         'bili', identity, plain(card.get('name')), SPACE + identity,
-        avatar=https(card.get('face')), signature=plain(card.get('sign')), followers=count(response.get('follower')),
+        avatar=https_url(card.get('face')), signature=plain(card.get('sign')), followers=count(response.get('follower')),
         likes=count(response.get('like_num')), posts=count(response.get('archive_count')), verified=str(official.get('title') or ''),
     )
 
@@ -197,3 +193,20 @@ async def collect_creator(runner, reference, cursor=None):
         await runner.collect_bili_video(row.get('aid'))
 
     await walk(runner, fetch, save, publish, start, state.get('s', 0), empty_retries=EMPTY_PAGE_RETRIES, **LABEL)
+
+
+async def load_feed(runner, cursor=None):
+    state = decode_cursor(cursor, 'bili-feed')
+    page = state.get('p', 1)
+    if not is_index(page, 1):
+        raise invalid_cursor()
+    response = await checked(runner.client.get_home_feed(page=page))
+    items = []
+    for row in response.get('item') or []:
+        # 推荐里还有直播和广告位，只保留能打开详情的视频
+        if row.get('goto') == 'av' and row.get('id') and row.get('bvid'):
+            items.append(feed_record(
+                'bili', row['id'], plain(row.get('title')), (row.get('owner') or {}).get('name'),
+                f"https://www.bilibili.com/video/{row['bvid']}", row.get('pic'), (row.get('stat') or {}).get('like'), 'video',
+            ))
+    return {'items': items, 'next_cursor': encode_cursor('bili-feed', p=page + 1), 'has_more': True}

@@ -36,6 +36,10 @@ def first_page(args, kwargs):
     return kwargs.get('page', 1) == 1
 
 
+def first_feed_page(args, kwargs):
+    return not kwargs.get('cursor')
+
+
 def unwrapped(error):
     attempt = getattr(error, 'last_attempt', None)
     return (attempt.exception() if attempt else None) or error
@@ -80,6 +84,10 @@ RULES = {
         key='dy-search', fresh_gap=(10, 15), page_gap=(6, 10), is_fresh=first_search_page,
         window_limit=20, window_seconds=600, cooldown_seconds=1800,
     ),
+    # 推荐流和搜索算同一个用户在刷：共用时间线和上限，只有用户滚动才翻页
+    ('bili', 'get_home_feed'): Rule(key='bili', fresh_gap=(4, 7), page_gap=(3, 6), is_fresh=first_page, window_limit=30, window_seconds=600, **BILI_COOLDOWN),
+    ('dy', 'get_home_feed'): Rule(key='dy-search', fresh_gap=(4, 8), page_gap=(6, 10), is_fresh=first_page, window_limit=20, window_seconds=600, cooldown_seconds=1800),
+    ('xhs', 'get_home_feed'): Rule(key='xhs', fresh_gap=(4, 8), page_gap=(4, 7), is_fresh=first_feed_page, window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),
     # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
     ('xhs', 'get_note_by_keyword'): Rule(

@@ -196,6 +196,24 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.get(uri, post_data)
 
+    async def get_home_feed(self, page: int = 1, page_size: int = 20) -> Dict:
+        """get the recommended feed shown on the home page"""
+        uri = "/x/web-interface/wbi/index/top/feed/rcmd"
+        post_data = {
+            "web_location": 1430650,
+            "y_num": 5,
+            "fresh_type": 4,
+            "feed_version": "V8",
+            "fresh_idx_1h": page,
+            "fetch_row": page,
+            "fresh_idx": page,
+            "brush": page,
+            "homepage_ver": 1,
+            "ps": page_size,
+            "last_y_num": 5,
+        }
+        return await self.get(uri, post_data)
+
     async def search_user_by_keyword(self, keyword: str, page: int = 1, page_size: int = 20) -> Dict:
         """search creators by keyword"""
         uri = "/x/web-interface/wbi/search/type"

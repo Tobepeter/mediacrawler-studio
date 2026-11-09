@@ -150,6 +150,10 @@ app
       service.resolveVideo(platform, id, requestId),
     )
     handle('cancel-video', (requestId) => service.cancelVideo(requestId))
+    handle('load-feed', (platform, cursor) =>
+      service.loadFeed(platform, cursor),
+    )
+    handle('cancel-feed', (platform) => service.cancelFeed(platform))
     handle('load-detail', (platform, id) => service.loadDetail(platform, id))
     handle('cancel-detail', (platform, id) =>
       service.cancelDetail(platform, id),

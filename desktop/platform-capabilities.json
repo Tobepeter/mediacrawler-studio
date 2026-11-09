@@ -1,6 +1,7 @@
 {
   "creator": ["bili", "dy", "xhs"],
   "creatorSearch": ["bili", "dy"],
+  "feed": ["bili", "dy", "xhs"],
   "creatorLimit": 200,
   "hosts": {
     "bili": ["bilibili.com", "b23.tv"],
