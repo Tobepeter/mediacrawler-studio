@@ -25,7 +25,7 @@ uv run mediacrawler collect --platform bili --url https://www.bilibili.com/video
 - `auth status` 在线检查已有登录；`auth logout` 先在平台页面执行退出并核查登录状态，再关闭浏览器、删除指定 CLI profile，其他账号和 Electron 不受影响
 - stdout 仅输出结果，默认 JSONL；`--format json` 输出数组。stderr 输出进度、二维码及错误
 
-## 关键词分页（当前支持 dy、xhs）
+## 关键词分页（当前支持 dy、bili、xhs）
 
 ```sh
 uv run mediacrawler search --query 罗翔

@@ -14,7 +14,7 @@ auth = typer.Typer(no_args_is_help=True)
 session = typer.Typer(no_args_is_help=True)
 app.add_typer(auth, name='auth')
 app.add_typer(session, name='session')
-creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品，当前支持 dy')
+creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品；posts 支持 dy、bili、xhs、zhihu，search 支持 dy、bili')
 app.add_typer(creator, name='creator')
 
 

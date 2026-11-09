@@ -18,6 +18,7 @@ import { panelDialogClass } from './studio/panel-dialog'
 import { Results } from './studio/results'
 import { TaskStatus } from './studio/task-status'
 import { ContentDetail } from './studio/content-detail'
+import { InstanceHandoff } from './studio/instance-handoff'
 import { DownloadFeedback } from './studio/media-download'
 import { LoginDialog } from './studio/login-dialog'
 import { LoginPanel } from './studio/login-panel'
@@ -125,6 +126,7 @@ export default function App() {
         <TaskStatus />
       </footer>
       <ContentDetail />
+      <InstanceHandoff />
       <DownloadFeedback />
       <LoginDialog />
 

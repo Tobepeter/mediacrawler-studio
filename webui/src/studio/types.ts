@@ -174,6 +174,8 @@ export interface StudioState {
     results?: FeatureResult[]
     waitSeconds?: number
   }
+  // 另一个版本正等着启动
+  handoff?: { build: 'dev' | 'packaged' }
   healthCheck?: {
     stage: 'network' | 'platforms' | 'done'
     completed: number
@@ -226,6 +228,7 @@ export interface HealthReport {
 export interface StudioBridge {
   setLoginForeground?(platform: Platform | null): Promise<void>
   healthCheck?(): Promise<HealthReport>
+  resolveHandoff?(accepted: boolean): Promise<void>
   checkFeatures?(
     platform: Platform,
   ): Promise<{ items: FeatureResult[]; cancelled?: boolean }>

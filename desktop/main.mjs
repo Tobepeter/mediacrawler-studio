@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import {
   app,
   BrowserWindow,
@@ -22,6 +23,7 @@ import { installPlaybackHeaders } from './playback-headers.mjs'
 import { HealthCheck } from './health-check.mjs'
 import { resolveCreatorLink } from './share-links.mjs'
 import { CliInstall } from './cli-install.mjs'
+import { acquireInstance } from './single-instance.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 app.setName('MediaCrawler Studio')
@@ -33,15 +35,28 @@ if (app.isPackaged && !process.env.STUDIO_PYTHON) {
   )
 }
 // 开发版和安装版共用登录态、历史和缓存，只有日志分开；同一份数据同时只能开一个
+const build = app.isPackaged ? 'packaged' : 'dev'
 app.setPath(
   'userData',
   process.env.STUDIO_USER_DATA ||
     path.join(app.getPath('appData'), 'mediacrawler-studio'),
 )
-if (!app.requestSingleInstanceLock()) {
-  console.error('MediaCrawler Studio 已在运行，请先退出再启动')
-  app.exit(0)
+const instance = acquireInstance(app, {
+  build,
+  // 安装版通知完就退出，用户确认后再打开一次；只有开发版退出会带走开发服务，需要留着等
+  wait: !app.isPackaged,
+  lockFile: path.join(app.getPath('userData'), 'SingletonLock'),
+  onWaiting: () =>
+    console.error('MediaCrawler Studio 已在运行，请在已打开的窗口里确认切换'),
+})
+if (instance === 'released') {
+  // 开发版由 npm 脚本托管，这个进程退出会带走 Vite，所以留着等新进程结束
+  const { status } = spawnSync(process.execPath, process.argv.slice(1), {
+    stdio: 'inherit',
+  })
+  app.exit(status ?? 0)
 }
+if (instance !== 'owner') app.exit(0)
 const logsDir = path.join(
   app.getPath('userData'),
   app.isPackaged ? 'logs' : 'logs-dev',
@@ -349,9 +364,19 @@ app
     createWindow()
     mainWindow.on('closed', () => app.quit())
     mainWindow.on('focus', () => service.sessions?.wake())
-    app.on('second-instance', () => {
+    app.on('second-instance', (_event, _argv, _cwd, data) => {
       mainWindow.show()
       mainWindow.focus()
+      // 另一个版本等着启动，交给用户决定；同版本重复打开只需切到前台
+      if (data?.build && data.build !== build) {
+        service.state.handoff = { build: data.build }
+        service.publish()
+      }
+    })
+    handle('resolve-handoff', (accepted) => {
+      delete service.state.handoff
+      service.publish()
+      if (accepted === true) app.quit()
     })
     app.on('activate', () => {
       if (mainWindow.isDestroyed()) createWindow()

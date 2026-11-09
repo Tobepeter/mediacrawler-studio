@@ -422,5 +422,12 @@
   "平台能否打开、二维码能否取到，不需要登录": "Whether the site opens and its QR code loads. No sign-in needed",
   "接口返回的条数和字段是否正常": "Whether the API returns the expected count and fields",
   "正文和图片能否拿到": "Whether text and images load",
-  "媒体地址是否可用，不会真的下载": "Whether media URLs work. Nothing is downloaded"
+  "媒体地址是否可用，不会真的下载": "Whether media URLs work. Nothing is downloaded",
+  "开发版想要启动": "The dev build wants to start",
+  "安装版想要启动": "The installed app wants to start",
+  "两个版本共用登录态和数据，同一时间只能运行一个": "Both builds share sessions and data, so only one can run at a time",
+  "继续使用当前版本": "Keep using this one",
+  "退出并切换": "Quit and switch",
+  "两个版本共用登录态和数据，同一时间只能运行一个。退出后开发服务也会结束，需要再打开一次安装版": "Both builds share sessions and data, so only one can run at a time. Quitting also stops the dev server. Open the installed app again afterwards.",
+  "退出开发版": "Quit dev build"
 }

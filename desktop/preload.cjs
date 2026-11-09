@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('studio', {
   platform: process.platform,
   healthCheck: () => ipcRenderer.invoke('studio:health-check'),
+  resolveHandoff: (accepted) =>
+    ipcRenderer.invoke('studio:resolve-handoff', accepted),
   cliStatus: () => ipcRenderer.invoke('studio:cli-status'),
   cliInstall: (action) => ipcRenderer.invoke('studio:cli-install', action),
   openLogs: () => ipcRenderer.invoke('studio:open-logs'),
