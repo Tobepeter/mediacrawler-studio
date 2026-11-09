@@ -91,3 +91,35 @@ async def test_forged_cursor_is_rejected():
     run = runner()
     with pytest.raises(CreatorError):
         await zhihu_paging.collect_creator(run, '', encode_cursor('zhihu-posts', c='tok', m=[9, 0]))
+
+
+async def test_feed_keeps_answers_with_text_and_cursor():
+    response = {
+        'data': [{'target': answer(1)}, {'target': {'id': 9, 'type': 'feed_advert'}}, {'type': 'feed'}],
+        'paging': {'is_end': False, 'next': 'https://www.zhihu.com/api/v3/feed/topstory/recommend?after_id=5&page_number=2&session_token=s1'},
+    }
+    run = runner(get_home_feed=AsyncMock(return_value=response))
+    page = await zhihu_paging.load_feed(run)
+    assert [item['id'] for item in page['items']] == ['zhihu:answer:1']
+    item = page['items'][0]
+    assert item['text'] == '正文' and item['author'] == '答主' and item['feed'] is True
+    assert item['authorUrl'] == 'https://www.zhihu.com/people/tok'
+    assert item['url'] == 'https://www.zhihu.com/question/7/answer/1'
+    state = decode_cursor(page['next_cursor'], 'zhihu-feed')
+    assert (state['p'], state['a'], state['t']) == (2, 5, 's1')
+    await zhihu_paging.load_feed(run, page['next_cursor'])
+    run.client.get_home_feed.assert_awaited_with(page=2, after_id=5, session_token='s1')
+
+
+async def test_empty_feed_stops_paging():
+    run = runner(get_home_feed=AsyncMock(return_value={'data': [], 'paging': {'is_end': False}}))
+    page = await zhihu_paging.load_feed(run)
+    assert page['has_more'] is False and page['next_cursor'] is None
+
+
+async def test_retry_exhausted_becomes_platform_error():
+    from tenacity import RetryError
+    run = runner(get_home_feed=AsyncMock(side_effect=RetryError(None)))
+    with pytest.raises(CreatorError) as error:
+        await zhihu_paging.load_feed(run)
+    assert error.value.code == 'PLATFORM_ERROR'

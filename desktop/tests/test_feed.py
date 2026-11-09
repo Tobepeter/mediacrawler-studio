@@ -71,11 +71,11 @@ async def test_xhs_feed_ends_without_cursor():
 
 async def test_unsupported_platform_rejected():
     with pytest.raises(CreatorError) as error:
-        await load_feed(task('zhihu'))
+        await load_feed(task('wb'))
     assert error.value.code == 'UNSUPPORTED_PLATFORM'
 
 
-@pytest.mark.parametrize('platform', ['bili', 'dy', 'xhs'])
+@pytest.mark.parametrize('platform', ['bili', 'dy', 'xhs', 'zhihu'])
 def test_feed_has_its_own_slow_rule(platform):
     rule = RULES[(platform, 'get_home_feed')]
     assert rule.window_limit and rule.page_gap[0] >= 3

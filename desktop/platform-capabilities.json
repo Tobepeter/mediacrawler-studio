@@ -2,7 +2,7 @@
   "creator": ["bili", "dy", "xhs", "zhihu"],
   "pagedSearch": ["bili", "dy", "xhs"],
   "creatorSearch": ["bili", "dy"],
-  "feed": ["bili", "dy", "xhs"],
+  "feed": ["bili", "dy", "xhs", "zhihu"],
   "creatorLimit": 200,
   "hosts": {
     "bili": ["bilibili.com", "b23.tv"],

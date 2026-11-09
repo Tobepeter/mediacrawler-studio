@@ -94,6 +94,7 @@ RULES = {
     ('xhs', 'get_home_feed'): Rule(key='xhs', fresh_gap=(4, 8), page_gap=(4, 7), is_fresh=first_feed_page, window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
     # 抖音共用一条时间线，验证后详情、评论、主页也要一起停；文件名沿用 dy-search，升级时不丢正在进行的冷却
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-search', page_gap=(2, 4)),
+    ('zhihu', 'get_home_feed'): Rule(key='zhihu', fresh_gap=(4, 8), page_gap=(4, 7), is_fresh=first_page, window_limit=20, window_seconds=600, name='知乎'),
     # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
     ('xhs', 'get_note_by_keyword'): Rule(
         key='xhs', fresh_gap=(8, 12), page_gap=(4, 7), is_fresh=first_page,

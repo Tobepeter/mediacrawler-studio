@@ -383,6 +383,22 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
                 await asyncio.sleep(crawl_interval)
         return all_sub_comments
 
+    async def get_home_feed(self, page: int = 1, after_id: int = 0, session_token: str = "") -> Dict:
+        """
+        Get the logged-in user's recommended feed
+        Args:
+            page: Page number, starts at 1
+            after_id: Offset returned by the previous page
+            session_token: Feed session returned by the previous page
+
+        Returns:
+
+        """
+        params = {"action": "down", "ad_interval": -10, "after_id": after_id, "desktop": "true", "page_number": page}
+        if session_token:
+            params["session_token"] = session_token
+        return await self.get("/api/v3/feed/topstory/recommend", params)
+
     async def get_creator_info(self, url_token: str) -> Optional[ZhihuCreator]:
         """
         Get creator information

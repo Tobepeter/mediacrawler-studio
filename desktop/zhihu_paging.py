@@ -1,7 +1,12 @@
 """知乎博主主页：回答、文章、视频依次翻页，列表自带正文，不用逐条请求详情"""
 import re
 
-from desktop.paging import CreatorError, Page, announce_profile, count, creator_summary, decode_cursor, encode_cursor, invalid_cursor, is_index, walk
+from urllib.parse import parse_qs, urlparse
+
+from tenacity import RetryError
+
+from desktop.paging import (CreatorError, Page, announce_profile, count, creator_summary, decode_cursor, encode_cursor, feed_record, https_url, invalid_cursor,
+                            is_index, walk)
 
 PEOPLE = 'https://www.zhihu.com/people/'
 TABS = ('answers', 'articles', 'videos')
@@ -45,7 +50,8 @@ async def checked(call):
     from media_platform.zhihu.exception import DataFetchError, ForbiddenError
     try:
         return await call
-    except (DataFetchError, ForbiddenError) as error:
+    # 上游 get 带重试，失败时外层拿到的是 RetryError
+    except (DataFetchError, ForbiddenError, RetryError) as error:
         raise CreatorError('PLATFORM_ERROR', '知乎暂时没有返回数据，请稍后重试', cause=str(error)[:300]) from None
 
 
@@ -103,3 +109,34 @@ async def collect_creator(runner, reference, cursor=None):
             tab, offset = following
 
     await walk(runner, fetch, collector.save, publish, start, state.get('s', 0), one_page=bool(runner.request.get('auto')), **LABEL)
+
+
+def card(target, item):
+    url = f'https://www.zhihu.com/zvideo/{item.content_id}' if item.content_type == 'zvideo' else item.content_url
+    record = feed_record(
+        'zhihu', f'{item.content_type}:{item.content_id}', item.title, item.user_nickname, url,
+        (item.image_list or [target.get('thumbnail')])[0], item.voteup_count, item.content_type, author_url(target.get('author')),
+    )
+    # 接口自带正文和配图，卡片一次给全，打开详情不用再请求
+    images = [https_url(image) for image in item.image_list]
+    return {**record, 'text': item.content_text or item.desc, 'images': [image for image in images if image.startswith('https://')] or record['images']}
+
+
+async def load_feed(runner, cursor=None):
+    state = decode_cursor(cursor, 'zhihu-feed')
+    page, after, session = state.get('p', 1), state.get('a', 0), state.get('t', '')
+    if not is_index(page, 1) or not is_index(after) or not isinstance(session, str):
+        raise invalid_cursor()
+    response = await checked(runner.client.get_home_feed(page=page, after_id=after, session_token=session))
+    items = []
+    for row in (response or {}).get('data') or []:
+        target = row.get('target') or {}
+        # 推荐里还混有广告和圈子卡片，只留能打开的回答、文章和视频
+        for item in runner.client._extractor.extract_content_list_from_creator([target]):
+            if item.content_id and item.title:
+                items.append(card(target, item))
+    paging = (response or {}).get('paging') or {}
+    query = parse_qs(urlparse(paging.get('next') or '').query)
+    following = encode_cursor('zhihu-feed', p=page + 1, a=int((query.get('after_id') or [after + len(items)])[0]), t=(query.get('session_token') or [session])[0])
+    more = bool(items) and paging.get('is_end') is not True
+    return {'items': items, 'next_cursor': following if more else None, 'has_more': more}
