@@ -104,7 +104,7 @@ async def resolve_playback(record, page):
     """只交付当前作品的临时 HTTPS 地址，不落盘或转发 Cookie/请求头"""
     import httpx
     from desktop.media_download import public_request, secure_url
-    if record['platform'] != 'dy':
+    if record['platform'] not in ('dy', 'xhs'):
         raise RuntimeError('unsupported')
     async for item in MediaResolver(record, page).videos():
         if item.audio_url:

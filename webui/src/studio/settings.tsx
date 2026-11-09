@@ -193,7 +193,7 @@ export function StudioSettings() {
                   <SettingCheck
                     id='studio-autoplay'
                     title={t('自动播放视频')}
-                    hint={t('打开详情时直接播放，支持 B 站和抖音')}
+                    hint={t('打开详情时直接播放，支持 B 站、抖音和小红书')}
                     checked={playback.autoplay}
                     onChange={(autoplay) => savePlayback({ autoplay })}
                   />

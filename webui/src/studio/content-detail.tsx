@@ -22,6 +22,7 @@ import { AuthorName } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 import { biliPlayer, DetailMedia } from './detail-media'
 import { DetailBody } from './detail-body'
+import { hasNativeVideo } from './native-video'
 import { MediaDownload } from './media-download'
 
 export function openSource(item: ContentItem) {
@@ -45,7 +46,7 @@ export function ContentDetail() {
     selected &&
     !selected.markdown &&
     (selected.images.length > 0 ||
-      selected.platform === 'dy' ||
+      hasNativeVideo(selected) ||
       !!biliPlayer(selected))
   const copy = async () => {
     if (!selected) return

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
 import { cn } from '@/lib/utils'
-import { DouyinMedia } from './douyin-media'
+import { hasNativeVideo, NativeVideo } from './native-video'
 import { startMuted, usePlayback } from './playback'
 import type { ContentItem } from './types'
 
@@ -81,7 +81,7 @@ export function DetailMedia({ item }: { item: ContentItem }) {
     const { autoplay } = usePlayback.getState()
     return biliPlayer(item, { autoplay, muted: startMuted(autoplay) })
   })
-  if (item.platform === 'dy') return <DouyinMedia key={item.id} item={item} />
+  if (hasNativeVideo(item)) return <NativeVideo key={item.id} item={item} />
   return (
     <div className='min-w-0 space-y-3'>
       {player ? (

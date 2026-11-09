@@ -255,7 +255,7 @@ export class StudioService {
 
   async resolveVideo(platform, id, requestId) {
     if (
-      platform !== 'dy' ||
+      !['dy', 'xhs'].includes(platform) ||
       typeof requestId !== 'string' ||
       !/^[\w-]{1,80}$/.test(requestId)
     )
@@ -348,9 +348,9 @@ export class StudioService {
   }
 
   async cancelVideo(requestId) {
-    const job = this.operations.get('dy')?.downloadJob
-    if (typeof requestId === 'string' && job?.requestId === requestId)
-      await job.cancel()
+    if (typeof requestId !== 'string') return
+    for (const { downloadJob } of this.operations.values())
+      if (downloadJob?.requestId === requestId) await downloadJob.cancel()
   }
 
   // 搜索博主与采集共用平台页面，走同一互斥；结果只回给调用方，不进历史

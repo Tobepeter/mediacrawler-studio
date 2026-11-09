@@ -13,6 +13,7 @@ test('仅调整主界面媒体请求，保留 Range 且不转发登录凭据', (
           assert.deepEqual(filter.urls, [
             'https://www.douyin.com/*',
             'https://*.douyinvod.com/*',
+            'https://*.xhscdn.com/*',
           ])
           listener = handler
         },
@@ -27,9 +28,10 @@ test('仅调整主界面媒体请求，保留 Range 且不转发登录凭据', (
     Referer: 'http://localhost',
     Range: 'bytes=100-',
   }
+  const url = 'https://v1.douyinvod.com/video.mp4'
   let result
   listener(
-    { webContentsId: 1, resourceType: 'media', requestHeaders },
+    { url, webContentsId: 1, resourceType: 'media', requestHeaders },
     (response) => (result = response.requestHeaders),
   )
   assert.deepEqual(result, {
@@ -39,12 +41,23 @@ test('仅调整主界面媒体请求，保留 Range 且不转发登录凭据', (
   })
   assert.equal(requestHeaders.Cookie, 'private')
   listener(
-    { webContentsId: 2, resourceType: 'media', requestHeaders },
+    {
+      url: 'https://sns-video-v3.xhscdn.com/video.mp4',
+      webContentsId: 1,
+      resourceType: 'media',
+      requestHeaders,
+    },
+    (response) => (result = response.requestHeaders),
+  )
+  assert.equal(result.Referer, 'https://www.xiaohongshu.com/')
+  assert.equal(result.Cookie, undefined)
+  listener(
+    { url, webContentsId: 2, resourceType: 'media', requestHeaders },
     (response) => (result = response.requestHeaders),
   )
   assert.deepEqual(result, requestHeaders)
   listener(
-    { webContentsId: 1, resourceType: 'xhr', requestHeaders },
+    { url, webContentsId: 1, resourceType: 'xhr', requestHeaders },
     (response) => (result = response.requestHeaders),
   )
   assert.deepEqual(result, requestHeaders)

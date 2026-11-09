@@ -9,9 +9,18 @@ import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
 import { useDetailMedia } from './use-detail-media'
 
-// 详情已经带回播放地址，自动播放直接用，不为它多发一次平台请求
+export const hasNativeVideo = (item: ContentItem) =>
+  item.platform === 'dy' ||
+  (item.platform === 'xhs' && item.contentType === 'video')
+
+// 小红书把 H264 标成 EF4、HEVC 标成 EF5；优先 H264，兼容性最好
 const codecRank = (codec?: string | null) =>
-  codec === 'h264' ? 0 : codec === 'h265' ? 2 : 1
+  ['h264', 'EF4'].includes(codec || '')
+    ? 0
+    : ['h265', 'EF5'].includes(codec || '')
+      ? 2
+      : 1
+// 详情已经带回播放地址，直接用，不为播放多发一次平台请求
 const detailUrls = (item: ContentItem) => [
   ...new Set(
     (item.media?.variants || [])
@@ -22,13 +31,15 @@ const detailUrls = (item: ContentItem) => [
 ]
 
 // 播放地址只在当前详情内存中保留，切换封面或卸载即停止请求和播放
-export function DouyinMedia({ item }: { item: ContentItem }) {
+export function NativeVideo({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
   const busy = useStudio((state) => platformBusy(state, item.platform))
   const detailLoading = useDetailMedia(item).loading
   const autoplay = useRef(usePlayback.getState().autoplay)
   const [muted, setMuted] = useState(false)
-  const imagePost = item.contentType === 'note' || item.images.length > 1
+  const imagePost =
+    item.contentType === 'note' ||
+    (item.platform === 'dy' && item.images.length > 1)
   const [mode, setMode] = useState('video')
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'playing' | 'error'
@@ -40,6 +51,14 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
   const request = useRef<string | null>(null)
   const refreshed = useRef(false)
   const failedSource = useRef('')
+
+  const play = (list: string[]) => {
+    setUrls(list)
+    setIndex(0)
+    failedSource.current = ''
+    setBuffering(true)
+    setStatus('playing')
+  }
 
   useEffect(
     () => () => {
@@ -56,10 +75,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
     if (!direct.length) return
     autoplay.current = false
     setMuted(startMuted(true))
-    setUrls(direct)
-    setIndex(0)
-    setBuffering(true)
-    setStatus('playing')
+    play(direct)
   }, [item, imagePost, status])
 
   const load = async (refresh = false) => {
@@ -68,6 +84,13 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
     if (!refresh) {
       autoplay.current = false
       setMuted(startMuted(false))
+      const direct = detailUrls(item)
+      if (direct.length) {
+        refreshed.current = false
+        setError('')
+        play(direct)
+        return
+      }
     }
     if (platformBusy(useStudio.getState(), item.platform)) {
       setError('请先结束当前任务')
@@ -95,11 +118,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
         setStatus('error')
         return
       }
-      setUrls(result.urls)
-      setIndex(0)
-      failedSource.current = ''
-      setBuffering(true)
-      setStatus('playing')
+      play(result.urls)
     } catch {
       if (request.current === id) {
         setError('视频加载失败，请重试')
