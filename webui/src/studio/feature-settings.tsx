@@ -135,7 +135,7 @@ function Issues() {
   })
   if (!lines.length) return null
   return (
-    <ul className='space-y-1 px-4 py-3 text-xs text-muted-foreground'>
+    <ul className='space-y-1.5 text-xs text-muted-foreground'>
       {lines.map((line) => (
         <li key={line}>{line}</li>
       ))}
@@ -151,7 +151,7 @@ function LoginHint() {
     .map((id) => t(platformNames[id]))
   if (!names.length) return null
   return (
-    <p className='px-4 py-3 text-xs text-muted-foreground'>
+    <p className='mt-auto pt-3 text-xs text-muted-foreground'>
       {t('{{names}} 未登录，只检查入口；登录后可以查更多项目', {
         names: names.join(t('、')),
       })}
@@ -167,53 +167,63 @@ export function FeatureSettings() {
   const run = useFeatureCheck((state) => state.run)
   const stop = useFeatureCheck((state) => state.stop)
   const progress = useProgressText()
-  const hint = running ? (
-    <span role='status' className='block truncate tabular-nums'>
-      {progress}
-    </span>
-  ) : summary && summary !== 'problems' ? (
-    t(summary)
-  ) : summary ? (
-    t('有项目需要留意，见下方说明')
-  ) : (
-    t('实际走一遍常用功能，看平台接口有没有变化')
-  )
+  const status = running
+    ? progress
+    : summary === 'problems'
+      ? t('有项目需要留意')
+      : summary
+        ? t(summary)
+        : t('还没有检查结果')
   return (
-    <>
-      <SettingRow title={t('体检')} hint={hint}>
-        <Button
-          variant='outline'
-          className='w-28 shrink-0'
-          disabled={!window.studio?.checkFeatures || stopped}
-          onClick={() => (running ? stop() : void run())}
+    // 结果放在固定大小的框里自己滚动，内容多少都不影响弹窗和表格
+    <div className='flex h-full min-h-0 flex-col gap-4 lg:flex-row'>
+      <div className='min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl bg-muted/40'>
+        <SettingRow
+          title={t('体检')}
+          hint={t('实际走一遍常用功能，看平台接口有没有变化')}
         >
-          {running ? (
-            <Loader2 className='animate-spin motion-reduce:animate-none' />
-          ) : (
-            <Stethoscope />
-          )}
-          {t(running ? '停止' : '开始体检')}
-        </Button>
-      </SettingRow>
-      <div className='overflow-x-auto'>
-        <div
-          className={cn(gridClass, 'h-8 text-xs text-muted-foreground')}
-          aria-hidden='true'
-        >
-          <span />
-          <span className='text-center'>{t('入口')}</span>
-          {steps.map((id) => (
-            <span key={id} className='text-center'>
-              {t(featureLabels[id])}
-            </span>
+          <Button
+            variant='outline'
+            className='w-28 shrink-0'
+            disabled={!window.studio?.checkFeatures || stopped}
+            onClick={() => (running ? stop() : void run())}
+          >
+            {running ? (
+              <Loader2 className='animate-spin motion-reduce:animate-none' />
+            ) : (
+              <Stethoscope />
+            )}
+            {t(running ? '停止' : '开始体检')}
+          </Button>
+        </SettingRow>
+        <div className='overflow-x-auto border-t border-border/60'>
+          <div
+            className={cn(gridClass, 'h-8 text-xs text-muted-foreground')}
+            aria-hidden='true'
+          >
+            <span />
+            <span className='text-center'>{t('入口')}</span>
+            {steps.map((id) => (
+              <span key={id} className='text-center'>
+                {t(featureLabels[id])}
+              </span>
+            ))}
+          </div>
+          {platforms.map((platform) => (
+            <PlatformRow key={platform} platform={platform} />
           ))}
         </div>
-        {platforms.map((platform) => (
-          <PlatformRow key={platform} platform={platform} />
-        ))}
       </div>
-      <LoginHint />
-      <Issues />
-    </>
+      <aside
+        aria-label={t('检查结果')}
+        className='flex h-44 shrink-0 flex-col overflow-y-auto rounded-xl border p-4 lg:h-full lg:w-80'
+      >
+        <p role='status' className='pb-3 text-sm font-medium tabular-nums'>
+          {status}
+        </p>
+        <Issues />
+        <LoginHint />
+      </aside>
+    </div>
   )
 }

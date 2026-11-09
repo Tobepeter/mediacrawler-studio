@@ -109,7 +109,7 @@ export function StudioSettings() {
       {/* 高度固定，切换分页不跳动；矮窗口按视口收缩 */}
       <DialogContent
         aria-describedby={undefined}
-        className='flex h-[min(38rem,90dvh)] w-[calc(100%-2rem)] max-w-2xl flex-col gap-4'
+        className='flex h-[85dvh] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-5xl flex-col gap-4'
       >
         <DialogHeader>
           <DialogTitle>{t('设置')}</DialogTitle>
@@ -194,13 +194,8 @@ export function StudioSettings() {
               </SettingRow>
             </SettingGroup>
           </TabsContent>
-          <TabsContent
-            value='health'
-            className='mt-4 min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]'
-          >
-            <SettingGroup>
-              <FeatureSettings />
-            </SettingGroup>
+          <TabsContent value='health' className='mt-4 min-h-0 flex-1'>
+            <FeatureSettings />
           </TabsContent>
           <TabsContent
             value='account'

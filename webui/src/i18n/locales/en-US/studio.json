@@ -409,11 +409,13 @@
   "{{name}}：正在准备（第 {{position}}/{{total}} 个平台）": "{{name}}: preparing (platform {{position}}/{{total}})",
   "{{name}}：{{step}}，按节流等待 {{seconds}} 秒（第 {{position}}/{{total}} 个平台）": "{{name}}: {{step}}, waiting {{seconds}}s for rate limit (platform {{position}}/{{total}})",
   "{{name}}：正在检查{{step}}（第 {{position}}/{{total}} 个平台）": "{{name}}: checking {{step}} (platform {{position}}/{{total}})",
-  "有项目需要留意，见下方说明": "Some items need attention. See below.",
   "推荐里没有可检查的作品": "No item to check in the feed",
   "详情没有拿到，跳过": "Details unavailable, skipped",
   "媒体地址返回的不是媒体文件": "The media URL did not return a media file",
   "主页": "Profile",
   "实际走一遍常用功能，看平台接口有没有变化": "Runs the common features to see whether platform APIs have changed",
-  "{{names}} 未登录，只检查入口；登录后可以查更多项目": "{{names}} not signed in, checked sign-in only. Sign in to check more."
+  "{{names}} 未登录，只检查入口；登录后可以查更多项目": "{{names}} not signed in, checked sign-in only. Sign in to check more.",
+  "检查结果": "Results",
+  "有项目需要留意": "Some items need attention",
+  "还没有检查结果": "No results yet"
 }
