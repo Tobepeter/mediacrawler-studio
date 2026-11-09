@@ -40,6 +40,7 @@ function creatorInfo(value, platform) {
 
 const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
+const feedWaitLimit = 12
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -304,7 +305,12 @@ export class StudioService {
     try {
       const result = await job.run({ record, kind: 'detail' })
       if (result.item?.id !== id || result.item.platform !== platform)
-        return { code: result.code || 'failed' }
+        return {
+          code: result.code || 'failed',
+          throttleCode: result.throttleCode,
+          retryAfter: result.retryAfter,
+          message: result.message,
+        }
       if (this.feedItems.get(platform)?.get(id) === record) {
         const item = { ...record, ...result.item }
         this.feedItems.get(platform).set(id, item)
@@ -505,6 +511,13 @@ export class StudioService {
             nextCursor: result.next_cursor || undefined,
             hasMore: result.has_more === true,
             ...(result.busy === true && { busy: true }),
+            ...(result.throttled && {
+              throttled: {
+                code: result.throttled.code,
+                retryAfter: result.throttled.retry_after,
+                message: result.throttled.message,
+              },
+            }),
           })
         else reject(new Error(message || `${label}失败，请重试`))
       })
@@ -525,7 +538,8 @@ export class StudioService {
     if (this.state.accounts[platform] !== 'connected')
       throw new Error('登录后才能查看推荐')
     const page = await this.feed.load(platform, cursor)
-    if (!page.cancelled) this.rememberFeed(platform, page.items, !cursor)
+    if (!page.cancelled && !page.throttled)
+      this.rememberFeed(platform, page.items, !cursor)
     return page
   }
 
@@ -543,6 +557,8 @@ export class StudioService {
       cursor,
       targetId,
       background: run.background,
+      // 用户等着的请求排队有上限，超过就把等多久告诉界面
+      waitLimit: run.background ? undefined : feedWaitLimit,
     })
     // 排查风控要能还原请求时间线
     this.logger?.write('info', 'crawler', 'feed-page', {
@@ -552,12 +568,17 @@ export class StudioService {
       count: page.items.length,
       busy: !!page.busy,
       cancelled: !!page.cancelled,
+      ...(page.throttled && { throttled: page.throttled.code }),
     })
     return page
   }
 
   cancelFeed(platform) {
     this.feed.cancel(platform)
+  }
+
+  keepFeedFresh(platform) {
+    if (feedPlatforms.includes(platform)) this.feed.keepFresh(platform)
   }
 
   focusFeed(platform) {

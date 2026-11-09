@@ -5,7 +5,7 @@ from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
-from desktop.pacing import BACKGROUND_WAIT_SECONDS, configure_cli, pace_client
+from desktop.pacing import BACKGROUND_WAIT_SECONDS, configure_cli, pace_client, throttle_detail
 from desktop.paging import PAGED_SEARCH_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
@@ -65,7 +65,7 @@ class DesktopCrawler:
         self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
-        limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else None
+        limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else self.request.get("waitLimit")
         if "max_wait" in self.request:
             configure_cli(self.request["max_wait"], bool(self.request.get("no_throttle")))
         pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail), limit)
@@ -176,9 +176,10 @@ class DesktopCrawler:
             try:
                 self.emit("feed", **await load_feed(self, self.request.get("cursor")))
             except CreatorError as error:
-                if error.code != "FEED_BUSY":
+                throttled = throttle_detail(error)
+                if not throttled:
                     raise
-                self.emit("feed", items=[], next_cursor=None, has_more=False, busy=True)
+                self.emit("feed", items=[], next_cursor=None, has_more=False, busy=error.code == "FEED_BUSY", throttled=throttled)
             self.emit("done", message="推荐已更新")
             return
         if self.request["action"] == "feature-check":

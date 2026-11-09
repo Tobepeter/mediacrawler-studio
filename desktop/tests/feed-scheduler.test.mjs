@@ -12,12 +12,15 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 
 function memoryCache() {
   const entries = new Map()
+  const ages = new Map()
   return {
     entries,
     get: (key) => entries.get(key),
     has: (key) => entries.has(key),
     set: (key, value) => entries.set(key, value),
     delete: (key) => entries.delete(key),
+    age: (key) => (entries.has(key) ? ages.get(key) || 0 : undefined),
+    ages,
   }
 }
 
@@ -287,4 +290,98 @@ test('JsonCache 按大类存一个文件，过期和损坏都当作没有缓存'
   assert.equal(open().get('bili'), undefined)
   open().set('bili', { c: 3 })
   assert.deepEqual(open().get('bili'), { c: 3 })
+})
+
+const throttled = (retryAfter, busy = false) => ({
+  items: [],
+  hasMore: false,
+  busy,
+  throttled: {
+    code: busy ? 'FEED_BUSY' : 'RATE_COOLDOWN',
+    retryAfter,
+    message: 'x',
+  },
+})
+
+test('平台冷却时后台不重试，用户请求拿到限流结果', async (t) => {
+  const { scheduler, calls } = setup({ bili: 'connected' })
+  t.after(() => scheduler.close())
+  scheduler.sync()
+  await tick()
+  calls[0].resolve(throttled(600))
+  await tick()
+  await tick()
+  assert.equal(calls.length, 1)
+  const opened = scheduler.load('bili')
+  await tick()
+  calls[1].resolve(throttled(600))
+  assert.equal((await opened).throttled.retryAfter, 600)
+  await tick()
+  assert.equal(scheduler.wanted.has('bili'), false)
+})
+
+test('排队太久的静默预取直接放弃', async (t) => {
+  const { scheduler, calls } = setup(
+    { bili: 'connected' },
+    { maxRetryDelayMs: 50 },
+  )
+  t.after(() => scheduler.close())
+  scheduler.sync()
+  await tick()
+  calls[0].resolve(throttled(30, true))
+  await tick()
+  assert.equal(scheduler.wanted.has('bili'), false)
+})
+
+test('静默预取按平台给的时间再试', async (t) => {
+  let now = 1000
+  const { scheduler, calls } = setup({ bili: 'connected' }, { now: () => now })
+  t.after(() => scheduler.close())
+  scheduler.sync()
+  await tick()
+  calls[0].resolve(throttled(30, true))
+  await tick()
+  assert.ok(scheduler.wanted.has('bili'))
+  assert.equal(scheduler.ready('bili'), false)
+  now += 31000
+  assert.equal(scheduler.ready('bili'), true)
+})
+
+test('使用中临近过期才补缓存，间隔内不重复', async (t) => {
+  let now = 10 * 60 * 1000
+  const { scheduler, calls, cache } = setup(
+    { bili: 'connected' },
+    { now: () => now, renewAfterMs: 100, renewGapMs: 1000 },
+  )
+  t.after(() => scheduler.close())
+  cache.set('bili', { account: 'a', page: page('old') })
+  cache.ages.set('bili', 50)
+  scheduler.seen.add('bili')
+  scheduler.keepFresh('bili')
+  await tick()
+  assert.equal(calls.length, 0)
+  cache.ages.set('bili', 200)
+  scheduler.keepFresh('bili')
+  await tick()
+  assert.equal(calls.length, 1)
+  assert.ok(cache.has('bili'), '新内容回来前旧缓存继续可用')
+  calls[0].resolve(page('new'))
+  await tick()
+  assert.deepEqual(cache.get('bili').page, page('new'))
+  cache.ages.set('bili', 200)
+  scheduler.keepFresh('bili')
+  await tick()
+  assert.equal(calls.length, 1, '间隔内不重复')
+  now += 2000
+  scheduler.keepFresh('bili')
+  await tick()
+  assert.equal(calls.length, 2)
+})
+
+test('未登录时不补缓存', (t) => {
+  const { scheduler, calls } = setup({ bili: 'expired' })
+  t.after(() => scheduler.close())
+  scheduler.keepFresh('bili')
+  assert.equal(calls.length, 0)
+  assert.equal(scheduler.wanted.has('bili'), false)
 })

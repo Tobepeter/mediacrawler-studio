@@ -46,7 +46,17 @@ export function ScrollSentinel(props: {
       if (root.scrollTop > 0) setScrolled(true)
     }
     root.addEventListener('scroll', mark, { passive: true })
-    return () => root.removeEventListener('scroll', mark)
+    // 调整窗口也算用户在操作；观察器注册时的第一次回调不算
+    let measured = false
+    const resized = new ResizeObserver(() => {
+      if (measured) setScrolled(true)
+      measured = true
+    })
+    resized.observe(root)
+    return () => {
+      root.removeEventListener('scroll', mark)
+      resized.disconnect()
+    }
   }, [root, needsScroll])
   useEffect(() => {
     if (!root || !node || fillScreens === undefined) {

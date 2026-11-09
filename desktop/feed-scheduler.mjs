@@ -1,12 +1,13 @@
 // 推荐流调度：用户正在等的请求立刻发，后台只给每个平台备一份首屏，下次打开秒开
 // 后台同一时间只跑一个，当前 Tab 优先；同平台有用户操作时让路，操作结束后再补
-// 只在连接成功和首屏被用掉时各补一次，缓存过期不重新拉，不会定时刷接口
+// 连接成功和首屏被用掉时各补一次；临近过期只在用户正使用时补当前平台，窗口闲置不刷接口
 export class FeedScheduler {
   runs = new Map()
   wanted = new Set()
   seen = new Set()
   quietUntil = new Map()
   attempts = new Map()
+  renewed = new Map()
   focused = null
   timer = null
   closed = false
@@ -20,6 +21,10 @@ export class FeedScheduler {
         idleMs: 10000,
         retryMs: 15000,
         maxAttempts: 4,
+        // 排队超过这个时长就不等了，留给用户下次操作
+        maxRetryDelayMs: 120000,
+        renewAfterMs: 25 * 60 * 1000,
+        renewGapMs: 10 * 60 * 1000,
         now: Date.now,
         random: Math.random,
       },
@@ -66,7 +71,7 @@ export class FeedScheduler {
     this.runs.set(platform, run)
     try {
       const page = await this.fetch(platform, cursor, run)
-      if (cursor === undefined && !page.cancelled) {
+      if (cursor === undefined && !page.cancelled && !page.throttled) {
         this.want(platform)
         this.touch(platform)
       }
@@ -87,7 +92,25 @@ export class FeedScheduler {
     waiter?.resolve({ items: [], hasMore: false, cancelled: true })
   }
 
+  // 界面确认用户正在用这个平台时调用：缓存快过期或已用完就在后台补一份
+  keepFresh(platform) {
+    const age = this.cache.age(platform)
+    const now = this.now()
+    if (
+      this.status(platform) !== 'connected' ||
+      this.wanted.has(platform) ||
+      this.runs.has(platform) ||
+      (age !== undefined && age < this.renewAfterMs && this.stored(platform)) ||
+      now - (this.renewed.get(platform) ?? -Infinity) < this.renewGapMs
+    )
+      return
+    this.renewed.set(platform, now)
+    this.wanted.add(platform)
+    this.schedule()
+  }
+
   reset(platform) {
+    this.renewed.delete(platform)
     this.wanted.delete(platform)
     this.seen.delete(platform)
     this.attempts.delete(platform)
@@ -212,20 +235,28 @@ export class FeedScheduler {
       if (page.busy) waiter.resolve({ retry: true })
       else {
         waiter.resolve(page)
-        if (!page.cancelled) this.want(platform)
+        if (!page.cancelled && !page.throttled) this.want(platform)
       }
-    } else if (page.busy) this.retry(platform)
+    } else if (page.busy) this.retry(platform, page.throttled?.retryAfter)
+    else if (page.throttled)
+      this.logger?.write('warn', 'crawler', 'feed-prefetch-throttled', {
+        platform,
+        code: page.throttled.code,
+      })
     else if (page.cancelled) {
       if (run.requeue) this.wanted.add(platform)
     } else if (page.items.length && !run.cancelled)
       this.cache.set(platform, { account: run.account, page })
   }
 
-  retry(platform) {
+  // 静默请求排不上时按平台给的时间再试，超过次数或要等太久就放弃
+  retry(platform, retryAfter = 0) {
     const count = (this.attempts.get(platform) || 0) + 1
     this.attempts.set(platform, count)
-    if (count >= this.maxAttempts) return
+    const delay = Math.max(this.retryMs, retryAfter * 1000)
+    if (count >= this.maxAttempts || delay > this.maxRetryDelayMs) return
+    this.quietUntil.set(platform, this.now() + delay)
     this.wanted.add(platform)
-    this.schedule(this.retryMs)
+    this.schedule(delay)
   }
 }

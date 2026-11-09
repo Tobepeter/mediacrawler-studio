@@ -31,7 +31,8 @@ export class DownloadJob {
     this.finished = new Promise((resolve) => {
       let saved = 0,
         result = null,
-        code = 'network'
+        code = 'network',
+        throttle = {}
       const child = this.spawnProcess(
         this.python,
         ['-u', '-m', 'desktop.download_worker'],
@@ -64,7 +65,13 @@ export class DownloadJob {
           if (event.type === 'download-result') result = event
           if (event.type === 'download-error') {
             code = event.code
-            if (code !== 'cancelled')
+            if (code === 'throttled')
+              throttle = {
+                throttleCode: event.throttle_code,
+                retryAfter: event.retry_after,
+                message: event.message,
+              }
+            else if (code !== 'cancelled')
               this.logger?.write('error', 'media', 'failed', {
                 platform: request.record.platform,
                 kind: request.kind,
@@ -93,6 +100,7 @@ export class DownloadJob {
           saved,
           total: request.kind === 'images' ? request.record.images.length : 1,
           ...result,
+          ...throttle,
           code: timedOut
             ? 'network'
             : this.stopped

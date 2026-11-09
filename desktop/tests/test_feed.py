@@ -123,7 +123,8 @@ def test_background_busy_is_reported_as_a_page(monkeypatch):
     crawler.setup = AsyncMock()
     monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('FEED_BUSY', 'x')))
     asyncio.run(crawler.run())
-    assert ('feed', {'items': [], 'next_cursor': None, 'has_more': False, 'busy': True}) in events
+    data = next(data for kind, data in events if kind == 'feed')
+    assert data['items'] == [] and data['has_more'] is False and data['busy'] is True
 
 
 def test_feed_errors_keep_their_message(monkeypatch):
@@ -132,8 +133,8 @@ def test_feed_errors_keep_their_message(monkeypatch):
     crawler.request = {'action': 'feed'}
     crawler.emit = lambda kind, **data: None
     crawler.setup = AsyncMock()
-    monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '暂停访问')))
-    with pytest.raises(CreatorError, match='暂停访问'):
+    monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('PLATFORM_ERROR', '接口异常')))
+    with pytest.raises(CreatorError, match='接口异常'):
         asyncio.run(crawler.run())
 
 
@@ -174,3 +175,17 @@ async def test_result_store_attaches_author_url():
     await store.store_content({'video_id': '2', 'title': 'b', 'nickname': 'm'})
     assert events[0]['item']['authorUrl'] == 'https://space.bilibili.com/9'
     assert 'authorUrl' not in events[1]['item']
+
+
+@pytest.mark.parametrize('code,busy', [('RATE_COOLDOWN', False), ('RATE_LIMITED', False), ('FEED_BUSY', True), ('SEARCH_VERIFICATION_REQUIRED', False)])
+async def test_throttled_feed_is_a_result_not_a_failure(monkeypatch, code, busy):
+    from desktop import crawler as crawler_module
+    events = []
+    monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError(code, '等一下', retry_after=42)))
+    runner = crawler_module.DesktopCrawler({'platform': 'bili', 'action': 'feed', 'mode': 'search', 'query': '', 'limit': 20}, None, lambda kind, **data: events.append((kind, data)))
+    runner.setup = AsyncMock()
+    await runner.run()
+    data = next(data for kind, data in events if kind == 'feed')
+    assert data['busy'] is busy and data['items'] == []
+    assert data['throttled'] == {'code': code, 'retry_after': 42, 'message': '等一下'}
+    assert 'error' not in [kind for kind, _ in events]

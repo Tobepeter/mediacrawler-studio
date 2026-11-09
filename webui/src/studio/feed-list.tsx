@@ -1,21 +1,23 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Inbox, Loader2 } from 'lucide-react'
 import { Reveal } from '@/components/common/reveal'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { translateMessage } from '@/i18n/studio'
-import { ipcFailure } from './ipc-failure'
 import { ResultCard } from './result-card'
+import { RetryNotice } from './retry-notice'
 import { useStudioRoute } from './route'
 import { ScrollSentinel } from './scroll-sentinel'
 import { useStudio } from './store'
+import { ThrottledError, useRetryWait } from './throttle'
 import type { Platform } from './types'
-import { useFeed } from './use-feed'
+import { useFeed, useFeedFreshness, useFeedRefreshing } from './use-feed'
 
 const gridClass =
   'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
 const placeholders = Array.from({ length: 10 }, (_, index) => index)
+// 连续排不上时最多自动续几次，之后只留按钮
+const AUTO_RESUMES = 3
 
 // 没有搜索结果时的默认内容；只跟滚动翻页，不写历史
 export function FeedList({ platform }: { platform: Platform }) {
@@ -33,6 +35,25 @@ export function FeedList({ platform }: { platform: Platform }) {
     [fetchNextPage],
   )
   const items = feed.data?.items || []
+  useFeedFreshness(platform, current)
+  const refreshing = useFeedRefreshing(platform)
+  // 被限流时等倒计时结束，用户再滚动或调整窗口才继续；次数用完只留按钮
+  const resumeBase = useRef({
+    items: items.length,
+    errors: feed.errorUpdateCount,
+  })
+  if (resumeBase.current.items !== items.length)
+    resumeBase.current = {
+      items: items.length,
+      errors: feed.errorUpdateCount,
+    }
+  const failure = feed.isFetchNextPageError ? feed.error : null
+  const wait = useRetryWait(failure)
+  const resumable =
+    failure instanceof ThrottledError &&
+    failure.resumable &&
+    wait === 0 &&
+    feed.errorUpdateCount - resumeBase.current.errors < AUTO_RESUMES
   if (!items.length && (feed.isPending || feed.isFetching))
     return (
       <div className={`${gridClass} pb-2 pt-1`} role='status' aria-busy='true'>
@@ -46,14 +67,16 @@ export function FeedList({ platform }: { platform: Platform }) {
     return (
       <div className='flex flex-1 flex-col items-center justify-center gap-4 py-16 text-muted-foreground'>
         <Inbox className='size-6' aria-hidden='true' />
-        <span role={feed.isError ? 'alert' : 'status'}>
-          {feed.isError
-            ? translateMessage(ipcFailure(feed.error))
-            : t('暂时没有推荐内容')}
-        </span>
-        <Button variant='outline' onClick={() => void feed.refetch()}>
-          {t('重试')}
-        </Button>
+        {feed.isError ? (
+          <RetryNotice error={feed.error} onRetry={() => void feed.refetch()} />
+        ) : (
+          <>
+            <span role='status'>{t('暂时没有推荐内容')}</span>
+            <Button variant='outline' onClick={() => void feed.refetch()}>
+              {t('重试')}
+            </Button>
+          </>
+        )}
       </div>
     )
   const more = feed.hasNextPage && !feed.data?.stalled
@@ -67,28 +90,22 @@ export function FeedList({ platform }: { platform: Platform }) {
         ))}
       </div>
       <ScrollSentinel
-        key={items.length}
+        key={`${items.length}:${feed.errorUpdateCount}`}
         active={
           !!more &&
           !feed.isFetchingNextPage &&
-          !feed.isFetchNextPageError &&
+          !refreshing &&
+          (!failure || resumable) &&
           !paused &&
           route !== 'history'
         }
         needsScroll
-        fillScreens={current ? 1 : undefined}
+        fillScreens={current && !failure ? 1 : undefined}
         screens={2}
         onReach={loadMore}
       >
-        {feed.isFetchNextPageError ? (
-          <span className='flex min-w-0 items-center gap-3'>
-            <span className='truncate text-destructive' role='alert'>
-              {translateMessage(ipcFailure(feed.error))}
-            </span>
-            <Button variant='outline' className='shrink-0' onClick={loadMore}>
-              {t('重试')}
-            </Button>
-          </span>
+        {failure ? (
+          <RetryNotice error={failure} onRetry={loadMore} label='继续加载' />
         ) : feed.isFetchingNextPage ? (
           <span className='inline-flex h-9 items-center' role='status'>
             <Loader2

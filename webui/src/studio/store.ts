@@ -134,7 +134,7 @@ export function platformBlocked(state: StudioStore, platform = state.platform) {
   )
 }
 
-const mainScroller = () =>
+export const mainScroller = () =>
   document
     .querySelector('main')
     ?.closest<HTMLElement>('[data-radix-scroll-area-viewport]')

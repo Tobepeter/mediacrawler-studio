@@ -429,5 +429,14 @@
   "继续使用当前版本": "Keep using this one",
   "退出并切换": "Quit and switch",
   "两个版本共用登录态和数据，同一时间只能运行一个。退出后开发服务也会结束，需要再打开一次安装版": "Both builds share sessions and data, so only one can run at a time. Quitting also stops the dev server. Open the installed app again afterwards.",
-  "退出开发版": "Quit dev build"
+  "退出开发版": "Quit dev build",
+  "刷新推荐": "Refresh feed",
+  "{{wait}}后可刷新": "Refresh available in {{wait}}",
+  "{{wait}}后可继续": "Available in {{wait}}",
+  "暂时没有新内容": "No new content yet",
+  "继续加载": "Load more",
+  "平台要求验证，暂时不能访问": "The platform requires verification, access is paused",
+  "请求太频繁，稍等一下": "Too many requests, please wait",
+  "约 {{count}} 秒": "about {{count}} s",
+  "约 {{count}} 分钟": "about {{count}} min"
 }

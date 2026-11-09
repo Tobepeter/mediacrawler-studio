@@ -51,6 +51,7 @@ export interface FeedPage {
   items: ContentItem[]
   nextCursor?: string
   hasMore: boolean
+  throttled?: { code: string; retryAfter: number; message: string }
   cancelled?: boolean
 }
 
@@ -253,10 +254,17 @@ export interface StudioBridge {
   loadDetail?(
     platform: Platform,
     id: string,
-  ): Promise<{ code: string; item?: ContentItem }>
+  ): Promise<{
+    code: string
+    item?: ContentItem
+    throttleCode?: string
+    retryAfter?: number
+    message?: string
+  }>
   loadFeed?(platform: Platform, cursor?: string): Promise<FeedPage>
   cancelFeed?(platform: Platform): Promise<void>
   focusFeed?(platform: Platform): Promise<void>
+  keepFeedFresh?(platform: Platform): Promise<void>
   cancelDetail?(platform: Platform, id: string): Promise<void>
   clearSessions(): Promise<{ localOnly: boolean }>
   logout(platform: Platform): Promise<{ localOnly: boolean }>

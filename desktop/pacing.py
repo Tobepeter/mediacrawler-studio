@@ -234,6 +234,16 @@ def start_cooldown(path, rule, now=None):
         pass
 
 
+THROTTLE_CODES = ('FEED_BUSY', 'RATE_LIMITED', 'RATE_WAIT_EXCEEDED', 'RATE_COOLDOWN', 'SEARCH_VERIFICATION_REQUIRED')
+
+
+def throttle_detail(error):
+    """节流拒绝不算故障，转成结构化结果，由调用方决定继续、重试还是提示"""
+    if isinstance(error, CreatorError) and error.code in THROTTLE_CODES:
+        return {'code': error.code, 'retry_after': error.retry_after or 0, 'message': str(error)}
+    return None
+
+
 def request_label(original, args, kwargs):
     """日志要能看出打的是哪个接口；底层 request 只留路径，查询串里可能有签名和令牌"""
     name = getattr(original, '__name__', 'request')

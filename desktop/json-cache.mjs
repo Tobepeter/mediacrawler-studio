@@ -32,6 +32,13 @@ export class JsonCache {
     return undefined
   }
 
+  // 距写入过去了多久；没有条目或已过期返回 undefined
+  age(key) {
+    const entry = this.load().get(key)
+    const age = entry && this.now() - entry.savedAt
+    return age !== undefined && age < this.ttlMs ? age : undefined
+  }
+
   has(key) {
     return this.get(key) !== undefined
   }

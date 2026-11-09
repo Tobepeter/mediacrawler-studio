@@ -3,13 +3,24 @@ import { useTranslation } from 'react-i18next'
 import { Heart, Loader2 } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RetryNotice } from './retry-notice'
 import type { ContentComment, ContentItem } from './types'
+import { useDetailMedia } from './use-detail-media'
 
 // 旧记录不显示评论页；新任务明确区分等待、空结果、失败和取消
 export function DetailBody({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
 
+  const detail = useDetailMedia(item)
   // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
+  if (item.feed && !item.text && !detail.loading) {
+    const error =
+      detail.error ??
+      (item.media?.status === 'failed'
+        ? new Error('正文暂时没有加载出来，可以查看原文')
+        : null)
+    if (error) return <RetryNotice error={error} onRetry={detail.retry} />
+  }
   if (item.feed && !item.text && !item.media)
     return (
       <div className='space-y-2' role='status' aria-busy='true'>
@@ -18,12 +29,6 @@ export function DetailBody({ item }: { item: ContentItem }) {
         <Skeleton className='h-4 w-full' />
         <Skeleton className='h-4 w-2/3' />
       </div>
-    )
-  if (item.feed && !item.text && item.media?.status === 'failed')
-    return (
-      <p className='text-body text-muted-foreground'>
-        {t('正文暂时没有加载出来，可以查看原文')}
-      </p>
     )
   const body = item.markdown ? (
     <MarkdownRenderer content={item.markdown} />

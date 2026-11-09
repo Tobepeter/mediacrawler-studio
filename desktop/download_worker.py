@@ -57,5 +57,10 @@ if __name__ == '__main__':
         if not isinstance(error, (asyncio.CancelledError, KeyboardInterrupt)):
             emit('diagnostic', detail=exception_detail(error))
         code = 'cancelled' if isinstance(error, (asyncio.CancelledError, KeyboardInterrupt)) else 'disk' if isinstance(error, OSError) else str(error) if isinstance(error, RuntimeError) and str(error) in ('login', 'unsupported', 'expired', 'unavailable', 'quality_unavailable', 'audio_unavailable', 'ffmpeg_required', 'hls_unsupported', 'hls_failed') else 'network'
-        emit('download-error', code=code)
+        from desktop.pacing import throttle_detail
+        throttled = throttle_detail(error)
+        if throttled:
+            emit('download-error', code='throttled', throttle_code=throttled['code'], retry_after=throttled['retry_after'], message=throttled['message'])
+        else:
+            emit('download-error', code=code)
         sys.exit(1)

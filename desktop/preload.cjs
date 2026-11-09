@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('studio', {
     ipcRenderer.invoke('studio:load-feed', platform, cursor),
   cancelFeed: (platform) => ipcRenderer.invoke('studio:cancel-feed', platform),
   focusFeed: (platform) => ipcRenderer.invoke('studio:focus-feed', platform),
+  keepFeedFresh: (platform) =>
+    ipcRenderer.invoke('studio:keep-feed-fresh', platform),
   loadDetail: (platform, id) =>
     ipcRenderer.invoke('studio:load-detail', platform, id),
   cancelDetail: (platform, id) =>

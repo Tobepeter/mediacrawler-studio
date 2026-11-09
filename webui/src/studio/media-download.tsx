@@ -33,7 +33,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const [downloading, setDownloading] = useState(false)
   const qualities = videoQualities(item)
   // 清晰度还在取时“自动”已经能下，不用等
-  const loadingQualities = useDetailMedia(item)
+  const loadingQualities = useDetailMedia(item).loading
   const video =
     item.contentType === 'video' ||
     item.media?.variants?.some((variant) => variant.kind === 'video')

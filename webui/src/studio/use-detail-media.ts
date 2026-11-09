@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { feedPlatforms } from './creator-options'
 import { useStudio } from './store'
+import { ThrottledError } from './throttle'
 import { updateFeedItem } from './use-feed'
 import type { ContentItem } from './types'
 
@@ -18,7 +19,7 @@ export function useDetailMedia(item: ContentItem) {
   const connected = useStudio(
     (state) => state.accounts[platform] === 'connected',
   )
-  return useQuery({
+  const detail = useQuery({
     queryKey: ['detail-media', platform, id],
     enabled: connected && needsDetail(item) && !!window.studio?.loadDetail,
     gcTime: 0,
@@ -30,6 +31,12 @@ export function useDetailMedia(item: ContentItem) {
         { once: true },
       )
       return window.studio!.loadDetail!(platform, id).then((result) => {
+        if (result.code === 'throttled')
+          throw new ThrottledError({
+            code: result.throttleCode || 'RATE_LIMITED',
+            retryAfter: result.retryAfter || 0,
+            message: result.message || '',
+          })
         // 推荐流不在页面记录里，要由这里写回详情和列表
         if (result.item) {
           updateFeedItem(result.item)
@@ -39,5 +46,14 @@ export function useDetailMedia(item: ContentItem) {
         return result
       })
     },
-  }).isFetching
+  })
+  const unavailable = !!detail.data?.code && !detail.data.item
+  return {
+    loading: detail.isFetching,
+    // 补全失败要让用户能重试，否则正文会一直停在占位
+    error:
+      detail.error ??
+      (unavailable ? new Error('正文暂时没有加载出来，可以查看原文') : null),
+    retry: () => void detail.refetch(),
+  }
 }

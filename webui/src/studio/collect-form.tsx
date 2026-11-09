@@ -21,6 +21,7 @@ import {
   supportsAuto,
 } from './creator-options'
 import { useState } from 'react'
+import { FeedRefresh } from './feed-refresh'
 import { LoginGate } from './login-gate'
 import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
@@ -295,6 +296,11 @@ export function CollectForm() {
           </form>
           <div className='flex size-9 shrink-0 items-center justify-center'>
             <ResultActions />
+            {!page &&
+              account === 'connected' &&
+              feedPlatforms.includes(form.platform) && (
+                <FeedRefresh key={form.platform} platform={form.platform} />
+              )}
           </div>
         </TabsContent>
       </Tabs>
