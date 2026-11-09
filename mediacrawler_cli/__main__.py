@@ -83,8 +83,8 @@ def collect(platform: str = typer.Option(...), query: Optional[str] = None, url:
 
 
 def creator_platform(platform, supported=None):
-    from desktop.paging import CREATOR_PLATFORMS, CREATOR_SEARCH_PLATFORMS
-    supported = CREATOR_PLATFORMS if supported == 'all' else CREATOR_SEARCH_PLATFORMS
+    from desktop.paging import CREATOR_PLATFORMS, CREATOR_SEARCH_PLATFORMS, PAGED_SEARCH_PLATFORMS
+    supported = {'posts': CREATOR_PLATFORMS, 'search': PAGED_SEARCH_PLATFORMS}.get(supported, CREATOR_SEARCH_PLATFORMS)
     if platform not in supported:
         raise typer.BadParameter('当前支持：' + ', '.join(supported))
 
@@ -126,7 +126,7 @@ def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', hel
     名称必须唯一且完全匹配，否则返回 CREATOR_AMBIGUOUS / CREATOR_NOT_FOUND 及 candidates
     """
     import re
-    creator_platform(platform, 'all')
+    creator_platform(platform, 'posts')
     if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
         raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
     if not reference and not cursor:
@@ -156,7 +156,7 @@ def search_command(query: Optional[str] = typer.Option(None, help='关键词；�
     需要一次拿固定条数、不关心翻页时用 collect
     """
     import re
-    creator_platform(platform, 'all')
+    creator_platform(platform, 'search')
     if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
         raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
     if not (query or '').strip() and not cursor:

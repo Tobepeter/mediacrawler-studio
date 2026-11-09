@@ -68,6 +68,7 @@ export const platforms = {
 
 export const creatorPlatforms = capabilities.creator
 export const creatorSearchPlatforms = capabilities.creatorSearch
+export const pagedSearchPlatforms = capabilities.pagedSearch
 export const feedPlatforms = capabilities.feed
 export const creatorLimit = capabilities.creatorLimit
 
@@ -112,7 +113,10 @@ export function validateRequest(value) {
   const mode = ['link', 'creator'].includes(value.mode) ? value.mode : 'search'
   const limit = Number(value.limit)
   const maximum = mode === 'creator' ? creatorLimit : 100
-  const paged = mode !== 'link' && creatorPlatforms.includes(value.platform)
+  const paged =
+    mode === 'creator'
+      ? creatorPlatforms.includes(value.platform)
+      : mode === 'search' && pagedSearchPlatforms.includes(value.platform)
   if (!Number.isInteger(limit) || limit < 1 || limit > maximum)
     throw new Error(`采集数量需为 1–${maximum} 条`)
   if (value.action === 'collect') {

@@ -1,5 +1,6 @@
 {
-  "creator": ["bili", "dy", "xhs"],
+  "creator": ["bili", "dy", "xhs", "zhihu"],
+  "pagedSearch": ["bili", "dy", "xhs"],
   "creatorSearch": ["bili", "dy"],
   "feed": ["bili", "dy", "xhs"],
   "creatorLimit": 200,
@@ -15,7 +16,8 @@
   "creatorUrl": {
     "bili": "^https://space\\.bilibili\\.com/\\d+(?:/[^?#]*)?(?:[?#].*)?$",
     "dy": "^https://(?!v\\.)(?:[\\w-]+\\.)*douyin\\.com/user/(?!self/?(?:[?#]|$))[^/?#]+/?(?:[?#].*)?$",
-    "xhs": "^https://(?:[\\w-]+\\.)*xiaohongshu\\.com/user/profile/[^/?#]+/?(?:[?#].*)?$"
+    "xhs": "^https://(?:[\\w-]+\\.)*xiaohongshu\\.com/user/profile/[^/?#]+/?(?:[?#].*)?$",
+    "zhihu": "^https://www\\.zhihu\\.com/people/[^/?#]+(?:/[^?#]*)?(?:[?#].*)?$"
   },
   "shareHosts": ["b23.tv", "v.douyin.com", "xhslink.com", "www.xhslink.com"]
 }

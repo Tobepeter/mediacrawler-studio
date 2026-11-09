@@ -9,14 +9,19 @@ export const creatorLimit = capabilities.creatorLimit
 export const creatorPresets = [20, 50, 100, 200] as const
 export const autoBatchSize = 20
 
+const pagedSearchPlatforms = capabilities.pagedSearch as readonly Platform[]
+
+// 能滚动续采的才有“自动”：知乎只有博主页能翻页，关键词搜索还是固定条数
+export const supportsAuto = (form: { platform: Platform; mode: string }) =>
+  form.mode === 'creator'
+    ? creatorPlatforms.includes(form.platform)
+    : form.mode === 'search' && pagedSearchPlatforms.includes(form.platform)
+
 export const isAutoForm = (form: {
   platform: Platform
   mode: string
   auto?: boolean
-}) =>
-  creatorPlatforms.includes(form.platform) &&
-  form.mode !== 'link' &&
-  form.auto !== false
+}) => supportsAuto(form) && form.auto !== false
 
 // 规则与主进程共用；分享短链无法在输入时区分作品和主页
 const creatorUrls = Object.values(capabilities.creatorUrl).map(

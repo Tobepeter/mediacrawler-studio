@@ -6,13 +6,14 @@ from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
 from desktop.pacing import BACKGROUND_WAIT_SECONDS, pace_client
-from desktop.paging import CREATOR_PLATFORMS, CreatorError
+from desktop.paging import PAGED_SEARCH_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
 from desktop.bili_paging import author_url as bili_author_url
 from desktop.result_store import ResultStore
 from desktop.xhs_paging import author_url as xhs_author_url
+from desktop.zhihu_paging import track_authors
 from desktop.comments import CommentCollector
 from desktop.page_context import PageContext
 from desktop.native_platforms import create_native
@@ -66,6 +67,8 @@ class DesktopCrawler:
         setattr(self.crawler, attr, self.client)
         limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else None
         pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail), limit)
+        if self.platform == 'zhihu':
+            track_authors(self)
 
     async def logged_in(self):
         if self.platform == 'wb' and urlparse(self.page.url).hostname in ('www.weibo.com', 'weibo.com'):
@@ -291,7 +294,7 @@ class DesktopCrawler:
     async def search(self):
         from desktop.search_options import search_options
         options = search_options(self.platform, self.request.get('filters'))
-        if self.platform not in CREATOR_PLATFORMS:
+        if self.platform not in PAGED_SEARCH_PLATFORMS:
             await ExtraCollector(self).search()
             return
         from desktop.creators import collect_search

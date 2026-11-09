@@ -18,6 +18,7 @@ import {
   isCreatorUrl,
   isShareShortLink,
   platformOfUrl,
+  supportsAuto,
 } from './creator-options'
 import { useState } from 'react'
 import { LoginGate } from './login-gate'
@@ -246,7 +247,7 @@ export function CollectForm() {
                   presets={form.mode === 'creator' ? creatorPresets : undefined}
                   auto={isAutoForm(form)}
                   onAuto={
-                    creatorPlatforms.includes(form.platform)
+                    supportsAuto(form)
                       ? () => updateForm({ auto: true })
                       : undefined
                   }

@@ -14,6 +14,7 @@ AUTHOR_LIMIT = 64
 CAPABILITIES = json.loads(Path(__file__).with_name('platform-capabilities.json').read_text())
 CREATOR_PLATFORMS = tuple(CAPABILITIES['creator'])
 CREATOR_SEARCH_PLATFORMS = tuple(CAPABILITIES['creatorSearch'])
+PAGED_SEARCH_PLATFORMS = tuple(CAPABILITIES['pagedSearch'])
 FEED_PLATFORMS = tuple(CAPABILITIES['feed'])
 EMPTY_PAGE_RETRIES = 2
 

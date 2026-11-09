@@ -34,7 +34,7 @@ uv run mediacrawler search --cursor <上次的 next_cursor> --limit 50
 
 `--limit` 是本次要多少条，默认一页 20 条；`--cursor` 是从哪继续，两者独立。输出格式和 `creator posts` 相同，末行给出 `next_cursor`，`has_more=false` 表示已到末尾。只想一次取固定条数时用 `collect`，它的输出不变
 
-## 博主（`posts` 支持 dy、xhs，`search` 仅 dy）
+## 博主（`posts` 支持 dy、xhs、bili、zhihu，`search` 支持 dy、bili）
 
 ```sh
 uv run mediacrawler creator search --query 罗翔 --limit 10

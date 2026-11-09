@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { creatorPlatforms } from './creator-options'
+import { feedPlatforms } from './creator-options'
 import { useStudio } from './store'
 import { updateFeedItem } from './use-feed'
 import type { ContentItem } from './types'
@@ -7,7 +7,7 @@ import type { ContentItem } from './types'
 const noop = () => {}
 
 export const needsDetail = (item: ContentItem) =>
-  creatorPlatforms.includes(item.platform) &&
+  feedPlatforms.includes(item.platform) &&
   (!item.media || ['pending', 'failed'].includes(item.media.status))
 
 // 详情先用列表数据打开，清晰度等慢数据在后台补，写回后由主进程状态推送更新

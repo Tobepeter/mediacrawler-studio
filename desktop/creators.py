@@ -1,7 +1,7 @@
 """按平台分发博主搜索、主页作品和关键词分页，桌面与 CLI 共用；各平台实现在 *_paging.py"""
 from importlib import import_module
 
-from desktop.paging import CREATOR_PLATFORMS, CREATOR_SEARCH_PLATFORMS, FEED_PLATFORMS, CreatorError
+from desktop.paging import CREATOR_PLATFORMS, CREATOR_SEARCH_PLATFORMS, FEED_PLATFORMS, PAGED_SEARCH_PLATFORMS, CreatorError
 
 
 def provider(platform, supported, message):
@@ -23,7 +23,7 @@ async def collect_creator(runner, reference, cursor=None):
 
 
 async def collect_search(runner, query, cursor=None, options=None):
-    await provider(runner.platform, CREATOR_PLATFORMS, '该平台暂不支持分页搜索').collect_search(runner, query, cursor, options)
+    await provider(runner.platform, PAGED_SEARCH_PLATFORMS, '该平台暂不支持分页搜索').collect_search(runner, query, cursor, options)
 
 
 async def load_feed(runner, cursor=None):
