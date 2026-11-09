@@ -32,16 +32,21 @@ if (app.isPackaged && !process.env.STUDIO_PYTHON) {
     process.platform === 'win32' ? 'studio-python.exe' : 'studio-python',
   )
 }
+// 开发版和安装版共用登录态、历史和缓存，只有日志分开；同一份数据同时只能开一个
 app.setPath(
   'userData',
   process.env.STUDIO_USER_DATA ||
-    path.join(
-      app.getPath('appData'),
-      app.isPackaged ? 'mediacrawler-studio' : 'mediacrawler-studio-dev',
-    ),
+    path.join(app.getPath('appData'), 'mediacrawler-studio'),
 )
-if (!app.requestSingleInstanceLock()) app.exit(0)
-const logger = new StudioLogger(path.join(app.getPath('userData'), 'logs'))
+if (!app.requestSingleInstanceLock()) {
+  console.error('MediaCrawler Studio 已在运行，请先退出再启动')
+  app.exit(0)
+}
+const logsDir = path.join(
+  app.getPath('userData'),
+  app.isPackaged ? 'logs' : 'logs-dev',
+)
+const logger = new StudioLogger(logsDir)
 process.on('uncaughtExceptionMonitor', (error) =>
   logger.write('error', 'main', 'uncaught', error),
 )
