@@ -220,6 +220,7 @@ app
       },
     )
     handle('resolve-creator-link', (url) => resolveCreatorLink(url))
+    handle('check-features', (platform) => service.checkFeatures(platform))
     handle('search-creators', (platform, keyword, cursor) =>
       service.searchCreators(platform, keyword, cursor),
     )

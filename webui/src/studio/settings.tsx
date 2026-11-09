@@ -1,23 +1,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
-import {
-  Settings,
-  FolderOpen,
-  LogOut,
-  Loader2,
-  RotateCcw,
-  SlidersHorizontal,
-  UserRound,
-} from 'lucide-react'
+import { Settings, FolderOpen, LogOut, Loader2, RotateCcw } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -33,13 +25,19 @@ import { toast } from 'sonner'
 import { ThemeToggle } from './theme-toggle'
 import { HealthSettings } from './health-settings'
 import { CliSettings } from './cli-settings'
+import { FeatureSettings } from './feature-settings'
+import { PlatformIcon } from './platform-icon'
+import { SettingGroup, SettingRow } from './settings-row'
 import { platformNames, useStudio } from './store'
+import type { Platform } from './types'
 
 // 语言、外观、下载偏好和平台会话管理
 export function StudioSettings() {
   const { t, i18n } = useTranslation('studio')
   const { setTheme } = useTheme()
   const {
+    accounts,
+    profiles,
     busy,
     pending,
     requests,
@@ -109,25 +107,28 @@ export function StudioSettings() {
           <Settings />
         </IconButton>
       </DialogTrigger>
+      {/* 高度固定，切换分页不跳动；矮窗口按视口收缩 */}
       <DialogContent
         aria-describedby={undefined}
-        className='max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl gap-6 overflow-y-auto'
+        className='flex h-[min(38rem,90dvh)] w-[calc(100%-2rem)] max-w-2xl flex-col gap-4'
       >
         <DialogHeader>
           <DialogTitle>{t('设置')}</DialogTitle>
         </DialogHeader>
-        <div className='space-y-6'>
-          <section aria-labelledby='studio-preferences' className='space-y-3'>
-            <h2
-              id='studio-preferences'
-              className='flex items-center gap-2 text-sm font-medium text-muted-foreground'
-            >
-              <SlidersHorizontal className='size-4' aria-hidden='true' />
-              {t('偏好设置')}
-            </h2>
-            <div className='space-y-5 rounded-xl bg-muted/40 p-4'>
-              <div className='flex min-h-9 flex-wrap items-center justify-between gap-3'>
-                <Label htmlFor='studio-language'>{t('语言')}</Label>
+        <Tabs defaultValue='general' className='flex min-h-0 flex-1 flex-col'>
+          <TabsList className='w-fit'>
+            <TabsTrigger value='general'>{t('通用')}</TabsTrigger>
+            <TabsTrigger value='health'>{t('体检')}</TabsTrigger>
+            <TabsTrigger value='account'>{t('账号')}</TabsTrigger>
+          </TabsList>
+          <TabsContent
+            value='general'
+            className='mt-4 min-h-0 flex-1 overflow-y-auto'
+          >
+            <SettingGroup>
+              <SettingRow
+                title={<Label htmlFor='studio-language'>{t('语言')}</Label>}
+              >
                 <Select
                   value={i18n.resolvedLanguage || 'zh-CN'}
                   onValueChange={(value) => void changeLanguage(value)}
@@ -143,20 +144,22 @@ export function StudioSettings() {
                     <SelectItem value='en-US'>English</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className='flex min-h-9 flex-wrap items-center justify-between gap-3'>
-                <span className='font-medium'>{t('外观')}</span>
+              </SettingRow>
+              <SettingRow title={t('外观')}>
                 <div className='rounded-lg bg-background p-1'>
                   <ThemeToggle />
                 </div>
-              </div>
-              <div className='flex min-h-9 items-center justify-between gap-3'>
-                <Label
-                  htmlFor='studio-ask-before-download'
-                  className='flex-1 cursor-pointer py-2'
-                >
-                  {t('下载前询问')}
-                </Label>
+              </SettingRow>
+              <SettingRow
+                title={
+                  <Label
+                    htmlFor='studio-ask-before-download'
+                    className='cursor-pointer'
+                  >
+                    {t('下载前询问')}
+                  </Label>
+                }
+              >
                 <Checkbox
                   id='studio-ask-before-download'
                   checked={askBeforeDownload}
@@ -164,36 +167,71 @@ export function StudioSettings() {
                     setAskBeforeDownload(checked === true)
                   }
                 />
-              </div>
-            </div>
-          </section>
-          <HealthSettings />
-          <CliSettings />
-          <section
-            aria-labelledby='studio-account-settings'
-            className='space-y-3'
-          >
-            <h2
-              id='studio-account-settings'
-              className='flex items-center gap-2 text-sm font-medium text-muted-foreground'
-            >
-              <UserRound className='size-4' aria-hidden='true' />
-              {t('账号')}
-            </h2>
-            <div className='space-y-5 rounded-xl bg-muted/40 p-4'>
-              <div className='flex flex-wrap items-center justify-between gap-3'>
-                <div className='space-y-1'>
-                  <p className='font-medium'>{t('登录态')}</p>
-                  <p
-                    id='studio-session-hint'
-                    className='text-sm text-muted-foreground'
-                  >
-                    {t(blocked && !clearing ? '任务进行中' : '保留采集记录')}
-                  </p>
-                </div>
+              </SettingRow>
+              <CliSettings />
+              <SettingRow title={t('恢复默认设置')}>
                 <Button
                   variant='outline'
-                  aria-describedby='studio-session-hint'
+                  disabled={blocked || clearing || resetting}
+                  onClick={() => void reset()}
+                >
+                  <RotateCcw />
+                  {t('恢复')}
+                </Button>
+              </SettingRow>
+            </SettingGroup>
+          </TabsContent>
+          <TabsContent
+            value='health'
+            className='mt-4 min-h-0 flex-1 overflow-y-auto'
+          >
+            <SettingGroup>
+              <FeatureSettings />
+              <HealthSettings />
+              <SettingRow title={t('运行日志')} hint={t('反馈问题时可以附上')}>
+                <Button
+                  variant='outline'
+                  disabled={!window.studio?.openLogs}
+                  onClick={() =>
+                    void window.studio
+                      ?.openLogs()
+                      .catch(() => toast.error(t('打开日志目录失败')))
+                  }
+                >
+                  <FolderOpen />
+                  {t('打开日志目录')}
+                </Button>
+              </SettingRow>
+            </SettingGroup>
+          </TabsContent>
+          <TabsContent
+            value='account'
+            className='mt-4 min-h-0 flex-1 overflow-y-auto'
+          >
+            <SettingGroup>
+              {(Object.keys(platformNames) as Platform[]).map((platform) => (
+                <SettingRow
+                  key={platform}
+                  title={
+                    <span className='inline-flex items-center gap-2'>
+                      <PlatformIcon platform={platform} className='size-4' />
+                      {t(platformNames[platform])}
+                    </span>
+                  }
+                >
+                  <span className='truncate text-sm text-muted-foreground'>
+                    {accounts[platform] === 'connected'
+                      ? profiles[platform]?.nickname || t('已连接')
+                      : t('未登录')}
+                  </span>
+                </SettingRow>
+              ))}
+              <SettingRow
+                title={t('清除登录态')}
+                hint={t(blocked && !clearing ? '任务进行中' : '保留采集记录')}
+              >
+                <Button
+                  variant='outline'
                   disabled={!window.studio || blocked || clearing}
                   onClick={() => void clear()}
                 >
@@ -204,33 +242,10 @@ export function StudioSettings() {
                   )}
                   {t(clearing ? '清除中' : '清除所有登录态')}
                 </Button>
-              </div>
-            </div>
-          </section>
-        </div>
-        <DialogFooter>
-          <Button
-            variant='outline'
-            disabled={!window.studio?.openLogs}
-            onClick={() =>
-              void window.studio
-                ?.openLogs()
-                .catch(() => toast.error(t('打开日志目录失败')))
-            }
-          >
-            <FolderOpen />
-            {t('打开日志目录')}
-          </Button>
-          <Button
-            variant='ghost'
-            className='text-muted-foreground'
-            disabled={blocked || clearing || resetting}
-            onClick={() => void reset()}
-          >
-            <RotateCcw />
-            {t('恢复默认设置')}
-          </Button>
-        </DialogFooter>
+              </SettingRow>
+            </SettingGroup>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )

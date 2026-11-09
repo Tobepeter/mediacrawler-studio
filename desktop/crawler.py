@@ -179,6 +179,13 @@ class DesktopCrawler:
                 self.emit("feed", items=[], next_cursor=None, has_more=False, busy=True)
             self.emit("done", message="推荐已更新")
             return
+        if self.request["action"] == "feature-check":
+            from desktop.feature_check import run_checks
+            if not await self.session_confirmed():
+                raise CreatorError("AUTH_REQUIRED", "登录已失效，请重新扫码")
+            self.emit("feature-check", items=await run_checks(self))
+            self.emit("done", message="体检完成")
+            return
         if self.request["action"] == "creator-search":
             from desktop.creators import search_creators
             if not await self.session_confirmed():

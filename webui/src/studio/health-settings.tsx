@@ -4,6 +4,7 @@ import { Activity, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { healthSummary } from './health-summary'
+import { SettingRow } from './settings-row'
 import { platformNames, useStudio } from './store'
 import i18n from '@/i18n'
 import type { Platform } from './types'
@@ -49,14 +50,11 @@ export function HealthSettings() {
       }),
   })
   return (
-    <div className='flex min-h-9 flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/40 p-4'>
-      <div className='flex items-center gap-3'>
-        <span className='font-medium'>{t('连接检查')}</span>
-        {checking && (
-          <span
-            role='status'
-            className='text-sm tabular-nums text-muted-foreground'
-          >
+    <SettingRow
+      title={t('登录入口检查')}
+      hint={
+        checking ? (
+          <span role='status' className='tabular-nums'>
             {progress?.stage === 'platforms'
               ? t('已检查 {{completed}}/{{total}}', {
                   completed: progress.completed,
@@ -64,8 +62,11 @@ export function HealthSettings() {
                 })
               : t('正在检查网络')}
           </span>
-        )}
-      </div>
+        ) : (
+          t('不用登录，只看各平台打不打得开、二维码取不取得到')
+        )
+      }
+    >
       <Button
         variant='outline'
         disabled={!window.studio?.healthCheck || checking}
@@ -78,6 +79,6 @@ export function HealthSettings() {
         )}
         {t(checking ? '检查中' : '检查全部平台')}
       </Button>
-    </div>
+    </SettingRow>
   )
 }

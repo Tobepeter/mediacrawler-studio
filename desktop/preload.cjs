@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('studio', {
   dismissLogin: () => ipcRenderer.invoke('studio:dismiss-login'),
   resolveCreatorLink: (url) =>
     ipcRenderer.invoke('studio:resolve-creator-link', url),
+  checkFeatures: (platform) =>
+    ipcRenderer.invoke('studio:check-features', platform),
   searchCreators: (platform, keyword, cursor) =>
     ipcRenderer.invoke('studio:search-creators', platform, keyword, cursor),
   saveDraft: (platform, form) =>

@@ -27,6 +27,15 @@ export interface CollectRequest {
   loginMode?: LoginMode
 }
 
+export interface FeatureResult {
+  id: 'feed' | 'creator' | 'search'
+  status: 'ok' | 'degraded' | 'failed' | 'skipped'
+  count?: number
+  expected?: number
+  missing?: string[]
+  message?: string
+}
+
 export interface ContentComment {
   id: string
   parentId: string
@@ -211,6 +220,9 @@ export interface HealthReport {
 export interface StudioBridge {
   setLoginForeground?(platform: Platform | null): Promise<void>
   healthCheck?(): Promise<HealthReport>
+  checkFeatures?(
+    platform: Platform,
+  ): Promise<{ items: FeatureResult[]; cancelled?: boolean }>
   ensureLogin?(platform: Platform): Promise<void>
   retryLogin?(platform: Platform): Promise<void>
   refreshLogin?(platform: Platform): Promise<void>

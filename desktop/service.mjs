@@ -12,6 +12,7 @@ import path from 'node:path'
 import {
   creatorLimit,
   creatorSearchPlatforms,
+  creatorPlatforms,
   feedPlatforms,
   isCreatorUrl,
   platforms,
@@ -379,6 +380,42 @@ export class StudioService {
           targetId,
         },
         90000,
+      )
+    } finally {
+      this.operations.delete(platform)
+      this.publish()
+    }
+  }
+
+  // 用户手动触发，占用平台互斥；各接口只请求一次，同样走平台节流
+  async checkFeatures(platform) {
+    if (!creatorPlatforms.includes(platform))
+      throw new Error('该平台暂不支持功能体检')
+    this.assertAvailable(platform)
+    if (this.state.accounts[platform] !== 'connected')
+      throw new Error('登录后才能体检')
+    if (!existsSync(this.python))
+      throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
+    const run = { kind: 'feature-check', child: null, cancelled: false }
+    this.operations.set(platform, run)
+    this.publish()
+    try {
+      await this.sessions?.stop(platform)
+      const targetId = await this.windows.prepare(platform)
+      if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
+      return await this.queryWorker(
+        run,
+        'feature-check',
+        '体检',
+        {
+          platform,
+          action: 'feature-check',
+          mode: 'search',
+          query: '',
+          limit: 20,
+          targetId,
+        },
+        180000,
       )
     } finally {
       this.operations.delete(platform)

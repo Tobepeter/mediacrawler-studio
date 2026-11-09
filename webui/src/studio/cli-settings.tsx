@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Download, Loader2, Terminal, Unplug } from 'lucide-react'
+import { Download, Loader2, Unplug } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { SettingRow } from './settings-row'
 
 export function CliSettings() {
   const { t } = useTranslation('studio')
@@ -47,40 +48,30 @@ export function CliSettings() {
     if (!pending) mutate(state.installed ? 'remove' : 'install')
   }
   return (
-    <section aria-labelledby='studio-cli' className='space-y-3'>
-      <h2
-        id='studio-cli'
-        className='flex items-center gap-2 text-sm font-medium text-muted-foreground'
+    <SettingRow
+      title={t('命令行工具')}
+      hint={
+        state.development
+          ? t('开发模式不可安装')
+          : state.conflict
+            ? t('已有同名命令')
+            : state.path
+      }
+    >
+      <Button
+        variant='outline'
+        disabled={pending || !state.available || state.conflict}
+        onClick={() => void change()}
       >
-        <Terminal className='size-4' aria-hidden='true' />
-        {t('命令行')}
-      </h2>
-      <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/40 p-4'>
-        <div className='space-y-1'>
-          <p className='font-medium'>mediacrawler</p>
-          <p className='text-sm text-muted-foreground'>
-            {state.development
-              ? t('开发模式不可安装')
-              : state.conflict
-                ? t('已有同名命令')
-                : state.path}
-          </p>
-        </div>
-        <Button
-          variant='outline'
-          disabled={pending || !state.available || state.conflict}
-          onClick={() => void change()}
-        >
-          {pending ? (
-            <Loader2 className='animate-spin motion-reduce:animate-none' />
-          ) : state.installed ? (
-            <Unplug />
-          ) : (
-            <Download />
-          )}
-          {t(state.installed ? '移除命令' : '安装命令')}
-        </Button>
-      </div>
-    </section>
+        {pending ? (
+          <Loader2 className='animate-spin motion-reduce:animate-none' />
+        ) : state.installed ? (
+          <Unplug />
+        ) : (
+          <Download />
+        )}
+        {t(state.installed ? '移除命令' : '安装命令')}
+      </Button>
+    </SettingRow>
   )
 }
