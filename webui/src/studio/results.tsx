@@ -102,7 +102,8 @@ const ResultItems = memo(function ResultItems({
             <ScrollSentinel
               key={`${page?.id}:${results.length}`}
               active={autoReady && !busy && !paused && route !== 'history'}
-              needsScroll={fromEarlier}
+              needsScroll
+              fillScreens={fromEarlier ? undefined : 0}
               onReach={continueCollect}
             >
               {(active && autoMode) || (autoReady && !fromEarlier) ? (

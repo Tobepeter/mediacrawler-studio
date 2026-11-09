@@ -76,7 +76,7 @@ export function FeedList({ platform }: { platform: Platform }) {
           route !== 'history'
         }
         needsScroll
-        fillViewport={current}
+        fillScreens={current ? 1 : undefined}
         screens={2}
         onReach={loadMore}
       >

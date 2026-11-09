@@ -4,12 +4,12 @@ import { useInView } from 'react-intersection-observer'
 // 列表每次变化都重新挂载：inView 由观察器异步更新，沿用旧值会在追加后多请求一批
 // 新实例从不可见开始，观察器首次回调给出真实位置，内容没填满时也会继续
 // needsScroll 时必须有用户的真实滚动才触发，不能一打开就访问平台
-// fillViewport 例外：先补到当前屏下方还多一屏，第一次滚动就有内容，之后仍等滚动
+// fillScreens 例外：内容不够可视区下方这么多屏时不等滚动先补，0 表示只铺满当前屏，不传不补
 // screens 是滚动时提前加载的距离，按可视区屏数算，窗口变化时自动跟随
 export function ScrollSentinel(props: {
   active: boolean
   needsScroll: boolean
-  fillViewport?: boolean
+  fillScreens?: number
   screens?: number
   onReach: () => void
   children: ReactNode
@@ -17,7 +17,7 @@ export function ScrollSentinel(props: {
   const {
     active,
     needsScroll,
-    fillViewport,
+    fillScreens,
     screens = 1,
     onReach,
     children,
@@ -49,20 +49,23 @@ export function ScrollSentinel(props: {
     return () => root.removeEventListener('scroll', mark)
   }, [root, needsScroll])
   useEffect(() => {
-    if (!root || !node || !fillViewport) {
+    if (!root || !node || fillScreens === undefined) {
       setShort(false)
       return
     }
     // 哨兵紧跟列表末尾，用它的位置判断可视区下方还备着多少内容
     const measure = () => {
       const view = root.getBoundingClientRect()
-      setShort(node.getBoundingClientRect().top < view.bottom + view.height)
+      setShort(
+        node.getBoundingClientRect().top <
+          view.bottom + view.height * fillScreens,
+      )
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [root, node, fillViewport])
+  }, [root, node, fillScreens])
   const shouldContinue = active && inView && (!needsScroll || scrolled || short)
   useEffect(() => {
     if (shouldContinue) onReach()

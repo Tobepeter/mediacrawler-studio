@@ -110,7 +110,7 @@ class Page:
     following: Any = None  # 下一页位置，None 表示已到末尾
 
 
-async def walk(runner, fetch, save, publish, position, skip=0, max_pages=None, empty_retries=0, label='平台', noun='内容'):
+async def walk(runner, fetch, save, publish, position, skip=0, max_pages=None, empty_retries=0, label='平台', noun='内容', one_page=False):
     """逐页逐条保存，数量够了或被风控时把位置精确到页内，续采不漏不重"""
     store, empty = runner.store, 0
     for _ in range(max_pages) if max_pages else forever():
@@ -144,6 +144,6 @@ async def walk(runner, fetch, save, publish, position, skip=0, max_pages=None, e
             publish()
             return
         publish(page.following)
-        if len(store.ids) >= store.limit:
+        if one_page or len(store.ids) >= store.limit:
             return
         position, skip = page.following, 0

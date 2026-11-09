@@ -24,7 +24,7 @@ def runner(client, limit=20):
     store = SimpleNamespace(ids=set(), items={}, limit=limit)
     current['store'] = store
     events = []
-    return SimpleNamespace(platform='dy', client=client, store=store, dy_details={}, emit=lambda kind, **data: events.append((kind, data)), events=events)
+    return SimpleNamespace(platform='dy', client=client, store=store, dy_details={}, request={}, emit=lambda kind, **data: events.append((kind, data)), events=events)
 
 
 def pages(task):

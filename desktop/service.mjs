@@ -361,15 +361,22 @@ export class StudioService {
       await this.sessions?.stop(platform)
       const targetId = await this.windows.prepare(platform)
       if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
-      return await this.queryWorker(run, 'creators', '搜索', {
-        platform,
-        action: 'creator-search',
-        mode: 'search',
-        query,
-        limit: 20,
-        cursor,
-        targetId,
-      })
+      // 抖音一次最多翻 3 页，按节流要等将近一分钟
+      return await this.queryWorker(
+        run,
+        'creators',
+        '搜索',
+        {
+          platform,
+          action: 'creator-search',
+          mode: 'search',
+          query,
+          limit: 20,
+          cursor,
+          targetId,
+        },
+        90000,
+      )
     } finally {
       this.operations.delete(platform)
       this.publish()
@@ -377,7 +384,7 @@ export class StudioService {
   }
 
   // 一次性查询 worker：结果只回给调用方，取消时返回 cancelled，不进历史
-  queryWorker(run, resultEvent, label, payload) {
+  queryWorker(run, resultEvent, label, payload, timeoutMs = 45000) {
     return new Promise((resolve, reject) => {
       const child = this.spawnProcess(
         this.python,
@@ -398,13 +405,20 @@ export class StudioService {
       const timer = setTimeout(() => {
         message = `${label}超时，请重试`
         child.kill('SIGKILL')
-      }, 45000)
+      }, timeoutMs)
       const lines = createInterface({ input: child.stdout })
       lines.on('line', (line) => {
         try {
           const event = JSON.parse(line)
           if (event.type === resultEvent) result = event
           else if (event.type === 'error') message = event.message
+          else if (event.type === 'log')
+            this.logger?.write(
+              event.level === 'warn' ? 'warn' : 'info',
+              'crawler',
+              event.event,
+              { platform: payload.platform, ...event.detail },
+            )
         } catch {
           /* 非协议输出不进入页面 */
         }
@@ -456,7 +470,7 @@ export class StudioService {
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
     const targetId = await this.windows.prepare(platform)
     if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
-    return this.queryWorker(run, 'feed', '获取推荐', {
+    const page = await this.queryWorker(run, 'feed', '获取推荐', {
       platform,
       action: 'feed',
       mode: 'search',
@@ -466,6 +480,16 @@ export class StudioService {
       targetId,
       background: run.background,
     })
+    // 排查风控要能还原请求时间线
+    this.logger?.write('info', 'crawler', 'feed-page', {
+      platform,
+      background: run.background,
+      next: !!cursor,
+      count: page.items.length,
+      busy: !!page.busy,
+      cancelled: !!page.cancelled,
+    })
+    return page
   }
 
   cancelFeed(platform) {

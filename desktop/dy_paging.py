@@ -186,7 +186,8 @@ async def collect_search(runner, query, cursor=None, options=None):
             if key in runner.store.items:
                 runner.dy_details[key] = item
 
-    await walk(runner, fetch, save, publish, offset, state.get('s', 0), max_pages=SEARCH_MAX_REQUESTS, **LABEL)
+    # 自动模式一批只取一页，不在一次采集里连翻两页
+    await walk(runner, fetch, save, publish, offset, state.get('s', 0), max_pages=SEARCH_MAX_REQUESTS, one_page=bool(runner.request.get('auto')), **LABEL)
 
 
 async def collect_creator(runner, reference, cursor=None):

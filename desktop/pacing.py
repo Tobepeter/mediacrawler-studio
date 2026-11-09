@@ -68,6 +68,8 @@ class Rule:
     is_fresh: Optional[Callable] = None
     window_limit: int = 0
     window_seconds: int = 0
+    # window_limit 只算换关键词和首屏；total_limit 连翻页一起算，共用时间线的规则要填同一个值
+    total_limit: int = 0
     cooldown_seconds: int = 0
     name: str = '抖音'
     is_blocked: Optional[Callable] = None
@@ -82,13 +84,13 @@ RULES = {
     ('bili', 'get_creator_videos'): Rule(key='bili', page_gap=(3, 6), **BILI_COOLDOWN),
     ('dy', 'search_info_by_keyword'): Rule(
         # 换关键词约等于用户看完一屏结果再搜下一个，翻页约等于看完一屏再向下滚动
-        # 3-6 秒翻页时，几分钟内连续采几批就会触发验证（2026-11-09 实际遇到）
-        key='dy-search', fresh_gap=(10, 15), page_gap=(6, 10), is_fresh=first_search_page,
-        window_limit=20, window_seconds=600, cooldown_seconds=1800,
+        # 3-6 秒翻页时，几分钟内连续采几批就会触发验证；6-10 秒时首页后第二页仍触发过（2026-11-09 实际遇到）
+        key='dy-search', fresh_gap=(10, 15), page_gap=(12, 20), is_fresh=first_search_page,
+        window_limit=20, window_seconds=600, total_limit=30, cooldown_seconds=1800,
     ),
     # 推荐流和搜索算同一个用户在刷：共用时间线和上限，只有用户滚动才翻页
     ('bili', 'get_home_feed'): Rule(key='bili', fresh_gap=(4, 7), page_gap=(3, 6), is_fresh=first_page, window_limit=30, window_seconds=600, **BILI_COOLDOWN),
-    ('dy', 'get_home_feed'): Rule(key='dy-search', fresh_gap=(4, 8), page_gap=(6, 10), is_fresh=first_page, window_limit=20, window_seconds=600, cooldown_seconds=1800),
+    ('dy', 'get_home_feed'): Rule(key='dy-search', fresh_gap=(4, 8), page_gap=(6, 10), is_fresh=first_page, window_limit=20, window_seconds=600, total_limit=30, cooldown_seconds=1800),
     ('xhs', 'get_home_feed'): Rule(key='xhs', fresh_gap=(4, 8), page_gap=(4, 7), is_fresh=first_feed_page, window_limit=20, window_seconds=600, cooldown_seconds=1800, name='小红书', is_blocked=xhs_blocked),
     ('dy', 'get_user_aweme_posts'): Rule(key='dy-user-posts', page_gap=(2, 4)),
     # 小红书共用一条时间线：搜索、主页和详情都算同一个用户在连续操作，验证也要一起停
@@ -164,12 +166,15 @@ def reserve(path, rule, fresh, now=None, limit=None):
             stamps = state.get('recent')
             recent = [stamp for stamp in stamps if number(stamp) > now - rule.window_seconds] if isinstance(stamps, list) else []
             over = fresh and rule.window_limit and len(recent) >= rule.window_limit
-            retry_after = recent[0] + rule.window_seconds - now if over else start - now
+            stored = state.get('total')
+            total = [stamp for stamp in stored if number(stamp) > now - rule.window_seconds] if isinstance(stored, list) else []
+            full = rule.total_limit and len(total) >= rule.total_limit
+            retry_after = max(start - now, recent[0] + rule.window_seconds - now if over else 0, total[0] + rule.window_seconds - now if full else 0)
             if limit is not None and retry_after > limit:
                 raise CreatorError('FEED_BUSY', '平台正忙，稍后再试', retry_after=math.ceil(retry_after))
-            if over or retry_after > MAX_WAIT_SECONDS:
+            if over or full or retry_after > MAX_WAIT_SECONDS:
                 raise CreatorError('RATE_LIMITED', f'操作太频繁，请约 {math.ceil(retry_after)} 秒后再试', retry_after=math.ceil(retry_after))
-            write_state(path, {**state, 'last_at': start, 'recent': recent + [start] if fresh and rule.window_limit else recent})
+            write_state(path, {**state, 'last_at': start, 'recent': recent + [start] if fresh and rule.window_limit else recent, 'total': total + [start] if rule.total_limit else total})
     except OSError:
         return 0
     return start - now

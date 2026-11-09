@@ -28,6 +28,17 @@ def test_background_gives_up_without_taking_the_slot(path):
     assert reserve(path, PAGES, False, now=1000) == 2
 
 
+def test_total_limit_counts_page_turns(path):
+    rule = Rule(key='total', page_gap=(1, 1), window_seconds=100, total_limit=2)
+    assert reserve(path, rule, False, now=1000) == 0
+    assert reserve(path, rule, False, now=1010) == 0
+    with pytest.raises(CreatorError) as caught:
+        reserve(path, rule, False, now=1020)
+    assert caught.value.code == 'RATE_LIMITED'
+    assert caught.value.retry_after == 80
+    assert reserve(path, rule, False, now=1101) == 0
+
+
 def test_only_search_has_new_query_gap(path):
     assert reserve(path, PAGES, False, now=1000) == 0
     assert reserve(path, PAGES, False, now=1000) == 2
