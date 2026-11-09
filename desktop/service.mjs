@@ -416,15 +416,38 @@ export class StudioService {
           targetId,
         },
         180000,
+        (event) => this.reportFeatureProgress(platform, event),
       )
     } finally {
+      delete this.state.featureCheck
       this.operations.delete(platform)
       this.publish()
     }
   }
 
+  // 节流等待可能十几秒，告诉用户在等什么，别以为卡住了
+  reportFeatureProgress(platform, event) {
+    if (event.type === 'feature-progress')
+      this.state.featureCheck = {
+        platform,
+        step: event.step,
+        results: Array.isArray(event.results) ? event.results : [],
+      }
+    else if (
+      event.type === 'log' &&
+      event.event === 'pacing-wait' &&
+      this.state.featureCheck
+    )
+      this.state.featureCheck = {
+        ...this.state.featureCheck,
+        waitSeconds: Math.round(event.detail?.seconds || 0),
+      }
+    else return
+    this.publish()
+  }
+
   // 一次性查询 worker：结果只回给调用方，取消时返回 cancelled，不进历史
-  queryWorker(run, resultEvent, label, payload, timeoutMs = 45000) {
+  queryWorker(run, resultEvent, label, payload, timeoutMs = 45000, onEvent) {
     return new Promise((resolve, reject) => {
       const child = this.spawnProcess(
         this.python,
@@ -450,6 +473,7 @@ export class StudioService {
       lines.on('line', (line) => {
         try {
           const event = JSON.parse(line)
+          onEvent?.(event)
           if (event.type === resultEvent) result = event
           else if (event.type === 'error') message = event.message
           else if (event.type === 'log')

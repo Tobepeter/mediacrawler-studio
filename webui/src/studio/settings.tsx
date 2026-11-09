@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { ThemeToggle } from './theme-toggle'
-import { HealthSettings } from './health-settings'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
@@ -169,25 +168,6 @@ export function StudioSettings() {
                 />
               </SettingRow>
               <CliSettings />
-              <SettingRow title={t('恢复默认设置')}>
-                <Button
-                  variant='outline'
-                  disabled={blocked || clearing || resetting}
-                  onClick={() => void reset()}
-                >
-                  <RotateCcw />
-                  {t('恢复')}
-                </Button>
-              </SettingRow>
-            </SettingGroup>
-          </TabsContent>
-          <TabsContent
-            value='health'
-            className='mt-4 min-h-0 flex-1 overflow-y-auto'
-          >
-            <SettingGroup>
-              <FeatureSettings />
-              <HealthSettings />
               <SettingRow title={t('运行日志')} hint={t('反馈问题时可以附上')}>
                 <Button
                   variant='outline'
@@ -202,6 +182,24 @@ export function StudioSettings() {
                   {t('打开日志目录')}
                 </Button>
               </SettingRow>
+              <SettingRow title={t('恢复默认设置')}>
+                <Button
+                  variant='outline'
+                  disabled={blocked || clearing || resetting}
+                  onClick={() => void reset()}
+                >
+                  <RotateCcw />
+                  {t('恢复')}
+                </Button>
+              </SettingRow>
+            </SettingGroup>
+          </TabsContent>
+          <TabsContent
+            value='health'
+            className='mt-4 min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]'
+          >
+            <SettingGroup>
+              <FeatureSettings />
             </SettingGroup>
           </TabsContent>
           <TabsContent

@@ -1,7 +1,12 @@
-"""功能体检：用当前账号把推荐、博主页、搜索各请求一次，看条数和字段有没有变；不翻页、不取详情、不写历史"""
+"""功能体检：用当前账号把推荐、博主页、详情、下载、搜索各走一次，看条数和字段有没有变；不翻页、不写历史、不落盘"""
 import asyncio
 
+import httpx
+
 from desktop.creators import load_feed
+from desktop.links import HOSTS, media_referer
+from desktop.media_download import public_request, secure_url
+from media_downloader.downloader import DEFAULT_USER_AGENT
 from desktop.pacing import wait_turn
 from desktop.paging import CreatorError
 
@@ -48,6 +53,62 @@ async def creator_rows(runner, url):
     return (await client.get_creator_answers(identity, 0, 20) or {}).get('data') or []
 
 
+def pick_sample(platform, items):
+    # 知乎正文就在卡片里，挑带图的探测下载；其他平台优先视频，下载最容易坏的就是它
+    if platform == 'zhihu':
+        return next((item for item in items if item.get('images')), None)
+    return next((item for item in items if item.get('contentType') == 'video'), items[0] if items else None)
+
+
+async def detail_rows(runner, record):
+    if runner.platform == 'zhihu':
+        return [record] if record.get('text') else []
+    await runner.client.update_cookies(runner.context)
+    runner.request = {**runner.request, 'mode': 'link', 'query': record['url']}
+    await runner.detail()
+    full = runner.store.items.get(record['id'])
+    return [{**full, 'contentType': record.get('contentType')}] if full and (full.get('text') or full.get('images')) else []
+
+
+async def media_source(runner, record):
+    if record.get('contentType') == 'video' and runner.platform != 'zhihu':
+        from desktop.media_resolver import MediaResolver
+        async for item in MediaResolver(record, runner.page, runner=runner).videos():
+            return [item.url, *item.backup_urls], item.headers or {}
+        return [], {}
+    return (record.get('images') or [])[:1], {}
+
+
+async def probe_media(url, headers, platform):
+    """只要响应头：Range 限定前 2 字节，读到状态就断开，不下载也不写文件"""
+    # 请求头要和真实下载一致，B站 CDN 不认默认的 python-httpx
+    request_headers = {'User-Agent': DEFAULT_USER_AGENT, 'Range': 'bytes=0-1', **({'Referer': media_referer(platform)} if platform in HOSTS else {}), **headers}
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15, event_hooks={'request': [public_request]}) as client:
+        async with client.stream('GET', secure_url(url), headers=request_headers) as response:
+            kind = response.headers.get('content-type', '').split('/')[0].lower()
+            if response.status_code not in (200, 206):
+                raise CreatorError('MEDIA_UNAVAILABLE', f'媒体地址访问失败（HTTP {response.status_code}）')
+            if kind not in ('video', 'image', 'audio', 'application'):
+                raise CreatorError('MEDIA_UNAVAILABLE', '媒体地址返回的不是媒体文件')
+
+
+async def download_rows(runner, record):
+    urls, headers = await media_source(runner, record)
+    failure = None
+    # 真实下载会换备用线路，有一条能用就算正常
+    for url in urls:
+        try:
+            await probe_media(url, headers, runner.platform)
+            return [url]
+        except (CreatorError, RuntimeError, httpx.HTTPError) as error:
+            failure = error
+    if isinstance(failure, CreatorError):
+        raise failure
+    if failure:
+        raise CreatorError('MEDIA_UNAVAILABLE', '媒体地址无法访问')
+    return []
+
+
 def missing_fields(platform, items):
     exempt = FIELD_EXEMPT.get(platform, ())
     return [name for name in CARD_FIELDS if name not in exempt and sum(bool(item.get(name)) for item in items) < len(items) * COVERAGE]
@@ -60,11 +121,12 @@ class Checks:
     def skip(self, name, message):
         self.results.append({'id': name, 'status': 'skipped', 'message': message})
 
-    async def attempt(self, name, call, floor, inspect=None):
+    async def attempt(self, name, call, floor, inspect=None, counted=True):
         """返回取到的内容；失败只记结果，一项坏了不影响查其他项"""
         if self.stopped:
             self.skip(name, self.stopped)
             return None
+        self.runner.emit('feature-progress', step=name, results=self.results)
         try:
             rows = await call()
         except CreatorError as error:
@@ -80,7 +142,7 @@ class Checks:
             return None
         count, missing = len(rows), (inspect(rows) if inspect and rows else [])
         status = 'failed' if not count else 'degraded' if count < floor or missing else 'ok'
-        self.results.append({'id': name, 'status': status, 'count': count, 'expected': floor, 'missing': missing})
+        self.results.append({'id': name, 'status': status, 'missing': missing, **({'count': count, 'expected': floor} if counted else {})})
         return rows
 
 
@@ -96,6 +158,14 @@ async def run_checks(runner):
         await checks.attempt('creator', lambda: creator_rows(runner, author), 1)
     else:
         checks.skip('creator', '推荐里没有拿到博主主页')
+    sample = pick_sample(platform, items)
+    full = sample and await checks.attempt('detail', lambda: detail_rows(runner, sample), 1, counted=False)
+    if not sample:
+        checks.skip('detail', '推荐里没有可检查的作品')
+    if full or (sample and checks.stopped):
+        await checks.attempt('download', lambda: download_rows(runner, full[0] if full else sample), 1, counted=False)
+    else:
+        checks.skip('download', '详情没有拿到，跳过')
     # 搜索最容易触发验证，放在最后
     await checks.attempt('search', lambda: search_rows(runner), SEARCH_FLOOR)
     return checks.results

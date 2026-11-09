@@ -28,7 +28,7 @@ export interface CollectRequest {
 }
 
 export interface FeatureResult {
-  id: 'feed' | 'creator' | 'search'
+  id: 'feed' | 'creator' | 'detail' | 'download' | 'search'
   status: 'ok' | 'degraded' | 'failed' | 'skipped'
   count?: number
   expected?: number
@@ -168,6 +168,12 @@ export interface PlatformLoginState {
 }
 
 export interface StudioState {
+  featureCheck?: {
+    platform: Platform
+    step: string
+    results?: FeatureResult[]
+    waitSeconds?: number
+  }
   healthCheck?: {
     stage: 'network' | 'platforms' | 'done'
     completed: number
