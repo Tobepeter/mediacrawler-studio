@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('studio', {
   ensureLogin: (platform) =>
     ipcRenderer.invoke('studio:ensure-login', platform),
   retryLogin: (platform) => ipcRenderer.invoke('studio:retry-login', platform),
+  refreshLogin: (platform) =>
+    ipcRenderer.invoke('studio:refresh-login', platform),
   stopLogin: (platform) => ipcRenderer.invoke('studio:stop-login', platform),
   resolveVideo: (platform, id, requestId) =>
     ipcRenderer.invoke('studio:resolve-video', platform, id, requestId),

@@ -142,6 +142,7 @@ export interface PlatformLoginState {
   startedAt?: number
   updatedAt?: number
   image?: string
+  refreshing?: boolean
   failure?: { code: string; stage: string; retryable?: boolean }
 }
 
@@ -200,6 +201,7 @@ export interface StudioBridge {
   healthCheck?(): Promise<HealthReport>
   ensureLogin?(platform: Platform): Promise<void>
   retryLogin?(platform: Platform): Promise<void>
+  refreshLogin?(platform: Platform): Promise<void>
   stopLogin?(platform: Platform): Promise<void>
   cliStatus(): Promise<CliStatus>
   cliInstall(

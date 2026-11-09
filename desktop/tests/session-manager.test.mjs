@@ -150,6 +150,58 @@ test('用户看着二维码时等待到期自动换码，无人操作换两次�
   await f.manager.stopAll(true)
 })
 
+test('常规刷新不重启进程，旧码留到新码就绪；失败自动走完整流程', async () => {
+  const f = fixture()
+  f.manager.ensure('bili')
+  await waitForQr(f, 0)
+  const calls = []
+  let release
+  f.service.windows.captureBackgroundQr = async (
+    _id,
+    refresh,
+    _active,
+    options,
+  ) => {
+    calls.push({ refresh, passive: options.passive })
+    await new Promise((resolve) => (release = resolve))
+    return { image: 'data:image/png;base64,new' }
+  }
+  f.manager.refresh('bili')
+  f.manager.refresh('bili')
+  await tick()
+  assert.deepEqual(calls, [{ refresh: true, passive: false }])
+  assert.equal(f.state.logins.bili.refreshing, true)
+  assert.equal(f.state.logins.bili.image, 'data:image/png;base64,bili')
+  release()
+  await tick()
+  assert.equal(f.state.logins.bili.refreshing, undefined)
+  assert.equal(f.state.logins.bili.image, 'data:image/png;base64,new')
+  assert.equal(f.children.length, 1)
+
+  f.service.windows.captureBackgroundQr = async () => ({ code: 'unavailable' })
+  f.manager.refresh('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 2)
+  assert.equal(f.state.logins.bili.status, 'preparing')
+  assert.equal(f.state.logins.bili.failure, undefined)
+  await f.manager.stopAll(true)
+})
+
+test('没有可用二维码时常规刷新直接走完整流程', async () => {
+  const f = fixture()
+  f.manager.ensure('bili')
+  await waitForQr(f, 0)
+  scanTimeout(f, 0)
+  await tick()
+  await tick()
+  assert.equal(f.state.logins.bili.status, 'expired')
+  await f.manager.refresh('bili')
+  await tick()
+  assert.equal(f.children.length, 2)
+  await f.manager.stopAll(true)
+})
+
 test('后台到期不换码，切回平台时才换；手机确认中到期不打断', async () => {
   const f = fixture()
   f.manager.ensure('bili')

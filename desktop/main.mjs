@@ -137,6 +137,7 @@ app
     )
     handle('ensure-login', (platform) => service.sessions.ensure(platform))
     handle('retry-login', (platform) => service.sessions.retry(platform))
+    handle('refresh-login', (platform) => service.sessions.refresh(platform))
     handle('stop-login', (platform) => {
       if (
         !Object.hasOwn(service.state.accounts, platform) &&

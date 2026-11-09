@@ -20,14 +20,17 @@ export function PlatformLogin() {
     loginMayBeBroken(platform),
   )
   const loading = !login || ['queued', 'preparing'].includes(login.status)
-  const retry = () =>
-    void window.studio?.retryLogin?.(platform).catch(() => {
+  const refreshing = !!login?.refreshing
+  const run = (action?: Promise<void>) =>
+    void action?.catch(() => {
       if (
         useStudio.getState().platform === platform &&
         document.visibilityState === 'visible'
       )
         toast.error(t('打开失败，请重试'))
     })
+  const retry = () => run(window.studio?.retryLogin?.(platform))
+  const refresh = () => run(window.studio?.refreshLogin?.(platform))
   return (
     <section
       className='flex flex-1 flex-col items-center justify-center gap-6 py-12'
@@ -41,10 +44,12 @@ export function PlatformLogin() {
         <QrFrame
           image={login?.image}
           confirming={login?.status === 'confirming'}
-          loading={loading}
+          loading={loading || refreshing}
           estimateAt={
-            (login?.startedAt || login?.scheduledAt || Date.now()) +
-            loginEstimate(platform)
+            refreshing
+              ? undefined
+              : (login?.startedAt || login?.scheduledAt || Date.now()) +
+                loginEstimate(platform)
           }
           loadingLabel={t('正在获取二维码')}
           onRetry={retry}
@@ -55,7 +60,11 @@ export function PlatformLogin() {
           {login?.status === 'ready' ? (
             <>
               <span>{t('扫码登录')}</span>
-              <IconButton label={t('刷新二维码')} onClick={retry}>
+              <IconButton
+                label={t('刷新二维码')}
+                disabled={refreshing}
+                onClick={refresh}
+              >
                 <RefreshCw />
               </IconButton>
             </>

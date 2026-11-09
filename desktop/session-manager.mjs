@@ -293,13 +293,24 @@ export class SessionManager {
     // Worker 复用后台页，换码必须重载页面，否则读回来的还是原来那张
     let refreshing = job.reload
     job.reload = false
+    const swapping = refreshing && !!job.image
+    // 原地换码失败时自动走一次完整流程，用户不用再点
+    const giveUp = () => {
+      if (swapping) void this.retry(job.platform).catch(() => {})
+      else
+        this.fail(job, {
+          code: 'QR_IMAGE_FAILED',
+          stage: 'qr_image',
+          retryable: true,
+        })
+    }
     const active = () => this.active(job) && !job.connected && !job.confirming
     try {
       let result = await this.service.windows.captureBackgroundQr(
         job.platform,
         refreshing,
         active,
-        { passive: !!job.image },
+        { passive: !!job.image && !refreshing },
       )
       if (result.code === 'expired' && active()) {
         refreshing = true
@@ -318,12 +329,18 @@ export class SessionManager {
         this.service.logger?.write('info', 'login', 'qr-scanned', {
           platform: job.platform,
         })
-        this.update(job, { status: 'confirming', failure: undefined })
+        this.update(job, {
+          status: 'confirming',
+          failure: undefined,
+          refreshing: undefined,
+        })
       } else if (result.image) {
         clearTimeout(job.deadline)
+        const current = this.service.state.logins[job.platform]
         const changed =
           job.image !== result.image ||
-          this.service.state.logins[job.platform]?.status !== 'ready'
+          current?.status !== 'ready' ||
+          current?.refreshing
         // 只记录换码时机，不写二维码内容
         if (job.image !== result.image) {
           this.service.logger?.write('info', 'login', 'qr-updated', {
@@ -341,29 +358,34 @@ export class SessionManager {
             image: result.image,
             updatedAt: Date.now(),
             failure: undefined,
+            refreshing: undefined,
           })
       } else if (
         result.code !== 'cancelled' &&
-        (!job.image || (refreshing && result.code !== 'pending'))
+        (!job.image || swapping || (refreshing && result.code !== 'pending'))
       ) {
-        this.fail(job, {
-          code: 'QR_IMAGE_FAILED',
-          stage: 'qr_image',
-          retryable: true,
-        })
+        giveUp()
       }
       // 已有码时，短暂消失/跳转/读图失败不取消扫码，不重开登录页
     } catch {
-      if (!job.image || refreshing)
-        this.fail(job, {
-          code: 'QR_IMAGE_FAILED',
-          stage: 'qr_image',
-          retryable: true,
-        })
+      if (!job.image || refreshing) giveUp()
     } finally {
       job.capturing = false
-      this.schedule(job)
+      if (job.reload) void this.capture(job)
+      else this.schedule(job)
     }
+  }
+
+  // 常规刷新：等待进程不动，只重载后台页换码，旧码留在原地直到新码就绪
+  refresh(platform) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
+    const job = this.jobs.get(platform)
+    if (!job?.image || job.connected || job.confirming)
+      return this.retry(platform)
+    if (job.reload || this.service.state.logins[platform]?.refreshing) return
+    job.reload = true
+    this.update(job, { refreshing: true })
+    if (!job.capturing) void this.capture(job)
   }
 
   retry(platform) {
