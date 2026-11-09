@@ -162,7 +162,8 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
 
     async def get_home_feed(self, page: int = 1, count: int = 20) -> Dict:
         """get the recommended feed shown on the jingxuan page"""
-        data = {
+        uri = "/aweme/v2/web/module/feed/"
+        params = {
             "module_id": 3003101,
             "count": count,
             "filterGids": "",
@@ -170,11 +171,16 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             "refresh_index": page,
             "refer_id": "",
             "refer_type": 10,
+            "pull_type": 2,
             "awemePcRecRawData": '{"is_client":false}',
             "Seo-Flag": 0,
             "tag_id": "",
+            "use_lite_type": 0,
+            "xigua_user": 0,
         }
-        return await self.post("/aweme/v2/web/module/feed/", data)
+        # 网址和表单都要带参数：只放表单平台读不到 count，只回几条；只放网址返回的不是 JSON
+        await self.__process_req_params(uri, params)
+        return await self.request(method="POST", url=f"{self._host}{uri}", params=params, data=dict(params), headers=self.headers)
 
     async def pong(self, browser_context: BrowserContext) -> bool:
         local_storage = await self.playwright_page.evaluate("() => window.localStorage")
