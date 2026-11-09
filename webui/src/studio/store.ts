@@ -89,6 +89,7 @@ interface StudioStore extends StudioState {
   authorTrips: Partial<Record<Platform, AuthorTrip>>
   openAuthor: (item: ContentItem) => Promise<void>
   leaveAuthor: () => Promise<void>
+  backToFeed: () => Promise<void>
   loginMode: LoginMode
   setLoginMode: (value: LoginMode) => boolean
   askBeforeDownload: boolean
@@ -283,6 +284,25 @@ export const useStudio = create<StudioStore>((set, get) => ({
       const page = get().pages[platform]
       return trip.pageId ? page?.id === trip.pageId : !page
     }, trip.scroll)
+  },
+  // 推荐流留在查询缓存里，回去不用重新请求，这里只要把结果页撤掉
+  backToFeed: async () => {
+    const { platform } = get()
+    set((state) => {
+      const authorTrips = { ...state.authorTrips }
+      delete authorTrips[platform]
+      return { authorTrips }
+    })
+    // 后台续采还占着平台时清不掉结果，先等它退出
+    await halt(platform)
+    try {
+      await get().clearResults()
+    } catch {
+      toast.error(t('操作失败，请重试'), { id: 'back-to-feed' })
+      return
+    }
+    const scroller = mainScroller()
+    if (scroller) scroller.scrollTop = 0
   },
   loginMode: 'qrcode',
   setLoginMode: (value) => {

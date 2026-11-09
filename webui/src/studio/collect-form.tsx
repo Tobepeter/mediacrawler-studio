@@ -98,10 +98,17 @@ export function CollectForm() {
   }
   const clearQuery = () => {
     setCleared(true)
-    updateForm({ query: '', mode: 'search', limit: limitFor('search') })
+    updateForm({
+      query: '',
+      mode: 'search',
+      // 点进博主时临时改过条数和自动，清空时还原
+      ...(trip
+        ? { limit: trip.form.limit, auto: trip.form.auto }
+        : { limit: limitFor('search') }),
+    })
     // 清空输入即回到推荐流；结果仍在历史里
     if (page && feedPlatforms.includes(form.platform))
-      void useStudio.getState().clearResults()
+      void useStudio.getState().backToFeed()
   }
   const updateQuery = (input: string) => {
     const query = extractShareUrl(input)
@@ -201,7 +208,7 @@ export function CollectForm() {
                   <CreatorField
                     url={form.query}
                     creator={creator}
-                    disabled={busy || pending || locked || !!trip}
+                    disabled={busy || pending || locked}
                     onClear={clearQuery}
                   />
                 ) : (
