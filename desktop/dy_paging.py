@@ -236,7 +236,7 @@ async def collect_creator(runner, reference, cursor=None):
 
 
 async def load_feed(runner, cursor=None):
-    from media_platform.douyin.media import extract_cover_url
+    from media_platform.douyin.media import extract_card_cover_url
     state = decode_cursor(cursor, 'dy-feed')
     page = state.get('p', 1)
     if not is_index(page, 1):
@@ -249,7 +249,7 @@ async def load_feed(runner, cursor=None):
         if identity and not row.get('cell_room'):
             items.append(feed_record(
                 'dy', identity, str(row.get('desc') or '')[:80], (row.get('author') or {}).get('nickname'),
-                f'https://www.douyin.com/video/{identity}', extract_cover_url(row), (row.get('statistics') or {}).get('digg_count'),
+                f'https://www.douyin.com/video/{identity}', extract_card_cover_url(row), (row.get('statistics') or {}).get('digg_count'),
                 'note' if row.get('images') else 'video',
             ))
     more = response.get('has_more') not in (False, 0)

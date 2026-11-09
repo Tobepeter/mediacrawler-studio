@@ -24,7 +24,7 @@
 from typing import List
 
 import config
-from media_platform.douyin.media import extract_cover_url, extract_image_urls, extract_video_urls
+from media_platform.douyin.media import extract_card_cover_url, extract_image_urls, extract_video_urls
 from var import source_keyword_var
 from tools.user_hash import anonymize_user_id, mask_nickname
 
@@ -109,7 +109,7 @@ async def update_douyin_aweme(aweme_item: Dict):
         "share_count": str(interact_info.get("share_count")),
         "last_modify_ts": utils.get_current_timestamp(),
         "aweme_url": f"https://www.douyin.com/video/{aweme_id}",
-        "cover_url": extract_cover_url(aweme_item),
+        "cover_url": extract_card_cover_url(aweme_item),
         "video_download_url": (extract_video_urls(aweme_item) or [""])[0],
         "music_download_url": _extract_music_download_url(aweme_item),
         "note_download_url": ",".join(extract_image_urls(aweme_item)),

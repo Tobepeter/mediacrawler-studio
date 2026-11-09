@@ -65,6 +65,16 @@ def extract_cover_url(aweme_detail: Dict) -> str:
     return ""
 
 
+def extract_card_cover_url(aweme_detail: Dict) -> str:
+    """列表卡片用的封面：卡片是 16:9，优先作者的横版封面，大字不会被裁掉"""
+    video_item = aweme_detail.get("video")
+    if isinstance(video_item, dict):
+        candidates = _url_list_of(video_item.get("universal_cover_horizontal169"))
+        if candidates:
+            return candidates[-1]
+    return extract_cover_url(aweme_detail)
+
+
 def extract_video_urls(aweme_detail: Dict) -> List[str]:
     """提取视频地址候选列表。
 

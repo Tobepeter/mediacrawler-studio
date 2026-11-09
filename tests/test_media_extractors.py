@@ -321,6 +321,20 @@ def test_douyin_empty_video_yields_nothing():
     assert douyin_media.build_media_items({"aweme_id": "1", "video": {}}) == []
 
 
+def test_douyin_card_cover_prefers_horizontal_cover():
+    detail = {
+        "video": {
+            "cover": {"url_list": ["https://cdn/cover"]},
+            "universal_cover_horizontal169": {"url_list": ["https://cdn/169"]},
+        },
+    }
+
+    assert douyin_media.extract_card_cover_url(detail) == "https://cdn/169"
+    assert douyin_media.extract_cover_url(detail) == "https://cdn/cover"
+    del detail["video"]["universal_cover_horizontal169"]
+    assert douyin_media.extract_card_cover_url(detail) == "https://cdn/cover"
+
+
 def test_douyin_cover_key_priority_is_locked():
     """封面字段有明确优先级，不能只钉住第一个键"""
     detail = {
