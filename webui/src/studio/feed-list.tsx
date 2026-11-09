@@ -77,6 +77,7 @@ export function FeedList({ platform }: { platform: Platform }) {
         }
         needsScroll
         fillViewport={current}
+        screens={2}
         onReach={loadMore}
       >
         {feed.isFetchNextPageError ? (
