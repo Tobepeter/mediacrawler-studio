@@ -5,11 +5,14 @@ import path from 'node:path'
 import { platforms } from './contracts.mjs'
 import policy from './health-policy.json' with { type: 'json' }
 
+const AUTO_RENEW_LIMIT = 2
+
 // 平台级登录任务与二维码缓存；与前台 Tab、采集 task/busy 解耦
 export class SessionManager {
   jobs = new Map()
   timers = new Map()
   retries = new Map()
+  renewals = new Map()
   closed = false
   started = false
   foreground = null
@@ -46,6 +49,11 @@ export class SessionManager {
     const previous = this.jobs.get(this.foreground)
     this.foreground = platform
     if (previous) this.schedule(previous)
+    if (this.service.state.logins[platform]?.status === 'expired') {
+      this.renewals.delete(platform)
+      this.renew(platform)
+      return
+    }
     const job = this.jobs.get(platform)
     if (job?.image && !job.confirming) {
       clearTimeout(job.refresh)
@@ -68,7 +76,7 @@ export class SessionManager {
     return !!this.service.state.working?.[platform]
   }
 
-  ensure(platform) {
+  ensure(platform, reload = false) {
     if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
     if (this.closed || this.occupied(platform)) return
     clearTimeout(this.timers.get(platform))
@@ -91,6 +99,7 @@ export class SessionManager {
       controller: new AbortController(),
       child: null,
       image: null,
+      reload,
     }
     this.jobs.set(platform, job)
     this.service.state.logins[platform] = {
@@ -141,7 +150,8 @@ export class SessionManager {
       ...failure,
     })
     // 取到码以后等待扫码超时，不计为“取码连续超时”
-    if ((job.image || job.confirming) && failure.code === 'TIMEOUT') {
+    const waited = (job.image || job.confirming) && failure.code === 'TIMEOUT'
+    if (waited) {
       this.update(job, {
         status: 'expired',
         image: undefined,
@@ -150,6 +160,18 @@ export class SessionManager {
     } else this.update(job, { status: 'error', image: undefined, failure })
     job.controller.abort()
     job.child?.kill('SIGKILL')
+    // 手机上正在确认时换码会打断登录，交给用户手动刷新
+    if (waited && !job.confirming) this.renew(job.platform)
+  }
+
+  // 只在用户看着这个平台时换码，后台不跑；无人操作时换几次就停，避免持续请求
+  renew(platform) {
+    if (this.closed || this.foreground !== platform || this.occupied(platform))
+      return
+    const count = this.renewals.get(platform) || 0
+    if (count >= AUTO_RENEW_LIMIT) return
+    void this.retry(platform).catch(() => {})
+    this.renewals.set(platform, count + 1)
   }
 
   async probe(job) {
@@ -268,12 +290,14 @@ export class SessionManager {
       return
     clearTimeout(job.refresh)
     job.capturing = true
-    let refreshing = false
+    // Worker 复用后台页，换码必须重载页面，否则读回来的还是原来那张
+    let refreshing = job.reload
+    job.reload = false
     const active = () => this.active(job) && !job.connected && !job.confirming
     try {
       let result = await this.service.windows.captureBackgroundQr(
         job.platform,
-        false,
+        refreshing,
         active,
         { passive: !!job.image },
       )
@@ -291,12 +315,25 @@ export class SessionManager {
       if (result.code === 'confirming') {
         job.confirming = true
         clearTimeout(job.deadline)
+        this.service.logger?.write('info', 'login', 'qr-scanned', {
+          platform: job.platform,
+        })
         this.update(job, { status: 'confirming', failure: undefined })
       } else if (result.image) {
         clearTimeout(job.deadline)
         const changed =
           job.image !== result.image ||
           this.service.state.logins[job.platform]?.status !== 'ready'
+        // 只记录换码时机，不写二维码内容
+        if (job.image !== result.image) {
+          this.service.logger?.write('info', 'login', 'qr-updated', {
+            platform: job.platform,
+            first: !job.image,
+            reloaded: refreshing,
+            shownMs: job.imageAt ? Date.now() - job.imageAt : 0,
+          })
+          job.imageAt = Date.now()
+        }
         job.image = result.image
         if (changed)
           this.update(job, {
@@ -334,12 +371,13 @@ export class SessionManager {
     if (this.closed || this.occupied(platform))
       return Promise.reject(new Error('任务进行中，请稍后重试'))
     if (this.retries.has(platform)) return this.retries.get(platform)
+    this.renewals.delete(platform)
     const promise = this.stop(platform)
       .then(() => {
         if (this.closed || this.occupied(platform))
           throw new Error('任务进行中，请稍后重试')
         delete this.service.state.logins[platform]
-        this.ensure(platform)
+        this.ensure(platform, true)
       })
       .finally(() => this.retries.delete(platform))
     this.retries.set(platform, promise)

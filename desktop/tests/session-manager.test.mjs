@@ -107,6 +107,73 @@ test('不同平台并行取码，切页复用；扫码恢复账号，停止只�
   await f.manager.stopAll(true)
 })
 
+async function waitForQr(f, index) {
+  await tick()
+  f.children[index].emitEvent({ type: 'state', status: 'auth' })
+  await tick()
+}
+
+function scanTimeout(f, index) {
+  f.children[index].emitEvent({
+    type: 'error',
+    failure: { code: 'TIMEOUT', stage: 'login' },
+  })
+}
+
+test('用户看着二维码时等待到期自动换码，无人操作换两次后停下', async () => {
+  const f = fixture()
+  f.manager.setForeground('bili')
+  f.manager.ensure('bili')
+  await waitForQr(f, 0)
+  for (let index = 0; index < 2; index++) {
+    scanTimeout(f, index)
+    await tick()
+    await tick()
+    assert.equal(f.children.length, index + 2)
+    await waitForQr(f, index + 1)
+    assert.equal(f.state.logins.bili.status, 'ready')
+  }
+  scanTimeout(f, 2)
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 3)
+  assert.equal(f.state.logins.bili.status, 'expired')
+  // 手动刷新要重载后台页取新码，并重新计数
+  f.captures.length = 0
+  await f.manager.retry('bili')
+  await waitForQr(f, 3)
+  assert.deepEqual(f.captures[0], ['bili', true])
+  scanTimeout(f, 3)
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 5)
+  await f.manager.stopAll(true)
+})
+
+test('后台到期不换码，切回平台时才换；手机确认中到期不打断', async () => {
+  const f = fixture()
+  f.manager.ensure('bili')
+  await waitForQr(f, 0)
+  scanTimeout(f, 0)
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 1)
+  assert.equal(f.state.logins.bili.status, 'expired')
+  f.manager.setForeground('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 2)
+  f.service.windows.captureBackgroundQr = async () => ({ code: 'confirming' })
+  await waitForQr(f, 1)
+  assert.equal(f.state.logins.bili.status, 'confirming')
+  scanTimeout(f, 1)
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 2)
+  assert.equal(f.state.logins.bili.status, 'expired')
+  await f.manager.stopAll(true)
+})
+
 test('准备超时也能释放，失败不自动循环；取码后扫码超时只标记过期', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const f = fixture()

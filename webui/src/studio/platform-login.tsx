@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { RefreshCw } from 'lucide-react'
+import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
 import { QrFrame } from './qr-frame'
 import { PlatformIcon } from './platform-icon'
@@ -50,13 +52,18 @@ export function PlatformLogin() {
           retryLabel={t('刷新二维码')}
         />
         <div className='flex min-h-9 items-center gap-2 text-sm text-muted-foreground'>
-          {login?.status === 'ready'
-            ? t('扫码登录')
-            : !suspicious && login?.status === 'expired'
-              ? t('二维码已过期，请刷新')
-              : !suspicious && login?.status === 'error'
-                ? t(healthReason(login.failure) || '暂时无法获取二维码，请重试')
-                : null}
+          {login?.status === 'ready' ? (
+            <>
+              <span>{t('扫码登录')}</span>
+              <IconButton label={t('刷新二维码')} onClick={retry}>
+                <RefreshCw />
+              </IconButton>
+            </>
+          ) : !suspicious && login?.status === 'expired' ? (
+            t('二维码已过期，请刷新')
+          ) : !suspicious && login?.status === 'error' ? (
+            t(healthReason(login.failure) || '暂时无法获取二维码，请重试')
+          ) : null}
         </div>
       </div>
       {suspicious && !loading && (
