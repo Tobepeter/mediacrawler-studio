@@ -20,6 +20,14 @@ def test_gaps_follow_user_rhythm(path):
     assert reserve(path, SEARCH, False, now=1100) == 0
 
 
+def test_background_gives_up_without_taking_the_slot(path):
+    assert reserve(path, PAGES, False, now=1000) == 0
+    with pytest.raises(CreatorError) as caught:
+        reserve(path, PAGES, False, now=1000, limit=1)
+    assert caught.value.code == 'FEED_BUSY'
+    assert reserve(path, PAGES, False, now=1000) == 2
+
+
 def test_only_search_has_new_query_gap(path):
     assert reserve(path, PAGES, False, now=1000) == 0
     assert reserve(path, PAGES, False, now=1000) == 2

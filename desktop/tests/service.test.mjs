@@ -837,11 +837,9 @@ test('详情补全写回当前记录，已切换记录或未登录时不写', as
   assert.equal(service.state.pages.bili.results[0].media.status, 'available')
 })
 
-test('推荐流按平台互不影响，新请求取消旧请求，只留在内存里', async () => {
+test('推荐流校验平台和登录，卡片数据只留在内存里', async () => {
   const service = Object.create(StudioService.prototype)
-  const kills = []
   Object.assign(service, {
-    feeds: new Map(),
     feedItems: new Map(),
     details: new Map(),
     operations: new Map(),
@@ -849,15 +847,6 @@ test('推荐流按平台互不影响，新请求取消旧请求，只留在内�
   })
   await assert.rejects(service.loadFeed('zhihu'), /暂不支持/)
   await assert.rejects(service.loadFeed('dy'), /登录后/)
-  const old = {
-    child: { kill: (signal) => kills.push(signal) },
-    cancelled: false,
-  }
-  service.feeds.set('bili', old)
-  service.cancelFeed('bili')
-  service.cancelFeed('dy')
-  assert.equal(old.cancelled, true)
-  assert.deepEqual(kills, ['SIGTERM'])
 
   const item = (id) => ({ id, platform: 'bili', title: id })
   service.rememberFeed('bili', [item('a'), item('b')], true)

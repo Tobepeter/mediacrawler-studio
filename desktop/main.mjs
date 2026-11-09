@@ -154,6 +154,7 @@ app
       service.loadFeed(platform, cursor),
     )
     handle('cancel-feed', (platform) => service.cancelFeed(platform))
+    handle('focus-feed', (platform) => service.focusFeed(platform))
     handle('load-detail', (platform, id) => service.loadDetail(platform, id))
     handle('cancel-detail', (platform, id) =>
       service.cancelDetail(platform, id),

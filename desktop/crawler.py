@@ -5,8 +5,8 @@ from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
-from desktop.pacing import pace_client
-from desktop.paging import CREATOR_PLATFORMS
+from desktop.pacing import BACKGROUND_WAIT_SECONDS, pace_client
+from desktop.paging import CREATOR_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
 from desktop.account import AccountProfile
@@ -62,7 +62,8 @@ class DesktopCrawler:
         self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
-        pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail))
+        limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else None
+        pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail), limit)
 
     async def logged_in(self):
         if self.platform == 'wb' and urlparse(self.page.url).hostname in ('www.weibo.com', 'weibo.com'):
@@ -165,7 +166,12 @@ class DesktopCrawler:
             return
         if self.request["action"] == "feed":
             from desktop.creators import load_feed
-            self.emit("feed", **await load_feed(self, self.request.get("cursor")))
+            try:
+                self.emit("feed", **await load_feed(self, self.request.get("cursor")))
+            except CreatorError as error:
+                if error.code != "FEED_BUSY":
+                    raise
+                self.emit("feed", items=[], next_cursor=None, has_more=False, busy=True)
             self.emit("done", message="推荐已更新")
             return
         if self.request["action"] == "creator-search":

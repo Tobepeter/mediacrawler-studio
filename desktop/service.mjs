@@ -6,6 +6,8 @@ import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { StudioLibrary } from './library.mjs'
 import { DownloadJob } from './download-job.mjs'
+import { FeedScheduler } from './feed-scheduler.mjs'
+import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
 import {
   creatorLimit,
@@ -36,6 +38,7 @@ function creatorInfo(value, platform) {
 }
 
 const feedMemoryLimit = 600
+const feedCacheTtl = 30 * 60 * 1000
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -49,7 +52,6 @@ export class StudioService {
   }
 
   details = new Map()
-  feeds = new Map()
   feedItems = new Map()
   persistence = Promise.resolve()
   state = {
@@ -73,6 +75,17 @@ export class StudioService {
     Object.assign(this, options)
     this.spawnProcess = options.spawnProcess || spawn
     this.library = new StudioLibrary(this.dataDir)
+    this.feed = new FeedScheduler({
+      platforms: feedPlatforms,
+      cache: new JsonCache(path.join(this.dataDir, 'cache'), 'feed', {
+        ttlMs: feedCacheTtl,
+        logger: this.logger,
+      }),
+      status: (platform) => this.state.accounts[platform],
+      busy: (platform) => this.operations.has(platform),
+      fetch: (platform, cursor, run) => this.fetchFeed(platform, cursor, run),
+      logger: this.logger,
+    })
   }
 
   async init() {
@@ -93,6 +106,7 @@ export class StudioService {
     )
     this.state.history = this.library.list()
     this.onState(this.state)
+    this.feed?.sync()
   }
 
   trackSave(job, task) {
@@ -412,6 +426,7 @@ export class StudioService {
             items: Array.isArray(result.items) ? result.items : [],
             nextCursor: result.next_cursor || undefined,
             hasMore: result.has_more === true,
+            ...(result.busy === true && { busy: true }),
           })
         else reject(new Error(message || `${label}失败，请重试`))
       })
@@ -431,35 +446,34 @@ export class StudioService {
       throw new Error('翻页位置无效，请重试')
     if (this.state.accounts[platform] !== 'connected')
       throw new Error('登录后才能查看推荐')
+    const page = await this.feed.load(platform, cursor)
+    if (!page.cancelled) this.rememberFeed(platform, page.items, !cursor)
+    return page
+  }
+
+  async fetchFeed(platform, cursor, run) {
     if (!existsSync(this.python))
       throw new Error('采集环境尚未安装，请在项目目录运行 uv sync')
-    this.cancelFeed(platform)
-    const run = { child: null, cancelled: false }
-    this.feeds.set(platform, run)
-    try {
-      const targetId = await this.windows.prepare(platform)
-      if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
-      const page = await this.queryWorker(run, 'feed', '获取推荐', {
-        platform,
-        action: 'feed',
-        mode: 'search',
-        query: '',
-        limit: 20,
-        cursor,
-        targetId,
-      })
-      if (!page.cancelled) this.rememberFeed(platform, page.items, !cursor)
-      return page
-    } finally {
-      if (this.feeds.get(platform) === run) this.feeds.delete(platform)
-    }
+    const targetId = await this.windows.prepare(platform)
+    if (run.cancelled) return { items: [], hasMore: false, cancelled: true }
+    return this.queryWorker(run, 'feed', '获取推荐', {
+      platform,
+      action: 'feed',
+      mode: 'search',
+      query: '',
+      limit: 20,
+      cursor,
+      targetId,
+      background: run.background,
+    })
   }
 
   cancelFeed(platform) {
-    const run = this.feeds.get(platform)
-    if (!run) return
-    run.cancelled = true
-    run.child?.kill('SIGTERM')
+    this.feed.cancel(platform)
+  }
+
+  focusFeed(platform) {
+    if (feedPlatforms.includes(platform)) this.feed.focus(platform)
   }
 
   // 卡片数据只留在内存，供详情和下载按 ID 找回，不写历史
@@ -803,7 +817,7 @@ export class StudioService {
 
   async stopAll() {
     await Promise.all([...this.details.values()].map((job) => job.cancel()))
-    for (const platform of this.feeds.keys()) this.cancelFeed(platform)
+    this.feed.close()
     await Promise.all(
       [...this.operations.keys()].map((platform) => this.cancel(platform)),
     )

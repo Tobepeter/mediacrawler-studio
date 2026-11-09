@@ -231,6 +231,7 @@ export interface StudioBridge {
   ): Promise<{ code: string; item?: ContentItem }>
   loadFeed?(platform: Platform, cursor?: string): Promise<FeedPage>
   cancelFeed?(platform: Platform): Promise<void>
+  focusFeed?(platform: Platform): Promise<void>
   cancelDetail?(platform: Platform, id: string): Promise<void>
   clearSessions(): Promise<{ localOnly: boolean }>
   logout(platform: Platform): Promise<{ localOnly: boolean }>

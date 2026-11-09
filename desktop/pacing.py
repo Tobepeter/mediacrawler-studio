@@ -24,6 +24,8 @@ from platformdirs import user_data_path
 from desktop.paging import CreatorError
 
 MAX_WAIT_SECONDS = 30
+# 后台预取只在平台空闲时发：排队要等更久就放弃，不占用户接下来搜索、翻页的名额
+BACKGROUND_WAIT_SECONDS = 3
 # 一次业务调用只算一次访问：外层已占用名额时，内层底层请求不再重复等待
 holding = contextvars.ContextVar('pacing_holding', default=False)
 
@@ -143,8 +145,9 @@ def locked(path):
     return FileLock(str(path) + '.lock', timeout=5)
 
 
-def reserve(path, rule, fresh, now=None):
-    """占用下一个可用时刻并返回需要等待的秒数；状态文件异常时放行，不阻断采集"""
+def reserve(path, rule, fresh, now=None, limit=None):
+    """占用下一个可用时刻并返回需要等待的秒数；状态文件异常时放行，不阻断采集
+    limit 是后台请求能接受的等待上限，超过时不占名额，抛 FEED_BUSY"""
     now = time.time() if now is None else now
     try:
         with locked(path):
@@ -162,6 +165,8 @@ def reserve(path, rule, fresh, now=None):
             recent = [stamp for stamp in stamps if number(stamp) > now - rule.window_seconds] if isinstance(stamps, list) else []
             over = fresh and rule.window_limit and len(recent) >= rule.window_limit
             retry_after = recent[0] + rule.window_seconds - now if over else start - now
+            if limit is not None and retry_after > limit:
+                raise CreatorError('FEED_BUSY', '平台正忙，稍后再试', retry_after=math.ceil(retry_after))
             if over or retry_after > MAX_WAIT_SECONDS:
                 raise CreatorError('RATE_LIMITED', f'操作太频繁，请约 {math.ceil(retry_after)} 秒后再试', retry_after=math.ceil(retry_after))
             write_state(path, {**state, 'last_at': start, 'recent': recent + [start] if fresh and rule.window_limit else recent})
@@ -179,7 +184,7 @@ def start_cooldown(path, rule, now=None):
         pass
 
 
-def paced(original, rule, report=None):
+def paced(original, rule, report=None, limit=None):
     def verification(path):
         # 继续请求只会加重风控，冷却期内直接本地拒绝
         start_cooldown(path, rule)
@@ -193,7 +198,7 @@ def paced(original, rule, report=None):
             return await original(*args, **kwargs)
         path = state_path(rule)
         fresh = bool(rule.is_fresh and rule.is_fresh(args, kwargs))
-        wait = reserve(path, rule, fresh)
+        wait = reserve(path, rule, fresh, limit=limit)
         if report and wait >= 1:
             report('pacing-wait', key=rule.key, seconds=round(wait, 1), fresh=fresh)
         await asyncio.sleep(wait)
@@ -222,7 +227,7 @@ def exempted(original):
     return call
 
 
-def pace_client(client, platform, report=None):
+def pace_client(client, platform, report=None, limit=None):
     base = PLATFORM_RULES.get(platform)
     wrap = {method: rule for (owner, method), rule in RULES.items() if owner == platform}
     if base:
@@ -231,7 +236,7 @@ def pace_client(client, platform, report=None):
     for method, rule in wrap.items():
         original = getattr(client, method, None)
         if original is not None:
-            setattr(client, method, paced(original, rule, report))
+            setattr(client, method, paced(original, rule, report, limit))
     for method in EXEMPT:
         original = getattr(client, method, None)
         if original is not None:

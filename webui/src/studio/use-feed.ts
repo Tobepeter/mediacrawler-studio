@@ -27,13 +27,16 @@ function request(
 
 const selectFeed = (data: InfiniteData<FeedPage>) => mergePages(data.pages)
 
-// 切到这个平台且已登录才取第一页，不在启动时一起拉；一次运行内不重新验证，
-// 无限列表重新验证会逐页重放，等于在狂刷接口
+// 切到这个平台且已登录才向主进程要第一页，后台预取和缓存由主进程调度；
+// 一次运行内不重新验证，无限列表重新验证会逐页重放，等于在狂刷接口
 export function useFeed(platform: Platform) {
   const current = useStudio((state) => state.platform === platform)
   const connected = useStudio(
     (state) => state.accounts[platform] === 'connected',
   )
+  useEffect(() => {
+    if (current) void window.studio?.focusFeed?.(platform).catch(noop)
+  }, [current, platform])
   useEffect(() => {
     // 换账号或退出后，上个账号的推荐不能留着
     if (!connected) queryClient.removeQueries({ queryKey: feedKey(platform) })
