@@ -71,6 +71,8 @@ export interface ContentItem {
   collectedAt: string
   contentType?: string
   feed?: boolean
+  // 只有列表字段，详情回来后合并进这条记录并清掉
+  detailPending?: boolean
   media?: {
     status: string
     variants: {
@@ -254,6 +256,7 @@ export interface StudioBridge {
   loadDetail?(
     platform: Platform,
     id: string,
+    options?: { background?: boolean },
   ): Promise<{
     code: string
     item?: ContentItem

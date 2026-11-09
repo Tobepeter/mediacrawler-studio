@@ -176,7 +176,9 @@ app
     handle('cancel-feed', (platform) => service.cancelFeed(platform))
     handle('focus-feed', (platform) => service.focusFeed(platform))
     handle('keep-feed-fresh', (platform) => service.keepFeedFresh(platform))
-    handle('load-detail', (platform, id) => service.loadDetail(platform, id))
+    handle('load-detail', (platform, id, options) =>
+      service.loadDetail(platform, id, options),
+    )
     handle('cancel-detail', (platform, id) =>
       service.cancelDetail(platform, id),
     )

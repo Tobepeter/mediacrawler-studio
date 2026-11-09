@@ -1,7 +1,7 @@
 """小红书关键词搜索与博主主页的游标分页；列表只有摘要，每条笔记再取一次详情"""
 import asyncio
 
-from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, creator_summary, decode_cursor, encode_cursor, feed_record, invalid_cursor,
+from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, creator_summary, decode_cursor, encode_cursor, feed_record, invalid_cursor, wants_cards,
                             is_index, walk)
 
 MAX_PAGES = 10
@@ -62,11 +62,6 @@ async def save_card(runner, row, source):
         'note_url': f'https://www.xiaohongshu.com/explore/{identity}?xsec_token={token}&xsec_source={row.get("xsec_source") or source}',
     })
     return True
-
-
-def wants_cards(runner):
-    # 采集评论要先有完整作品，这种情况仍然逐条取
-    return bool(runner.request.get('listCards')) and not runner.request.get('comments')
 
 
 def creator_url(user_id, token, source):

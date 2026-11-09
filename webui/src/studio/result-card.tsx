@@ -4,8 +4,10 @@ import { ArrowUpRight, Heart, Images, MessageSquare } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { openSource } from './content-detail'
+import { useCoverBackfill } from './cover-backfill'
 import { AuthorName } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 import { platformNames, useStudio } from './store'
@@ -21,13 +23,21 @@ export function ResultCard(props: {
   const { t, i18n } = useTranslation('studio')
   const compact = new Intl.NumberFormat(i18n.language, { notation: 'compact' })
   const patch = useStudio((state) => state.patch)
+  const cover = useCoverBackfill(item)
   return (
-    <Card className='group flex h-full flex-col overflow-hidden transition-[transform,box-shadow,border-color] duration-200 focus-within:border-primary/30 focus-within:shadow-lg hover:border-primary/30 hover:shadow-lg motion-safe:hover:-translate-y-1 motion-reduce:transition-none'>
+    <Card
+      ref={cover.ref}
+      className='group flex h-full flex-col overflow-hidden transition-[transform,box-shadow,border-color] duration-200 focus-within:border-primary/30 focus-within:shadow-lg hover:border-primary/30 hover:shadow-lg motion-safe:hover:-translate-y-1 motion-reduce:transition-none'
+    >
       <button
         className='flex w-full flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
         aria-label={t('查看详情：') + item.title}
         onClick={() => patch({ selected: item })}
       >
+        {/* 列表没给封面时先占位，封面回来不会把卡片撑得跳动 */}
+        {cover.pending && (
+          <Skeleton className='block aspect-video w-full shrink-0 rounded-none motion-reduce:animate-none' />
+        )}
         {!!item.images.length && (
           <span className='relative block aspect-video w-full shrink-0 overflow-hidden bg-muted'>
             <ResultCover key={item.images[0]} src={item.images[0]} />

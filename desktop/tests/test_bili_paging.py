@@ -12,6 +12,7 @@ from media_platform.bilibili.exception import DataFetchError
 class Task:
     def __init__(self, client, limit=20):
         self.client, self.platform, self.events, self.saved = client, 'bili', [], []
+        self.request = {}
         self.store = SimpleNamespace(ids=set(), items={}, limit=limit)
 
     def emit(self, kind, **data):
@@ -191,3 +192,35 @@ def test_bili_batches_defer_media_but_single_links_keep_it():
     assert not make('bili', 'link').defer_media()
     assert not make('dy', 'search').defer_media()
     assert not make('xhs', 'creator').defer_media()
+
+
+async def test_card_uses_list_fields_and_skips_detail():
+    from desktop.result_store import ResultStore
+    from desktop import bili_paging
+    store = ResultStore('bili', 20, lambda kind, **data: None)
+    run = SimpleNamespace(store=store, request={'listCards': True})
+    row = {'aid': 7, 'bvid': 'BV1', 'title': '<em class="keyword">手冲</em>咖啡', 'pic': '//i0.hdslb.com/a.jpg', 'author': 'UP', 'like': 12, 'mid': 9, 'description': '简介'}
+    assert await bili_paging.save_card(run, row, row['like']) is True
+    item = store.items['bili:7']
+    assert item['title'] == '手冲咖啡' and item['text'] == '简介' and item['author'] == 'UP'
+    assert item['images'] == ['https://i0.hdslb.com/a.jpg'] and item['likes'] == '12'
+    assert item['url'] == 'https://www.bilibili.com/video/BV1' and item['authorUrl'].endswith('/9')
+    assert item['feed'] is True and item['detailPending'] is True
+
+
+async def test_creator_card_leaves_unknown_likes_blank():
+    from desktop.result_store import ResultStore
+    from desktop import bili_paging
+    store = ResultStore('bili', 20, lambda kind, **data: None)
+    run = SimpleNamespace(store=store, request={'listCards': True})
+    assert await bili_paging.save_card(run, {'aid': 8, 'bvid': 'BV2', 'title': 't', 'pic': 'https://a/b.jpg', 'author': 'UP'}, None) is True
+    assert store.items['bili:8']['likes'] == ''
+
+
+async def test_card_without_identity_falls_back():
+    from desktop.result_store import ResultStore
+    from desktop import bili_paging
+    store = ResultStore('bili', 20, lambda kind, **data: None)
+    run = SimpleNamespace(store=store, request={'listCards': True})
+    assert await bili_paging.save_card(run, {'aid': 8, 'title': 't'}, None) is False
+    assert not store.items

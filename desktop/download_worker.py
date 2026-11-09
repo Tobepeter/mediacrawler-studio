@@ -40,7 +40,7 @@ async def main(request):
                 if target['targetInfo']['targetId'] == request['targetId']:
                     if request['kind'] == 'detail':
                         from desktop.content.detail import load_detail
-                        return await load_detail(request['record'], page)
+                        return await load_detail(request['record'], page, request.get('background', False))
                     if request['kind'] == 'playback':
                         from desktop.media_resolver import resolve_playback
                         return await resolve_playback(request['record'], page)

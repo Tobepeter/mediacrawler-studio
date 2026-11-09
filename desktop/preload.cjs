@@ -27,8 +27,8 @@ contextBridge.exposeInMainWorld('studio', {
   focusFeed: (platform) => ipcRenderer.invoke('studio:focus-feed', platform),
   keepFeedFresh: (platform) =>
     ipcRenderer.invoke('studio:keep-feed-fresh', platform),
-  loadDetail: (platform, id) =>
-    ipcRenderer.invoke('studio:load-detail', platform, id),
+  loadDetail: (platform, id, options) =>
+    ipcRenderer.invoke('studio:load-detail', platform, id, options),
   cancelDetail: (platform, id) =>
     ipcRenderer.invoke('studio:cancel-detail', platform, id),
   cancelVideo: (requestId) =>

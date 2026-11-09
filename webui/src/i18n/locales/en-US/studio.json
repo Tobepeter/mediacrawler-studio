@@ -438,5 +438,6 @@
   "平台要求验证，暂时不能访问": "The platform requires verification, access is paused",
   "请求太频繁，稍等一下": "Too many requests, please wait",
   "约 {{count}} 秒": "about {{count}} s",
-  "约 {{count}} 分钟": "about {{count}} min"
+  "约 {{count}} 分钟": "about {{count}} min",
+  "正在加载完整内容": "Loading full content"
 }

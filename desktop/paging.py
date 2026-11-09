@@ -66,6 +66,11 @@ def creator_summary(platform, identity, name, url, source='user', **fields):
     }
 
 
+def wants_cards(runner):
+    """列表先出卡片，打开时再取详情；采集评论要先有完整作品，命令行要完整内容"""
+    return bool(runner.request.get('listCards')) and not runner.request.get('comments')
+
+
 def https_url(value):
     if not isinstance(value, str):
         return ''

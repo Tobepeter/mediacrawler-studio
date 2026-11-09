@@ -290,10 +290,16 @@ export class StudioService {
   }
 
   // 只读补全，不占平台互斥：采集和下载可以同时进行，同平台只保留最新一次
-  async loadDetail(platform, id) {
+  // 用户打开的详情会取消进行中的任务；后台补封面只在平台空闲时跑，不抢任何请求
+  async loadDetail(platform, id, { background = false } = {}) {
     if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
       throw new Error('不支持的操作')
     if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
+    if (
+      background &&
+      (this.details.has(platform) || this.operations.has(platform))
+    )
+      return { code: 'busy' }
     await this.details.get(platform)?.cancel()
     const page = this.state.pages[platform]
     const record = this.findItem(platform, id)
@@ -303,7 +309,7 @@ export class StudioService {
     job.itemId = id
     this.details.set(platform, job)
     try {
-      const result = await job.run({ record, kind: 'detail' })
+      const result = await job.run({ record, kind: 'detail', background })
       if (result.item?.id !== id || result.item.platform !== platform)
         return {
           code: result.code || 'failed',

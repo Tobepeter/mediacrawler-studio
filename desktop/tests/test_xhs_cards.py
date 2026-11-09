@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from desktop import xhs_paging
+from desktop import paging, xhs_paging
 from desktop.result_store import ResultStore
 
 
@@ -50,6 +50,6 @@ async def test_row_without_list_fields_falls_back():
 
 
 def test_comments_and_cli_keep_full_details():
-    assert xhs_paging.wants_cards(runner(listCards=True)) is True
-    assert xhs_paging.wants_cards(runner(listCards=True, comments=True)) is False
-    assert xhs_paging.wants_cards(runner()) is False
+    assert paging.wants_cards(runner(listCards=True)) is True
+    assert paging.wants_cards(runner(listCards=True, comments=True)) is False
+    assert paging.wants_cards(runner()) is False

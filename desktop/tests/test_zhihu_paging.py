@@ -132,3 +132,38 @@ async def test_feed_card_keeps_structure_and_decodes_entities():
     assert item['title'] == 'A "B"'
     assert item['text'] == '第一段 "引用"\n小标题\n第二段'
     assert '## 小标题' in item['markdown'] and '&#34;' not in item['markdown']
+
+
+def test_detail_page_camel_case_counts_are_read():
+    target = {**answer(4), 'voteupCount': 321, 'commentCount': 8}
+    target.pop('voteup_count')
+    target.pop('comment_count')
+    run = runner()
+    item = run.client._extractor._extract_answer_content(target)
+    assert item.voteup_count == 321 and item.comment_count == 8
+
+
+def test_thumbnail_becomes_cover_when_excerpt_has_no_image():
+    target = {**answer(5), 'content': '<p>摘要</p>', 'thumbnail_info': {'thumbnails': [{'url': 'https://pic/a.jpg'}]}}
+    run = runner()
+    assert run.client._extractor._extract_answer_content(target).image_list == ['https://pic/a.jpg']
+
+
+async def test_search_card_is_marked_pending_without_markdown(memory_store, monkeypatch):
+    from desktop.extra_platforms import ExtraCollector
+    store = ResultStore('zhihu', 1, lambda kind, **data: None)
+    memory_store['store'] = store
+    monkeypatch.setattr('desktop.extra_platforms.wait_turn', AsyncMock())
+    monkeypatch.setattr('desktop.extra_platforms.asyncio.sleep', AsyncMock())
+    store.markdown['zhihu:answer:9'] = '摘要'
+    run = SimpleNamespace(platform='zhihu', store=store, request={'listCards': True, 'limit': 1, 'query': 'q', 'filters': None},
+                          page=SimpleNamespace(goto=AsyncMock()), context=object(),
+                          client=SimpleNamespace(update_cookies=AsyncMock(), get_note_by_keyword=AsyncMock()))
+    item = ZhihuExtractor()._extract_answer_content({**answer(9), 'content': '<p>摘要</p>'})
+    run.client.get_note_by_keyword.return_value = [item]
+    collector = ExtraCollector(run)
+    collector.detail = AsyncMock()
+    await collector.search()
+    collector.detail.assert_not_awaited()
+    saved = store.items['zhihu:answer:9']
+    assert saved['detailPending'] is True and 'markdown' not in saved

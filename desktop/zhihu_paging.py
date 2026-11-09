@@ -33,6 +33,13 @@ def track_raw(runner):
             item = original(raw)
             key, html = f'zhihu:{item.content_type}:{item.content_id}', raw.get('content')
             runner.store.author_urls[key] = author_url(raw.get('author'))
+            # 详情页内嵌数据是驼峰命名，上游只读下划线，会把点赞和评论读成 0
+            item.voteup_count = raw.get('voteup_count') or raw.get('voteupCount') or item.voteup_count
+            item.comment_count = raw.get('comment_count') or raw.get('commentCount') or item.comment_count
+            if not item.image_list:
+                # 列表摘要里没有配图时用接口给的缩略图当封面
+                thumbnail = raw.get('thumbnail') or ((raw.get('thumbnail_info') or {}).get('thumbnails') or [{}])[0].get('url')
+                item.image_list = [thumbnail] if thumbnail else []
             if html:
                 runner.store.full_text[key], runner.store.markdown[key] = to_plain(html), to_markdown(html)
             return item

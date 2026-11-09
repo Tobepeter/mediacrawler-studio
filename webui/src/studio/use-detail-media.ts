@@ -7,11 +7,12 @@ import type { ContentItem } from './types'
 
 const noop = () => {}
 
-// 知乎卡片自带正文和配图，没有要补的
+// 列表卡片一定要补；知乎推荐自带正文和配图，没有要补的
 export const needsDetail = (item: ContentItem) =>
-  feedPlatforms.includes(item.platform) &&
-  item.platform !== 'zhihu' &&
-  (!item.media || ['pending', 'failed'].includes(item.media.status))
+  !!item.detailPending ||
+  (feedPlatforms.includes(item.platform) &&
+    item.platform !== 'zhihu' &&
+    (!item.media || ['pending', 'failed'].includes(item.media.status)))
 
 // 详情先用列表数据打开，清晰度等慢数据在后台补，写回后由主进程状态推送更新
 export function useDetailMedia(item: ContentItem) {

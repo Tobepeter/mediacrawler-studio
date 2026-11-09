@@ -37,7 +37,25 @@ export function DetailBody({ item }: { item: ContentItem }) {
       {item.text || t('这条作品没有正文')}
     </p>
   )
-  if (!item.commentStatus) return body
+  // 卡片已有摘要时先显示，全文回来再替换；失败留在原位可重试，不弹全局提示
+  const completing = item.detailPending && !!item.text && (
+    <div className='mt-3 text-caption text-muted-foreground'>
+      {detail.loading ? (
+        <span role='status'>{t('正在加载完整内容')}</span>
+      ) : (
+        detail.error && (
+          <RetryNotice error={detail.error} onRetry={detail.retry} />
+        )
+      )}
+    </div>
+  )
+  if (!item.commentStatus)
+    return (
+      <>
+        {body}
+        {completing}
+      </>
+    )
   const comments = item.comments || []
   const roots = comments.filter((comment) => !comment.parentId)
   const replies = new Map<string, ContentComment[]>()

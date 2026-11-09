@@ -65,7 +65,11 @@ class ResultStore:
         item.update(metadata(content_item))
         initialize(item)
         if item["id"] in self.cards:
-            item["feed"] = True
+            # 列表和详情是同一条记录，详情回来后合并进来并去掉这个标记
+            item.update(feed=True, detailPending=True)
+            # 列表没给点赞数时留空，不显示成 0
+            if content_item.get("liked_count") is None:
+                item["likes"] = ""
         self.ids.add(item["id"])
         if self.comments:
             item.update(comments=[], commentStatus="pending")

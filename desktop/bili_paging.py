@@ -1,10 +1,10 @@
-"""B 站关键词搜索、博主搜索与主页视频的游标分页；列表只有摘要，每条视频再取一次详情"""
+"""B 站关键词搜索、博主搜索与主页视频的游标分页；桌面端列表先出卡片，详情打开时再取"""
 import html
 import re
 from urllib.parse import urlparse
 
 from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, announce_profile, count, creator_summary, decode_cursor,
-                            encode_cursor, feed_record, https_url, invalid_cursor, is_index, pick_by_name, walk)
+                            encode_cursor, feed_record, https_url, invalid_cursor, is_index, pick_by_name, walk, wants_cards)
 
 SEARCH_MAX_PAGES = 10
 SEARCH_REQUESTS_PER_CALL = 3
@@ -36,6 +36,23 @@ def more_pages(page, response):
     # 接口用 numPages 表示总页数；缺失时翻到空页为止
     total = response.get('numPages')
     return page + 1 if not is_index(total) or page < total else None
+
+
+async def save_card(runner, row, like):
+    """列表已带标题、封面、作者，一页一次请求；字段不全时返回 False，改取详情"""
+    identity, bvid, title = row.get('aid'), row.get('bvid'), plain(row.get('title'))
+    if not identity or not bvid or not title:
+        return False
+    key = f'bili:{identity}'
+    runner.store.cards.add(key)
+    runner.store.author_urls[key] = author_url(row)
+    await runner.store.store_content({
+        'video_id': str(identity), 'title': title, 'desc': plain(row.get('description')),
+        'nickname': plain(row.get('author')), 'liked_count': like,
+        'video_cover_url': row.get('pic') or '', 'video_type': 'video',
+        'video_url': f'https://www.bilibili.com/video/{bvid}',
+    })
+    return True
 
 
 def author_url(owner):
@@ -158,6 +175,8 @@ async def collect_search(runner, query, cursor=None, options=None):
         return Page(rows, more_pages(page, response) if rows else None)
 
     async def save(row):
+        if wants_cards(runner) and await save_card(runner, row, row.get('like')):
+            return
         await runner.collect_bili_video(row.get('aid'))
 
     await walk(runner, fetch, save, publish, start, state.get('s', 0), max_pages=SEARCH_MAX_PAGES, **LABEL)
@@ -195,6 +214,9 @@ async def collect_creator(runner, reference, cursor=None):
         return Page(rows, page + 1 if rows and (not is_index(total) or page * POSTS_PAGE_SIZE < total) else None)
 
     async def save(row):
+        # 主页列表没有点赞数，详情回来再补
+        if wants_cards(runner) and await save_card(runner, row, None):
+            return
         await runner.collect_bili_video(row.get('aid'))
 
     await walk(runner, fetch, save, publish, start, state.get('s', 0), empty_retries=EMPTY_PAGE_RETRIES, **LABEL)

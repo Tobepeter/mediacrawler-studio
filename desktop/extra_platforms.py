@@ -1,5 +1,6 @@
 """知乎、微博、贴吧、快手的有界采集编排"""
 from desktop.pacing import wait_turn
+from desktop.paging import wants_cards
 import asyncio
 import re
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -106,6 +107,15 @@ class ExtraCollector:
             for item in rows:
                 if self.platform == 'tieba':
                     item = await self.client.get_note_by_id(item.note_id)
+                elif self.platform == 'zhihu' and wants_cards(self.runner):
+                    # 摘要当卡片，全文打开时再取；摘要转出的 Markdown 不完整，不用
+                    key = f'zhihu:{item.content_type}:{item.content_id}'
+                    self.store.cards.add(key)
+                    self.store.markdown.pop(key, None)
+                    await self.save(item)
+                    if len(self.store.ids) >= self.runner.request['limit']:
+                        return
+                    continue
                 elif self.platform == 'zhihu':
                     # 搜索返回摘要，继续取作品正文；只取用户所选数量
                     url = f'https://www.zhihu.com/zvideo/{item.content_id}' if item.content_type == 'zvideo' else item.content_url
