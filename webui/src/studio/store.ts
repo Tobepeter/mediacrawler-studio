@@ -424,6 +424,9 @@ export const useStudio = create<StudioStore>((set, get) => ({
     }
     set((current) => ({
       ...state,
+      // 主进程删除字段时快照里就没有这个键，合并不会清掉，要显式覆盖
+      handoff: state.handoff,
+      featureCheck: state.featureCheck,
       ready: true,
       selected: current.selected
         ? state.pages[current.platform]?.results.find(
