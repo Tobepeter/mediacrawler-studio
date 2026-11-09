@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { CollectForm } from './studio/collect-form'
+import { panelDialogClass } from './studio/panel-dialog'
 import { Results } from './studio/results'
 import { TaskStatus } from './studio/task-status'
 import { ContentDetail } from './studio/content-detail'
@@ -109,7 +110,7 @@ export default function App() {
         }}
       >
         <DialogContent
-          className='flex h-[85dvh] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-6xl flex-col overflow-hidden'
+          className={cn(panelDialogClass, 'flex flex-col overflow-hidden')}
           aria-describedby={undefined}
         >
           <DialogHeader className='shrink-0 pr-8'>

@@ -38,7 +38,7 @@ export function CollectionHistory() {
     if (!recovery.isPending) recovery.mutate(id)
   }
   return (
-    <div className='pr-3'>
+    <div className='p-1 pr-3'>
       <div className='mb-4 flex items-center justify-between gap-4'>
         <span className='text-muted-foreground'>{t('最近 50 次')}</span>
         <Select
@@ -69,7 +69,7 @@ export function CollectionHistory() {
             <li key={entry.id}>
               <Button
                 variant='ghost'
-                className='h-auto w-full justify-start gap-3 py-3 text-left'
+                className='w-full justify-start gap-3'
                 disabled={
                   !window.studio ||
                   platformBusy(state, entry.task.platform) ||
@@ -77,13 +77,13 @@ export function CollectionHistory() {
                 }
                 onClick={() => void recover(entry.id)}
               >
-                <span className='flex min-w-0 flex-1 flex-col gap-1'>
+                <span className='flex min-w-0 flex-1 items-center justify-between gap-6'>
                   <span className='truncate'>
                     {entry.task.creator?.name ||
                       entry.task.query ||
                       t('之前的采集')}
                   </span>
-                  <span className='flex flex-wrap items-center gap-x-3 gap-y-1 font-normal text-muted-foreground'>
+                  <span className='flex shrink-0 items-center gap-4 font-normal text-muted-foreground'>
                     <span className='inline-flex items-center gap-1'>
                       <PlatformIcon platform={entry.task.platform} />
                       {t(platformNames[entry.task.platform])}

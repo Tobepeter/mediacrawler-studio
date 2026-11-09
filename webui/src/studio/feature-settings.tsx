@@ -8,6 +8,15 @@ import {
   Stethoscope,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { translateMessage } from '@/i18n/studio'
 import { cn } from '@/lib/utils'
 import { creatorPlatforms } from './creator-options'
@@ -24,9 +33,6 @@ import type { FeatureResult, Platform } from './types'
 
 const platforms = Object.keys(platformNames) as Platform[]
 const steps = Object.keys(featureLabels) as FeatureResult['id'][]
-// 列宽和行高固定，结果陆续进来时表格不动，说明文字统一放在表格下面
-const gridClass =
-  'grid min-w-[30rem] grid-cols-[minmax(8rem,1.25fr)_repeat(6,minmax(3.5rem,1fr))] items-stretch'
 const legend = [
   ['入口', '平台能否打开、二维码能否取到，不需要登录'],
   ['推荐、主页、搜索', '接口返回的条数和字段是否正常'],
@@ -40,7 +46,7 @@ const appearance = {
   skipped: { icon: CircleMinus, tone: 'text-muted-foreground' },
 }
 
-function Cell(props: {
+function Status(props: {
   status?: keyof typeof appearance
   count?: number
   active?: boolean
@@ -48,27 +54,29 @@ function Cell(props: {
 }) {
   const shape = appearance[props.status || 'skipped']
   return (
-    <span
-      title={props.title}
-      className='flex h-full items-center justify-center gap-1 text-caption tabular-nums text-muted-foreground'
-    >
-      {props.active ? (
-        <Loader2
-          className='size-3.5 animate-spin motion-reduce:animate-none'
-          aria-hidden='true'
-        />
-      ) : props.status ? (
-        <>
-          <shape.icon
-            className={cn('size-3.5', shape.tone)}
-            aria-label={props.status}
+    <TableCell className='text-center'>
+      <span
+        title={props.title}
+        className='inline-flex items-center gap-1 text-caption tabular-nums text-muted-foreground'
+      >
+        {props.active ? (
+          <Loader2
+            className='size-4 animate-spin motion-reduce:animate-none'
+            aria-hidden='true'
           />
-          {props.count || ''}
-        </>
-      ) : (
-        <span aria-hidden='true'>·</span>
-      )}
-    </span>
+        ) : props.status ? (
+          <>
+            <shape.icon
+              className={cn('size-4', shape.tone)}
+              aria-label={props.status}
+            />
+            {props.count || ''}
+          </>
+        ) : (
+          <span aria-hidden='true'>·</span>
+        )}
+      </span>
+    </TableCell>
   )
 }
 
@@ -93,12 +101,15 @@ function PlatformRow({ platform }: { platform: Platform }) {
       : undefined,
   )
   return (
-    <div className={cn(gridClass, 'h-11 border-t border-border/60')}>
-      <span className='flex h-full items-center gap-2 px-4'>
-        <PlatformIcon platform={platform} className='size-4 shrink-0' />
-        <span className='truncate'>{t(platformNames[platform])}</span>
-      </span>
-      <Cell
+    <TableRow>
+      <TableCell className='pl-4'>
+        {/* 小红书没有图标，定高才能和其他行对齐 */}
+        <span className='inline-flex h-6 items-center gap-2'>
+          <PlatformIcon platform={platform} />
+          {t(platformNames[platform])}
+        </span>
+      </TableCell>
+      <Status
         active={checkingEntry}
         status={entry && (entry.ok ? 'ok' : 'failed')}
         title={entry?.ok === false ? t(entry.reason || '') : undefined}
@@ -106,7 +117,7 @@ function PlatformRow({ platform }: { platform: Platform }) {
       {steps.map((id) => {
         const item = items.find((value) => value.id === id)
         return (
-          <Cell
+          <Status
             key={id}
             active={step === id && !item}
             status={item?.status}
@@ -115,7 +126,7 @@ function PlatformRow({ platform }: { platform: Platform }) {
           />
         )
       })}
-    </div>
+    </TableRow>
   )
 }
 
@@ -215,33 +226,31 @@ export function FeatureSettings() {
         </Button>
       }
     >
-      {/* 表格行高固定在上面，结果占满下方固定区域并自己滚动，内容多少都不影响布局 */}
+      {/* 表格固定在上面，结果占满下方固定区域并自己滚动，内容多少都不影响布局 */}
       <div className='flex h-full min-h-0 flex-col gap-4'>
-        <div className='shrink-0 overflow-x-auto rounded-xl bg-muted/40'>
-          <div className='min-w-[30rem]'>
-            <div
-              className={cn(
-                gridClass,
-                'h-9 shrink-0 items-center text-caption text-muted-foreground',
-              )}
-              aria-hidden='true'
-            >
-              <span />
-              <span className='text-center'>{t('入口')}</span>
-              {steps.map((id) => (
-                <span key={id} className='text-center'>
-                  {t(featureLabels[id])}
-                </span>
+        <Card className='shrink-0 overflow-hidden'>
+          <Table className='table-fixed'>
+            <TableHeader>
+              <TableRow>
+                <TableHead className='w-48 pl-4'>{t('平台')}</TableHead>
+                <TableHead className='text-center'>{t('入口')}</TableHead>
+                {steps.map((id) => (
+                  <TableHead key={id} className='text-center'>
+                    {t(featureLabels[id])}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {platforms.map((platform) => (
+                <PlatformRow key={platform} platform={platform} />
               ))}
-            </div>
-            {platforms.map((platform) => (
-              <PlatformRow key={platform} platform={platform} />
-            ))}
-          </div>
-        </div>
-        <aside
+            </TableBody>
+          </Table>
+        </Card>
+        <Card
           aria-label={t('检查结果')}
-          className='flex min-h-24 flex-1 flex-col overflow-y-auto rounded-xl border p-4'
+          className='flex min-h-24 flex-1 flex-col overflow-y-auto p-4'
         >
           <p role='status' className='pb-2 font-medium tabular-nums'>
             {status}
@@ -249,7 +258,7 @@ export function FeatureSettings() {
           {!running && !summary && <Legend />}
           <Issues />
           <LoginHint />
-        </aside>
+        </Card>
       </div>
     </SettingPage>
   )

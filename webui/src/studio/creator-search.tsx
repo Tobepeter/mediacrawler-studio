@@ -200,7 +200,7 @@ export function CreatorSearch(props: {
       <Button
         type='button'
         variant='ghost'
-        className='shrink-0 gap-1.5 px-2'
+        className='shrink-0'
         aria-label={t('找博主')}
         disabled={disabled}
         onClick={() => toggle(true)}

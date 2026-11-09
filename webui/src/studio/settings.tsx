@@ -31,10 +31,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { ThemeToggle } from './theme-toggle'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
+import { panelDialogClass } from './panel-dialog'
 import { SettingGroup, SettingPage, SettingRow } from './settings-row'
 import { platformNames, useStudio } from './store'
 import type { Platform } from './types'
@@ -121,28 +123,26 @@ export function StudioSettings() {
           <Settings />
         </IconButton>
       </DialogTrigger>
-      {/* 宽度占屏幕 70%，比例 16:10；尺寸固定，切换分页和内容变化都不跳动 */}
+      {/* 尺寸固定，切换分页和内容变化都不跳动 */}
       <DialogContent
         aria-describedby={undefined}
-        className='h-[min(max(43.75vw,35rem),85dvh)] w-[max(70vw,min(56rem,calc(100vw-2rem)))] max-w-none gap-0 overflow-hidden p-0'
+        className={cn(panelDialogClass, 'gap-0 overflow-hidden p-0')}
       >
         <Tabs
           defaultValue='general'
           orientation='vertical'
           className='flex h-full min-h-0 flex-col sm:flex-row'
         >
-          <div className='shrink-0 space-y-4 border-b bg-muted/40 p-4 sm:w-48 sm:border-b-0 sm:border-r'>
-            <DialogHeader className='px-2 text-left'>
-              <DialogTitle className='leading-6 tracking-normal'>
-                {t('设置')}
-              </DialogTitle>
+          <div className='shrink-0 space-y-4 border-b bg-muted/50 p-4 sm:w-48 sm:border-b-0 sm:border-r'>
+            <DialogHeader className='px-2'>
+              <DialogTitle>{t('设置')}</DialogTitle>
             </DialogHeader>
             <TabsList className='flex h-auto gap-1 bg-transparent p-0 sm:flex-col sm:items-stretch'>
               {tabs.map(({ id, label, icon: Icon }) => (
                 <TabsTrigger
                   key={id}
                   value={id}
-                  className='justify-start gap-2 data-[state=active]:bg-background'
+                  className='justify-start gap-2'
                 >
                   <Icon className='size-4' aria-hidden='true' />
                   {t(label)}
@@ -151,7 +151,7 @@ export function StudioSettings() {
             </TabsList>
           </div>
           <TabsContent value='general' className='mt-0 min-h-0 min-w-0 flex-1'>
-            <SettingPage narrow title={t('通用')}>
+            <SettingPage title={t('通用')}>
               <div className='h-full overflow-y-auto'>
                 <SettingGroup>
                   <SettingRow
@@ -161,10 +161,7 @@ export function StudioSettings() {
                       value={i18n.resolvedLanguage || 'zh-CN'}
                       onValueChange={(value) => void changeLanguage(value)}
                     >
-                      <SelectTrigger
-                        id='studio-language'
-                        className='w-44 bg-background'
-                      >
+                      <SelectTrigger id='studio-language' className='w-44'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -174,9 +171,7 @@ export function StudioSettings() {
                     </Select>
                   </SettingRow>
                   <SettingRow title={t('外观')}>
-                    <div className='rounded-lg bg-background p-1'>
-                      <ThemeToggle />
-                    </div>
+                    <ThemeToggle />
                   </SettingRow>
                   <SettingRow
                     title={
@@ -233,11 +228,38 @@ export function StudioSettings() {
           </TabsContent>
           <TabsContent value='account' className='mt-0 min-h-0 min-w-0 flex-1'>
             <SettingPage
-              narrow
               title={t('账号')}
-              action={
+              hint={t(
+                blocked && !clearing
+                  ? '任务进行中'
+                  : '清除登录态不影响采集记录',
+              )}
+            >
+              <div className='h-full space-y-4 overflow-y-auto'>
+                <SettingGroup>
+                  {(Object.keys(platformNames) as Platform[]).map(
+                    (platform) => (
+                      <SettingRow
+                        key={platform}
+                        title={
+                          <span className='inline-flex items-center gap-2'>
+                            <PlatformIcon platform={platform} />
+                            {t(platformNames[platform])}
+                          </span>
+                        }
+                      >
+                        <span className='truncate text-muted-foreground'>
+                          {accounts[platform] === 'connected'
+                            ? profiles[platform]?.nickname || t('已连接')
+                            : t('未登录')}
+                        </span>
+                      </SettingRow>
+                    ),
+                  )}
+                </SettingGroup>
                 <Button
                   variant='outline'
+                  className='w-full text-destructive hover:text-destructive'
                   disabled={!window.studio || blocked || clearing}
                   onClick={() => void clear()}
                 >
@@ -248,38 +270,6 @@ export function StudioSettings() {
                   )}
                   {t(clearing ? '清除中' : '清除所有登录态')}
                 </Button>
-              }
-              hint={t(
-                blocked && !clearing
-                  ? '任务进行中'
-                  : '清除登录态不影响采集记录',
-              )}
-            >
-              <div className='h-full overflow-y-auto'>
-                <SettingGroup>
-                  {(Object.keys(platformNames) as Platform[]).map(
-                    (platform) => (
-                      <SettingRow
-                        key={platform}
-                        title={
-                          <span className='inline-flex items-center gap-2'>
-                            <PlatformIcon
-                              platform={platform}
-                              className='size-4'
-                            />
-                            {t(platformNames[platform])}
-                          </span>
-                        }
-                      >
-                        <span className='truncate text-body text-muted-foreground'>
-                          {accounts[platform] === 'connected'
-                            ? profiles[platform]?.nickname || t('已连接')
-                            : t('未登录')}
-                        </span>
-                      </SettingRow>
-                    ),
-                  )}
-                </SettingGroup>
               </div>
             </SettingPage>
           </TabsContent>
