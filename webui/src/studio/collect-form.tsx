@@ -200,11 +200,6 @@ export function CollectForm() {
                   <CreatorField
                     url={form.query}
                     creator={creator}
-                    count={
-                      page?.task.query === form.query
-                        ? page.results.length
-                        : undefined
-                    }
                     disabled={busy || pending || locked || !!trip}
                     onClear={clearQuery}
                   />

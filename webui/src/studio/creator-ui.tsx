@@ -102,20 +102,14 @@ export function AuthorBack(props: { fromPage: boolean; disabled?: boolean }) {
 export function CreatorField(props: {
   url: string
   creator?: CreatorInfo
-  count?: number
   disabled?: boolean
   onClear: () => void
 }) {
-  const { url, creator, count, disabled, onClear } = props
+  const { url, creator, disabled, onClear } = props
   const { t } = useTranslation('studio')
   const stats = useCreatorStats()
   const name = creator?.name || t('博主主页')
-  const detail = [
-    ...(creator ? stats(creator) : []),
-    count ? t('已采 {{count}} 条', { count }) : '',
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const detail = creator ? stats(creator).join(' · ') : ''
   return (
     <div
       className='flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-sm'
