@@ -6,6 +6,7 @@ import { platforms } from './contracts.mjs'
 import policy from './health-policy.json' with { type: 'json' }
 
 const AUTO_RENEW_LIMIT = 2
+const REPEAT_REFRESH_MS = 60000
 
 // 平台级登录任务与二维码缓存；与前台 Tab、采集 task/busy 解耦
 export class SessionManager {
@@ -383,6 +384,10 @@ export class SessionManager {
     if (!job?.image || job.connected || job.confirming)
       return this.retry(platform)
     if (job.reload || this.service.state.logins[platform]?.refreshing) return
+    // 换码后很快又点，说明小刷没解决问题，直接完整重来，不需要单独入口
+    if (Date.now() - (job.refreshedAt || 0) < REPEAT_REFRESH_MS)
+      return this.retry(platform)
+    job.refreshedAt = Date.now()
     job.reload = true
     this.update(job, { refreshing: true })
     if (!job.capturing) void this.capture(job)

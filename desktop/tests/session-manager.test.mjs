@@ -178,6 +178,7 @@ test('常规刷新不重启进程，旧码留到新码就绪；失败自动走�
   assert.equal(f.state.logins.bili.image, 'data:image/png;base64,new')
   assert.equal(f.children.length, 1)
 
+  f.manager.jobs.get('bili').refreshedAt = 0
   f.service.windows.captureBackgroundQr = async () => ({ code: 'unavailable' })
   f.manager.refresh('bili')
   await tick()
@@ -185,6 +186,32 @@ test('常规刷新不重启进程，旧码留到新码就绪；失败自动走�
   assert.equal(f.children.length, 2)
   assert.equal(f.state.logins.bili.status, 'preparing')
   assert.equal(f.state.logins.bili.failure, undefined)
+  await f.manager.stopAll(true)
+})
+
+test('一分钟内再次刷新升级为完整流程，超过一分钟仍是原地换码', async () => {
+  const f = fixture()
+  f.manager.ensure('bili')
+  await waitForQr(f, 0)
+  f.manager.refresh('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 1)
+  f.manager.jobs.get('bili').refreshedAt = Date.now() - 61000
+  f.manager.refresh('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 1)
+  f.manager.refresh('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 2)
+  await waitForQr(f, 1)
+  // 大刷之后重新计时，下一次回到原地换码
+  f.manager.refresh('bili')
+  await tick()
+  await tick()
+  assert.equal(f.children.length, 2)
   await f.manager.stopAll(true)
 })
 
