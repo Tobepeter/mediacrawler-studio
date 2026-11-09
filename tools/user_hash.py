@@ -19,20 +19,13 @@ def anonymize_user_id(user_id) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:16]
 
 
-_show_creator_names = False
+# 昵称是平台公开展示的数据，默认原样保留；开关只给校验脱敏算法的测试用
+_mask_names = False
 
 
-def show_creator_names(enabled: bool = True) -> None:
-    """桌面端查看时显示作品作者的公开昵称；评论用户始终脱敏，其他运行方式不受影响"""
-    global _show_creator_names
-    _show_creator_names = enabled
-
-
-def creator_name(name) -> str:
-    """作品作者昵称：默认脱敏，桌面端开启后返回原昵称"""
-    if _show_creator_names:
-        return "" if name is None else str(name)
-    return mask_nickname(name)
+def set_mask_names(enabled: bool) -> None:
+    global _mask_names
+    _mask_names = enabled
 
 
 def mask_nickname(name) -> str:
@@ -45,6 +38,8 @@ def mask_nickname(name) -> str:
     if name is None:
         return ""
     s = str(name)
+    if not _mask_names:
+        return s
     if len(s) <= 1:
         return "*"
     if len(s) == 2:

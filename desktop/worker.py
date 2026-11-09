@@ -16,10 +16,6 @@ def emit(event_type, **values):
 async def main(request):
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
     from desktop.crawler import DesktopCrawler
-    from tools.user_hash import show_creator_names
-
-    show_creator_names()
-
     async with async_playwright() as playwright:
         try:
             async with asyncio.timeout(20):

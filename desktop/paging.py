@@ -8,6 +8,9 @@ from itertools import count as forever
 from pathlib import Path
 from typing import Any
 
+# 平台字段不可信，进入列表和历史前限制长度；完整内容仍在正文里
+TITLE_LIMIT = 80
+AUTHOR_LIMIT = 64
 CAPABILITIES = json.loads(Path(__file__).with_name('platform-capabilities.json').read_text())
 CREATOR_PLATFORMS = tuple(CAPABILITIES['creator'])
 CREATOR_SEARCH_PLATFORMS = tuple(CAPABILITIES['creatorSearch'])
@@ -72,7 +75,7 @@ def feed_record(platform, identity, title, author, url, cover, likes, content_ty
     """推荐流卡片只用列表接口自带的字段，正文和媒体在打开详情时补"""
     image = https_url(cover)
     return {
-        'id': f'{platform}:{identity}', 'platform': platform, 'title': title or '未命名作品', 'text': '', 'author': author or '',
+        'id': f'{platform}:{identity}', 'platform': platform, 'title': str(title or '未命名作品')[:TITLE_LIMIT], 'text': '', 'author': str(author or '')[:AUTHOR_LIMIT],
         'images': [image] if image.startswith('https://') else [], 'url': url, 'likes': str(likes or 0),
         'collectedAt': datetime.now(timezone.utc).isoformat(), 'contentType': content_type, 'feed': True,
     }

@@ -96,3 +96,12 @@ def sample_xhs_creator():
         "interaction": 50000,
         "tag_list": '{"profession": "Designer", "interest": "Photography"}'
     }
+
+
+@pytest.fixture(autouse=True)
+def _mask_names_for_algorithm_tests():
+    """这批测试校验脱敏算法本身，默认运行不脱敏"""
+    from tools import user_hash
+    user_hash.set_mask_names(True)
+    yield
+    user_hash.set_mask_names(False)

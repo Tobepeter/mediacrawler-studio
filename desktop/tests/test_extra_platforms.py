@@ -59,7 +59,8 @@ async def test_search_details_respect_limit_and_normalize(platform, monkeypatch)
         assert '完整正文' in item['text']
         assert item['images'] == ['https://example.com/a.jpg']
         assert item['url'].startswith('https://')
-        assert '测试昵称' != item['author']
+        if platform in ('wb', 'ks'):
+            assert item['author'] == '测试昵称'
     if platform == 'ks':
         assert len(next(iter(task.store.items.values()))['text']) > 500
     if platform == 'zhihu':

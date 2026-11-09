@@ -136,12 +136,14 @@ def test_feed_errors_keep_their_message(monkeypatch):
         asyncio.run(crawler.run())
 
 
-def test_creator_name_is_real_only_when_desktop_enables_it():
+def test_names_are_kept_and_length_is_limited():
+    from desktop.paging import AUTHOR_LIMIT, TITLE_LIMIT
+    from desktop.result_store import normalize
     from tools import user_hash
-    assert user_hash.creator_name('测试作者') == '测***者'
-    user_hash.show_creator_names()
-    try:
-        assert user_hash.creator_name('测试作者') == '测试作者'
-        assert user_hash.mask_nickname('测试作者') == '测***者'
-    finally:
-        user_hash.show_creator_names(False)
+    assert user_hash.mask_nickname('测试作者') == '测试作者'
+    item = normalize({'aweme_id': '1', 'desc': '长' * 300, 'title': '长' * 300, 'nickname': '名' * 200}, 'dy')
+    assert len(item['title']) == TITLE_LIMIT and len(item['text']) == 300
+    assert item['text'].startswith(item['title'])
+    assert len(item['author']) == AUTHOR_LIMIT
+    record = bili_paging.feed_record('bili', '1', '长' * 300, '名' * 200, 'https://x', '', 0, 'video')
+    assert len(record['title']) == TITLE_LIMIT and len(record['author']) == AUTHOR_LIMIT

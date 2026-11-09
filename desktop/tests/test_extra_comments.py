@@ -58,7 +58,7 @@ async def test_comment_adapters_caps_relations_and_content_isolation(monkeypatch
         assert len([row for row in item['comments'] if not row['parentId']]) == 20
         assert len([row for row in item['comments'] if row['parentId'] == '1']) == 20
         assert all(set(row) == {'id', 'parentId', 'text', 'author', 'likes'} for row in item['comments'])
-        assert all(row['author'] != '测试作者' for row in item['comments'])
+        assert all('*' not in row['author'] for row in item['comments'])
         assert all('<p>' not in row['text'] for row in item['comments'])
     assert roots.await_count == 2
     if replies:

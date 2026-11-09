@@ -188,7 +188,7 @@ mediacrawler auth login --help
 | `publishedAt` | 可解析的发布时间，UTC ISO 格式；未知为 null |
 | `durationSeconds` | 视频时长（秒），未知为 null |
 | `contentType` | 上游内容类型；解析出视频后为 video，无法判断为 unknown |
-| `creatorHash` | 上游已有的匿名作者标识，继续保留昵称脱敏规则 |
+| `creatorHash` | 上游已有的匿名作者标识；昵称是平台公开数据，原样返回 |
 | `statistics` | 点赞、播放、评论、分享、收藏，以及 B站投币/弹幕；未知为 null，不伪造零 |
 | `media.variants` | 当前接口返回且可提取的全部候选，不因为画质选择而丢弃其他候选 |
 | `media.selection` | 推荐视频/音频 ID、选择结果及是否需要合流；只是推荐，不下载 |

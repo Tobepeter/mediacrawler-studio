@@ -26,7 +26,7 @@ from typing import List
 import config
 from media_platform.douyin.media import extract_card_cover_url, extract_image_urls, extract_video_urls
 from var import source_keyword_var
-from tools.user_hash import anonymize_user_id, creator_name, mask_nickname
+from tools.user_hash import anonymize_user_id, mask_nickname
 
 from ._store_impl import *
 
@@ -102,7 +102,7 @@ async def update_douyin_aweme(aweme_item: Dict):
         "desc": aweme_item.get("desc", ""),
         "create_time": aweme_item.get("create_time"),
         "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
-        "nickname": creator_name(user_info.get("nickname")),  # 作品作者昵称
+        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称
         "liked_count": str(interact_info.get("digg_count")),
         "collected_count": str(interact_info.get("collect_count")),
         "comment_count": str(interact_info.get("comment_count")),

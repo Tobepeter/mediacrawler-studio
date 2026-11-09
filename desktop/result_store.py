@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import urlparse
 
+from desktop.paging import AUTHOR_LIMIT, TITLE_LIMIT
+
 
 def normalize(item, platform):
     content_id = str(item.get("video_id") or item.get("aweme_id") or item.get("note_id") or item.get("content_id") or "")
@@ -25,8 +27,8 @@ def normalize(item, platform):
                 safe_images.append(value)
     return {
         "id": f"{platform}:{content_id}", "platform": platform,
-        "title": item.get("title") or unescape(text[:80]) or "未命名作品", "text": unescape(text),
-        "author": item.get("nickname") or item.get("user_nickname") or "", "images": safe_images,
+        "title": unescape(item.get("title") or text)[:TITLE_LIMIT] or "未命名作品", "text": unescape(text),
+        "author": str(item.get("nickname") or item.get("user_nickname") or "")[:AUTHOR_LIMIT], "images": safe_images,
         "url": item.get("note_url") or item.get("aweme_url") or item.get("video_url") or item.get("content_url") or "",
         "likes": str(item.get("liked_count") or item.get("voteup_count") or "0"),
         "collectedAt": datetime.now(timezone.utc).isoformat(),
@@ -83,6 +85,6 @@ class ResultStore:
             return
         item['comments'].append({
             'id': identity, 'parentId': parent, 'text': raw.get('content') or '',
-            'author': raw.get('nickname') or raw.get('user_nickname') or '', 'likes': str(raw.get('like_count') or raw.get('comment_like_count') or '0'),
+            'author': str(raw.get('nickname') or raw.get('user_nickname') or '')[:AUTHOR_LIMIT], 'likes': str(raw.get('like_count') or raw.get('comment_like_count') or '0'),
         })
         self.emit('item-update', item=item)
