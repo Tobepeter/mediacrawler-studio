@@ -386,7 +386,6 @@
   "博主页": "Creator page",
   "运行日志": "Logs",
   "反馈问题时可以附上": "Attach when reporting a problem",
-  "清除登录态": "Clear sessions",
   "命令行工具": "Command-line tool",
   "全部功能正常": "All features are working",
   "体检发现 {{count}} 项需要留意": "{{count}} items need attention",
@@ -417,5 +416,11 @@
   "{{names}} 未登录，只检查入口；登录后可以查更多项目": "{{names}} not signed in, checked sign-in only. Sign in to check more.",
   "检查结果": "Results",
   "有项目需要留意": "Some items need attention",
-  "还没有检查结果": "No results yet"
+  "还没有检查结果": "No results yet",
+  "清除登录态不影响采集记录": "Clearing sessions keeps collected records",
+  "推荐、主页、搜索": "Feed, profile, search",
+  "平台能否打开、二维码能否取到，不需要登录": "Whether the site opens and its QR code loads. No sign-in needed",
+  "接口返回的条数和字段是否正常": "Whether the API returns the expected count and fields",
+  "正文和图片能否拿到": "Whether text and images load",
+  "媒体地址是否可用，不会真的下载": "Whether media URLs work. Nothing is downloaded"
 }

@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
-import { Settings, FolderOpen, LogOut, Loader2, RotateCcw } from 'lucide-react'
+import {
+  Settings,
+  FolderOpen,
+  LogOut,
+  Loader2,
+  RotateCcw,
+  SlidersHorizontal,
+  Stethoscope,
+  UserRound,
+} from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -26,9 +35,15 @@ import { ThemeToggle } from './theme-toggle'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
-import { SettingGroup, SettingRow } from './settings-row'
+import { SettingGroup, SettingPage, SettingRow } from './settings-row'
 import { platformNames, useStudio } from './store'
 import type { Platform } from './types'
+
+const tabs = [
+  { id: 'general', label: '通用', icon: SlidersHorizontal },
+  { id: 'health', label: '体检', icon: Stethoscope },
+  { id: 'account', label: '账号', icon: UserRound },
+]
 
 // 语言、外观、下载偏好和平台会话管理
 export function StudioSettings() {
@@ -106,123 +121,118 @@ export function StudioSettings() {
           <Settings />
         </IconButton>
       </DialogTrigger>
-      {/* 高度固定，切换分页不跳动；矮窗口按视口收缩 */}
+      {/* 16:10，桌面设置窗口的常见比例；尺寸固定，切换分页和内容变化都不跳动 */}
       <DialogContent
         aria-describedby={undefined}
-        className='flex h-[85dvh] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-5xl flex-col gap-4'
+        className='h-[min(41.25rem,85dvh)] w-[min(66rem,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden p-0'
       >
-        <DialogHeader>
-          <DialogTitle>{t('设置')}</DialogTitle>
-        </DialogHeader>
-        <Tabs defaultValue='general' className='flex min-h-0 flex-1 flex-col'>
-          <TabsList className='w-fit'>
-            <TabsTrigger value='general'>{t('通用')}</TabsTrigger>
-            <TabsTrigger value='health'>{t('体检')}</TabsTrigger>
-            <TabsTrigger value='account'>{t('账号')}</TabsTrigger>
-          </TabsList>
-          <TabsContent
-            value='general'
-            className='mt-4 min-h-0 flex-1 overflow-y-auto'
-          >
-            <SettingGroup>
-              <SettingRow
-                title={<Label htmlFor='studio-language'>{t('语言')}</Label>}
-              >
-                <Select
-                  value={i18n.resolvedLanguage || 'zh-CN'}
-                  onValueChange={(value) => void changeLanguage(value)}
+        <Tabs
+          defaultValue='general'
+          orientation='vertical'
+          className='flex h-full min-h-0 flex-col sm:flex-row'
+        >
+          <div className='shrink-0 space-y-4 border-b bg-muted/40 p-4 sm:w-48 sm:border-b-0 sm:border-r'>
+            <DialogHeader className='px-2 text-left'>
+              <DialogTitle>{t('设置')}</DialogTitle>
+            </DialogHeader>
+            <TabsList className='flex h-auto gap-1 bg-transparent p-0 sm:flex-col sm:items-stretch'>
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <TabsTrigger
+                  key={id}
+                  value={id}
+                  className='justify-start gap-2 data-[state=active]:bg-background'
                 >
-                  <SelectTrigger
-                    id='studio-language'
-                    className='w-44 bg-background'
+                  <Icon className='size-4' aria-hidden='true' />
+                  {t(label)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <TabsContent value='general' className='mt-0 min-h-0 min-w-0 flex-1'>
+            <SettingPage title={t('通用')}>
+              <div className='h-full overflow-y-auto'>
+                <SettingGroup>
+                  <SettingRow
+                    title={<Label htmlFor='studio-language'>{t('语言')}</Label>}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='zh-CN'>简体中文</SelectItem>
-                    <SelectItem value='en-US'>English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow title={t('外观')}>
-                <div className='rounded-lg bg-background p-1'>
-                  <ThemeToggle />
-                </div>
-              </SettingRow>
-              <SettingRow
-                title={
-                  <Label
-                    htmlFor='studio-ask-before-download'
-                    className='cursor-pointer'
+                    <Select
+                      value={i18n.resolvedLanguage || 'zh-CN'}
+                      onValueChange={(value) => void changeLanguage(value)}
+                    >
+                      <SelectTrigger
+                        id='studio-language'
+                        className='w-44 bg-background'
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='zh-CN'>简体中文</SelectItem>
+                        <SelectItem value='en-US'>English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </SettingRow>
+                  <SettingRow title={t('外观')}>
+                    <div className='rounded-lg bg-background p-1'>
+                      <ThemeToggle />
+                    </div>
+                  </SettingRow>
+                  <SettingRow
+                    title={
+                      <Label
+                        htmlFor='studio-ask-before-download'
+                        className='cursor-pointer'
+                      >
+                        {t('下载前询问')}
+                      </Label>
+                    }
                   >
-                    {t('下载前询问')}
-                  </Label>
-                }
-              >
-                <Checkbox
-                  id='studio-ask-before-download'
-                  checked={askBeforeDownload}
-                  onCheckedChange={(checked) =>
-                    setAskBeforeDownload(checked === true)
-                  }
-                />
-              </SettingRow>
-              <CliSettings />
-              <SettingRow title={t('运行日志')} hint={t('反馈问题时可以附上')}>
-                <Button
-                  variant='outline'
-                  disabled={!window.studio?.openLogs}
-                  onClick={() =>
-                    void window.studio
-                      ?.openLogs()
-                      .catch(() => toast.error(t('打开日志目录失败')))
-                  }
-                >
-                  <FolderOpen />
-                  {t('打开日志目录')}
-                </Button>
-              </SettingRow>
-              <SettingRow title={t('恢复默认设置')}>
-                <Button
-                  variant='outline'
-                  disabled={blocked || clearing || resetting}
-                  onClick={() => void reset()}
-                >
-                  <RotateCcw />
-                  {t('恢复')}
-                </Button>
-              </SettingRow>
-            </SettingGroup>
+                    <Checkbox
+                      id='studio-ask-before-download'
+                      checked={askBeforeDownload}
+                      onCheckedChange={(checked) =>
+                        setAskBeforeDownload(checked === true)
+                      }
+                    />
+                  </SettingRow>
+                  <CliSettings />
+                  <SettingRow
+                    title={t('运行日志')}
+                    hint={t('反馈问题时可以附上')}
+                  >
+                    <Button
+                      variant='outline'
+                      disabled={!window.studio?.openLogs}
+                      onClick={() =>
+                        void window.studio
+                          ?.openLogs()
+                          .catch(() => toast.error(t('打开日志目录失败')))
+                      }
+                    >
+                      <FolderOpen />
+                      {t('打开日志目录')}
+                    </Button>
+                  </SettingRow>
+                  <SettingRow title={t('恢复默认设置')}>
+                    <Button
+                      variant='outline'
+                      disabled={blocked || clearing || resetting}
+                      onClick={() => void reset()}
+                    >
+                      <RotateCcw />
+                      {t('恢复')}
+                    </Button>
+                  </SettingRow>
+                </SettingGroup>
+              </div>
+            </SettingPage>
           </TabsContent>
-          <TabsContent value='health' className='mt-4 min-h-0 flex-1'>
+          <TabsContent value='health' className='mt-0 min-h-0 min-w-0 flex-1'>
             <FeatureSettings />
           </TabsContent>
-          <TabsContent
-            value='account'
-            className='mt-4 min-h-0 flex-1 overflow-y-auto'
-          >
-            <SettingGroup>
-              {(Object.keys(platformNames) as Platform[]).map((platform) => (
-                <SettingRow
-                  key={platform}
-                  title={
-                    <span className='inline-flex items-center gap-2'>
-                      <PlatformIcon platform={platform} className='size-4' />
-                      {t(platformNames[platform])}
-                    </span>
-                  }
-                >
-                  <span className='truncate text-sm text-muted-foreground'>
-                    {accounts[platform] === 'connected'
-                      ? profiles[platform]?.nickname || t('已连接')
-                      : t('未登录')}
-                  </span>
-                </SettingRow>
-              ))}
-              <SettingRow
-                title={t('清除登录态')}
-                hint={t(blocked && !clearing ? '任务进行中' : '保留采集记录')}
-              >
+          <TabsContent value='account' className='mt-0 min-h-0 min-w-0 flex-1'>
+            <SettingPage
+              title={t('账号')}
+              action={
                 <Button
                   variant='outline'
                   disabled={!window.studio || blocked || clearing}
@@ -235,8 +245,40 @@ export function StudioSettings() {
                   )}
                   {t(clearing ? '清除中' : '清除所有登录态')}
                 </Button>
-              </SettingRow>
-            </SettingGroup>
+              }
+              hint={t(
+                blocked && !clearing
+                  ? '任务进行中'
+                  : '清除登录态不影响采集记录',
+              )}
+            >
+              <div className='h-full overflow-y-auto'>
+                <SettingGroup>
+                  {(Object.keys(platformNames) as Platform[]).map(
+                    (platform) => (
+                      <SettingRow
+                        key={platform}
+                        title={
+                          <span className='inline-flex items-center gap-2'>
+                            <PlatformIcon
+                              platform={platform}
+                              className='size-4'
+                            />
+                            {t(platformNames[platform])}
+                          </span>
+                        }
+                      >
+                        <span className='truncate text-sm text-muted-foreground'>
+                          {accounts[platform] === 'connected'
+                            ? profiles[platform]?.nickname || t('已连接')
+                            : t('未登录')}
+                        </span>
+                      </SettingRow>
+                    ),
+                  )}
+                </SettingGroup>
+              </div>
+            </SettingPage>
           </TabsContent>
         </Tabs>
       </DialogContent>

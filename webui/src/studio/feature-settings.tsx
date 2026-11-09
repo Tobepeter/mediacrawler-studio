@@ -18,7 +18,7 @@ import {
   useProgressText,
 } from './feature-check'
 import { PlatformIcon } from './platform-icon'
-import { SettingRow } from './settings-row'
+import { SettingPage } from './settings-row'
 import { platformNames, useStudio } from './store'
 import type { FeatureResult, Platform } from './types'
 
@@ -26,7 +26,13 @@ const platforms = Object.keys(platformNames) as Platform[]
 const steps = Object.keys(featureLabels) as FeatureResult['id'][]
 // 列宽和行高固定，结果陆续进来时表格不动，说明文字统一放在表格下面
 const gridClass =
-  'grid min-w-[30rem] grid-cols-[minmax(6rem,1fr)_repeat(6,3.5rem)] items-center'
+  'grid min-w-[30rem] grid-cols-[minmax(7rem,1.5fr)_repeat(6,minmax(3.5rem,1fr))] items-stretch'
+const legend = [
+  ['入口', '平台能否打开、二维码能否取到，不需要登录'],
+  ['推荐、主页、搜索', '接口返回的条数和字段是否正常'],
+  ['详情', '正文和图片能否拿到'],
+  ['下载', '媒体地址是否可用，不会真的下载'],
+]
 const appearance = {
   ok: { icon: CircleCheck, tone: 'text-emerald-600 dark:text-emerald-400' },
   degraded: { icon: CircleAlert, tone: 'text-amber-600 dark:text-amber-400' },
@@ -44,7 +50,7 @@ function Cell(props: {
   return (
     <span
       title={props.title}
-      className='flex h-10 items-center justify-center gap-1 text-xs tabular-nums text-muted-foreground'
+      className='flex h-full items-center justify-center gap-1 text-xs tabular-nums text-muted-foreground'
     >
       {props.active ? (
         <Loader2
@@ -87,8 +93,8 @@ function PlatformRow({ platform }: { platform: Platform }) {
       : undefined,
   )
   return (
-    <div className={gridClass}>
-      <span className='inline-flex h-10 items-center gap-2 px-4'>
+    <div className={cn(gridClass, 'min-h-11 flex-1 border-t border-border/60')}>
+      <span className='flex h-full items-center gap-2 px-4'>
         <PlatformIcon platform={platform} className='size-4 shrink-0' />
         <span className='truncate'>{t(platformNames[platform])}</span>
       </span>
@@ -143,6 +149,21 @@ function Issues() {
   )
 }
 
+// 还没结果时解释每一列查什么，结果框不空着
+function Legend() {
+  const { t } = useTranslation('studio')
+  return (
+    <dl className='space-y-2.5 text-xs text-muted-foreground'>
+      {legend.map(([name, text]) => (
+        <div key={name}>
+          <dt className='font-medium text-foreground'>{t(name)}</dt>
+          <dd>{t(text)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 function LoginHint() {
   const { t } = useTranslation('studio')
   const accounts = useStudio((state) => state.accounts)
@@ -175,55 +196,61 @@ export function FeatureSettings() {
         ? t(summary)
         : t('还没有检查结果')
   return (
-    // 结果放在固定大小的框里自己滚动，内容多少都不影响弹窗和表格
-    <div className='flex h-full min-h-0 flex-col gap-4 lg:flex-row'>
-      <div className='min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl bg-muted/40'>
-        <SettingRow
-          title={t('体检')}
-          hint={t('实际走一遍常用功能，看平台接口有没有变化')}
+    <SettingPage
+      title={t('体检')}
+      hint={t('实际走一遍常用功能，看平台接口有没有变化')}
+      action={
+        <Button
+          variant='outline'
+          className='w-28 shrink-0'
+          disabled={!window.studio?.checkFeatures || stopped}
+          onClick={() => (running ? stop() : void run())}
         >
-          <Button
-            variant='outline'
-            className='w-28 shrink-0'
-            disabled={!window.studio?.checkFeatures || stopped}
-            onClick={() => (running ? stop() : void run())}
-          >
-            {running ? (
-              <Loader2 className='animate-spin motion-reduce:animate-none' />
-            ) : (
-              <Stethoscope />
-            )}
-            {t(running ? '停止' : '开始体检')}
-          </Button>
-        </SettingRow>
-        <div className='overflow-x-auto border-t border-border/60'>
-          <div
-            className={cn(gridClass, 'h-8 text-xs text-muted-foreground')}
-            aria-hidden='true'
-          >
-            <span />
-            <span className='text-center'>{t('入口')}</span>
-            {steps.map((id) => (
-              <span key={id} className='text-center'>
-                {t(featureLabels[id])}
-              </span>
+          {running ? (
+            <Loader2 className='animate-spin motion-reduce:animate-none' />
+          ) : (
+            <Stethoscope />
+          )}
+          {t(running ? '停止' : '开始体检')}
+        </Button>
+      }
+    >
+      {/* 表格撑满高度；结果在固定的框里自己滚动，内容多少都不影响布局 */}
+      <div className='flex h-full min-h-0 flex-col gap-4 lg:flex-row'>
+        <div className='min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-muted/40'>
+          <div className='flex h-full min-w-[30rem] flex-col'>
+            <div
+              className={cn(
+                gridClass,
+                'h-9 shrink-0 items-center text-xs text-muted-foreground',
+              )}
+              aria-hidden='true'
+            >
+              <span />
+              <span className='text-center'>{t('入口')}</span>
+              {steps.map((id) => (
+                <span key={id} className='text-center'>
+                  {t(featureLabels[id])}
+                </span>
+              ))}
+            </div>
+            {platforms.map((platform) => (
+              <PlatformRow key={platform} platform={platform} />
             ))}
           </div>
-          {platforms.map((platform) => (
-            <PlatformRow key={platform} platform={platform} />
-          ))}
         </div>
+        <aside
+          aria-label={t('检查结果')}
+          className='flex h-40 shrink-0 flex-col overflow-y-auto rounded-xl border p-4 lg:h-full lg:w-72'
+        >
+          <p role='status' className='pb-3 text-sm font-medium tabular-nums'>
+            {status}
+          </p>
+          {!running && !summary && <Legend />}
+          <Issues />
+          <LoginHint />
+        </aside>
       </div>
-      <aside
-        aria-label={t('检查结果')}
-        className='flex h-44 shrink-0 flex-col overflow-y-auto rounded-xl border p-4 lg:h-full lg:w-80'
-      >
-        <p role='status' className='pb-3 text-sm font-medium tabular-nums'>
-          {status}
-        </p>
-        <Issues />
-        <LoginHint />
-      </aside>
-    </div>
+    </SettingPage>
   )
 }

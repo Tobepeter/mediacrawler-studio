@@ -209,7 +209,7 @@ export function CreatorSearch(props: {
         <span className='hidden sm:inline'>{t('找博主')}</span>
       </Button>
       {/* 高度固定，切换搜索状态不跳动；矮窗口按视口收缩 */}
-      <DialogContent className='flex h-[75dvh] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col sm:max-w-3xl'>
+      <DialogContent className='flex h-[min(35rem,85dvh)] w-[calc(100vw-2rem)] flex-col sm:max-w-4xl'>
         <DialogHeader>
           <DialogTitle>{t('找博主')}</DialogTitle>
           <DialogDescription className='sr-only'>
