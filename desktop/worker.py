@@ -41,7 +41,8 @@ async def main(request):
         if page is None:
             raise RuntimeError("找不到平台窗口，请重试")
         # 不创建新页面，也不关闭 Electron 所属的浏览器或 context
-        crawler = DesktopCrawler(request, page, emit)
+        # 桌面端列表先出卡片，打开时再取详情；命令行要完整内容，不走这里
+        crawler = DesktopCrawler({**request, 'listCards': True}, page, emit)
         if request.get('action') == 'logout':
             from desktop.logout import logout
             emit('logout-result', result=await logout(crawler))

@@ -231,6 +231,9 @@ class DesktopCrawler:
         if not self.defer_media():
             from desktop.content.media import enrich
             for item in self.store.items.values():
+                # 列表卡片的媒体等打开详情时再取，否则一页又变成逐条请求
+                if item['id'] in self.store.cards:
+                    continue
                 await enrich(self, item, self.request.get('quality', 'best'))
                 self.emit('item-update', item=item)
         count = len(self.store.ids)

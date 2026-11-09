@@ -36,9 +36,37 @@ async def collect_search(runner, query, cursor=None, options=None):
     semaphore = asyncio.Semaphore(1)
 
     async def save(row):
+        if wants_cards(runner) and await save_card(runner, row, 'pc_search'):
+            return
         await runner.collect_xhs_note(row.get('id'), row.get('xsec_source'), row.get('xsec_token'), semaphore)
 
     await walk(runner, fetch, save, publish, page, state.get('s', 0), max_pages=MAX_PAGES, **LABEL)
+
+
+async def save_card(runner, row, source):
+    """列表接口已带标题、封面、作者和点赞，一页一次请求；字段不全时返回 False，改取详情"""
+    card = row.get('note_card') or row
+    identity, token = row.get('id') or row.get('note_id'), row.get('xsec_token')
+    title, user = card.get('display_title'), card.get('user') or {}
+    if not identity or not token or not (title or card.get('cover')):
+        return False
+    key, cover = f'xhs:{identity}', card.get('cover') or {}
+    runner.store.cards.add(key)
+    runner.store.author_urls[key] = author_url(user, source)
+    await runner.store.store_content({
+        'note_id': identity, 'title': title or '', 'desc': '',
+        'nickname': user.get('nickname') or user.get('nick_name') or '',
+        'liked_count': (card.get('interact_info') or {}).get('liked_count'),
+        'image_list': [cover.get('url_default') or cover.get('url_pre') or cover.get('url') or ''],
+        'type': 'video' if card.get('type') == 'video' else 'note',
+        'note_url': f'https://www.xiaohongshu.com/explore/{identity}?xsec_token={token}&xsec_source={row.get("xsec_source") or source}',
+    })
+    return True
+
+
+def wants_cards(runner):
+    # 采集评论要先有完整作品，这种情况仍然逐条取
+    return bool(runner.request.get('listCards')) and not runner.request.get('comments')
 
 
 def creator_url(user_id, token, source):
@@ -92,6 +120,8 @@ async def collect_creator(runner, reference, cursor=None):
     semaphore = asyncio.Semaphore(1)
 
     async def save(row):
+        if wants_cards(runner) and await save_card(runner, row, 'pc_user'):
+            return
         await runner.collect_xhs_note(row.get('note_id'), row.get('xsec_source') or 'pc_user', row.get('xsec_token'), semaphore)
 
     await walk(runner, fetch, save, publish, position, skip, empty_retries=EMPTY_PAGE_RETRIES, **LABEL)

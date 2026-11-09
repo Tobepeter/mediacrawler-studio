@@ -18,7 +18,7 @@ def runner(client, limit=20):
         store.ids.add(f'xhs:{note_id}')
         task.seen.append((note_id, source, token))
 
-    task = SimpleNamespace(platform='xhs', client=client, store=store, emit=lambda kind, **data: events.append((kind, data)), events=events, seen=[], collect_xhs_note=collect)
+    task = SimpleNamespace(platform='xhs', client=client, store=store, request={}, emit=lambda kind, **data: events.append((kind, data)), events=events, seen=[], collect_xhs_note=collect)
     return task
 
 

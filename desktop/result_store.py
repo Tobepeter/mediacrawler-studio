@@ -44,6 +44,7 @@ class ResultStore:
         self.full_text = {}
         self.author_urls = {}
         self.markdown = {}
+        self.cards = set()  # 只有列表字段的条目，打开详情时再补全
         self.media = {}
         self.items = {}
         self.comments = comments
@@ -63,6 +64,8 @@ class ResultStore:
         from desktop.content.schema import initialize, metadata
         item.update(metadata(content_item))
         initialize(item)
+        if item["id"] in self.cards:
+            item["feed"] = True
         self.ids.add(item["id"])
         if self.comments:
             item.update(comments=[], commentStatus="pending")

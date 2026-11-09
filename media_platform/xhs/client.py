@@ -343,6 +343,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             "search_id": search_id,
             "sort": sort.value,
             "note_type": note_type.value,
+            "image_formats": ["jpg", "webp", "avif"],
         }
         return await self.post(uri, data)
 
