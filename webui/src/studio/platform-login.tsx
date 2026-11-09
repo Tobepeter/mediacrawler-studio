@@ -4,6 +4,12 @@ import { toast } from 'sonner'
 import { RefreshCw } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import { QrFrame } from './qr-frame'
 import { PlatformIcon } from './platform-icon'
 import { platformNames, useStudio } from './store'
@@ -60,13 +66,26 @@ export function PlatformLogin() {
           {login?.status === 'ready' ? (
             <>
               <span>{t('扫码登录')}</span>
-              <IconButton
-                label={t('刷新二维码')}
-                disabled={refreshing}
-                onClick={refresh}
-              >
-                <RefreshCw />
-              </IconButton>
+              <ContextMenu>
+                <ContextMenuTrigger asChild disabled={refreshing}>
+                  <IconButton
+                    label={t('刷新二维码')}
+                    hint={t('刷新二维码（右键可重新连接）')}
+                    disabled={refreshing}
+                    onClick={(event) => (event.altKey ? retry() : refresh())}
+                  >
+                    <RefreshCw />
+                  </IconButton>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onSelect={refresh}>
+                    {t('刷新二维码')}
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={retry}>
+                    {t('重新连接')}
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             </>
           ) : !suspicious && login?.status === 'expired' ? (
             t('二维码已过期，请刷新')

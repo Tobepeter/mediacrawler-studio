@@ -9,8 +9,8 @@ import {
 // 图标操作共用默认 Button 和 Tooltip，ref/events 透传给菜单、弹窗触发器
 export const IconButton = forwardRef<
   HTMLButtonElement,
-  ButtonProps & { label: string }
->(({ label, children, ...props }, ref) => (
+  ButtonProps & { label: string; hint?: string }
+>(({ label, hint, children, ...props }, ref) => (
   <Tooltip>
     <TooltipTrigger asChild>
       <Button
@@ -24,7 +24,7 @@ export const IconButton = forwardRef<
         {children}
       </Button>
     </TooltipTrigger>
-    <TooltipContent>{label}</TooltipContent>
+    <TooltipContent>{hint || label}</TooltipContent>
   </Tooltip>
 ))
 IconButton.displayName = 'IconButton'

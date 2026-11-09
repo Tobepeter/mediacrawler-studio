@@ -215,6 +215,8 @@
   "未能获取二维码，请打开完整登录页": "QR code unavailable. Open the full sign-in page",
   "请用{{platform}}扫码": "Scan with {{platform}}",
   "刷新二维码": "Refresh QR code",
+  "刷新二维码（右键可重新连接）": "Refresh QR code (right-click to reconnect)",
+  "重新连接": "Reconnect",
   "打开完整登录页": "Open full sign-in page",
   "偏好设置": "Preferences",
   "打开日志目录": "Open log folder",

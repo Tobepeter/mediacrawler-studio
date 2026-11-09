@@ -333,6 +333,7 @@ app
     }
     createWindow()
     mainWindow.on('closed', () => app.quit())
+    mainWindow.on('focus', () => service.sessions?.wake())
     app.on('second-instance', () => {
       mainWindow.show()
       mainWindow.focus()
