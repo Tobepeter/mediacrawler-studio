@@ -98,6 +98,7 @@ async def test_feed_detail_keeps_card_author(monkeypatch):
     result = await detail.load_detail({'id': 'bili:1', 'platform': 'bili', 'url': 'u', 'author': '闲摆龙门阵', 'feed': True}, None)
     assert result['item']['author'] == '闲摆龙门阵'
     assert result['item']['text'] == '正文' and result['item']['feed'] is True
+    assert result['item']['url'] == 'u'
 
 
 async def test_feed_detail_failure_keeps_card(monkeypatch):

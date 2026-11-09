@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { useState } from 'react'
-import { Play } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
+import { cn } from '@/lib/utils'
 import { DouyinMedia } from './douyin-media'
 import type { ContentItem } from './types'
 
@@ -31,47 +30,51 @@ export function biliPlayer(item: ContentItem) {
   }
 }
 
-export function DetailMedia({ item }: { item: ContentItem }) {
+// 地址和封面在打开时定下来，详情数据合并进来不能让播放器重新加载
+function BiliPlayer({ src, item }: { src: string; item: ContentItem }) {
   const { t } = useTranslation('studio')
+  const [poster] = useState(item.images[0])
+  const [loaded, setLoaded] = useState(false)
+  // 播放器的 load 事件可能被统计请求拖很久，到时间也要显示，不能让封面挡住播放
+  useEffect(() => {
+    const timer = setTimeout(() => setLoaded(true), 1500)
+    return () => clearTimeout(timer)
+  }, [])
+  return (
+    <div className='relative aspect-video overflow-hidden rounded-lg bg-muted'>
+      {poster && (
+        <img
+          className='absolute inset-0 size-full object-cover'
+          src={poster}
+          alt=''
+          referrerPolicy='no-referrer'
+        />
+      )}
+      {/* 播放器加载完才显示，中间不露出黑屏 */}
+      <iframe
+        className={cn(
+          'absolute inset-0 size-full border-0 transition-opacity duration-300 motion-reduce:transition-none',
+          loaded ? 'opacity-100' : 'opacity-0',
+        )}
+        src={src}
+        title={`${item.title} · ${t('视频播放器')}`}
+        allow='autoplay; fullscreen; picture-in-picture'
+        allowFullScreen
+        sandbox='allow-scripts allow-same-origin allow-presentation'
+        referrerPolicy='strict-origin-when-cross-origin'
+        onLoad={() => setLoaded(true)}
+      />
+    </div>
+  )
+}
 
-  const [playing, setPlaying] = useState(false)
-  const player = biliPlayer(item)
+export function DetailMedia({ item }: { item: ContentItem }) {
+  const [player] = useState(() => biliPlayer(item))
   if (item.platform === 'dy') return <DouyinMedia key={item.id} item={item} />
   return (
     <div className='min-w-0 space-y-3'>
       {player ? (
-        <div className='relative aspect-video overflow-hidden rounded-lg bg-muted'>
-          {playing ? (
-            <iframe
-              className='absolute inset-0 size-full border-0'
-              src={player}
-              title={`${item.title} · ${t('视频播放器')}`}
-              allow='autoplay; fullscreen; picture-in-picture'
-              allowFullScreen
-              sandbox='allow-scripts allow-same-origin allow-presentation'
-              referrerPolicy='strict-origin-when-cross-origin'
-            />
-          ) : (
-            <Button
-              variant='ghost'
-              className='group absolute inset-0 h-full w-full overflow-hidden rounded-none p-0'
-              aria-label={t('播放视频')}
-              onClick={() => setPlaying(true)}
-            >
-              {item.images[0] && (
-                <img
-                  className='absolute inset-0 size-full object-cover'
-                  src={item.images[0]}
-                  alt=''
-                  referrerPolicy='no-referrer'
-                />
-              )}
-              <span className='relative flex size-12 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm transition-transform group-hover:scale-105'>
-                <Play className='size-5 fill-current' />
-              </span>
-            </Button>
-          )}
-        </div>
+        <BiliPlayer src={player} item={item} />
       ) : (
         <ImageGallery images={item.images} title={item.title} />
       )}

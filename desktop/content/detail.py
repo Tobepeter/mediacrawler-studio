@@ -33,7 +33,8 @@ async def load_feed_detail(record, page, background=False):
         return {'item': {**record, 'media': {'status': 'failed', 'variants': []}}, 'code': 'failed'}
     await enrich(runner, full)
     # 上游入库时会给昵称脱敏，界面继续用卡片上的原名
-    item = {**full, 'feed': True, 'detailPending': False, 'author': record.get('author') or full.get('author')}
+    # 地址沿用卡片的：详情里的 av 地址换掉 BV 地址会让正在播放的播放器重新加载
+    item = {**full, 'feed': True, 'detailPending': False, 'url': record.get('url') or full.get('url'), 'author': record.get('author') or full.get('author')}
     return {'item': item, 'code': 'failed' if full['media']['status'] == 'failed' else ''}
 
 
