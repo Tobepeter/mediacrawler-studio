@@ -1,10 +1,12 @@
 """知乎博主主页：回答、文章、视频依次翻页，列表自带正文，不用逐条请求详情"""
 import re
 
+from html import unescape
 from urllib.parse import parse_qs, urlparse
 
 from tenacity import RetryError
 
+from desktop.content.rich_text import to_markdown, to_plain
 from desktop.paging import (CreatorError, Page, announce_profile, count, creator_summary, decode_cursor, encode_cursor, feed_record, https_url, invalid_cursor,
                             is_index, walk)
 
@@ -22,14 +24,17 @@ def author_url(author):
     return f'{PEOPLE}{token}' if token else ''
 
 
-def track_authors(runner):
-    """搜索和详情都经过这三个解析函数，在这里记下原始作者，不改上游入库字段"""
+def track_raw(runner):
+    """搜索和详情都经过这三个解析函数，在这里记下作者和带结构的正文，不改上游入库字段"""
     extractor = runner.client._extractor
 
     def tracked(original):
         def extract(raw):
             item = original(raw)
-            runner.store.author_urls[f'zhihu:{item.content_type}:{item.content_id}'] = author_url(raw.get('author'))
+            key, html = f'zhihu:{item.content_type}:{item.content_id}', raw.get('content')
+            runner.store.author_urls[key] = author_url(raw.get('author'))
+            if html:
+                runner.store.full_text[key], runner.store.markdown[key] = to_plain(html), to_markdown(html)
             return item
         return extract
 
@@ -111,15 +116,19 @@ async def collect_creator(runner, reference, cursor=None):
     await walk(runner, fetch, collector.save, publish, start, state.get('s', 0), one_page=bool(runner.request.get('auto')), **LABEL)
 
 
-def card(target, item):
+def card(runner, target, item):
     url = f'https://www.zhihu.com/zvideo/{item.content_id}' if item.content_type == 'zvideo' else item.content_url
     record = feed_record(
-        'zhihu', f'{item.content_type}:{item.content_id}', item.title, item.user_nickname, url,
+        'zhihu', f'{item.content_type}:{item.content_id}', unescape(item.title), item.user_nickname, url,
         (item.image_list or [target.get('thumbnail')])[0], item.voteup_count, item.content_type, author_url(target.get('author')),
     )
     # 接口自带正文和配图，卡片一次给全，打开详情不用再请求
     images = [https_url(image) for image in item.image_list]
-    return {**record, 'text': item.content_text or item.desc, 'images': [image for image in images if image.startswith('https://')] or record['images']}
+    store = runner.store
+    return {
+        **record, 'text': store.full_text.get(record['id']) or unescape(item.desc or ''), 'images': [image for image in images if image.startswith('https://')] or record['images'],
+        **({'markdown': store.markdown[record['id']]} if store.markdown.get(record['id']) else {}),
+    }
 
 
 async def load_feed(runner, cursor=None):
@@ -134,7 +143,7 @@ async def load_feed(runner, cursor=None):
         # 推荐里还混有广告和圈子卡片，只留能打开的回答、文章和视频
         for item in runner.client._extractor.extract_content_list_from_creator([target]):
             if item.content_id and item.title:
-                items.append(card(target, item))
+                items.append(card(runner, target, item))
     paging = (response or {}).get('paging') or {}
     query = parse_qs(urlparse(paging.get('next') or '').query)
     following = encode_cursor('zhihu-feed', p=page + 1, a=int((query.get('after_id') or [after + len(items)])[0]), t=(query.get('session_token') or [session])[0])

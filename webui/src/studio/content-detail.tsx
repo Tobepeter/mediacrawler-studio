@@ -40,8 +40,10 @@ export function ContentDetail() {
 
   const selected = useStudio((state) => state.selected)
   const patch = useStudio((state) => state.patch)
+  // 文章的图片排在正文里，单栏阅读，不再拆到左侧图集
   const hasMedia =
     selected &&
+    !selected.markdown &&
     (selected.images.length > 0 ||
       selected.platform === 'dy' ||
       !!biliPlayer(selected))
@@ -70,7 +72,11 @@ export function ContentDetail() {
         }}
         className={cn(
           'flex max-h-[90dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg p-0',
-          hasMedia ? 'max-w-none sm:w-[92vw]' : 'max-w-5xl',
+          hasMedia
+            ? 'max-w-none sm:w-[92vw]'
+            : selected?.markdown
+              ? 'max-w-3xl'
+              : 'max-w-5xl',
         )}
       >
         {selected && (

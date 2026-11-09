@@ -50,6 +50,8 @@ export interface ContentItem {
   platform: Platform
   title: string
   text: string
+  // 带结构的正文，有就按文章排版显示；旧记录和其他平台没有
+  markdown?: string
   author: string
   // 博主主页；旧记录和链接采集可能没有，此时按名字搜
   authorUrl?: string

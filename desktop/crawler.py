@@ -13,7 +13,7 @@ from desktop.account import AccountProfile
 from desktop.bili_paging import author_url as bili_author_url
 from desktop.result_store import ResultStore
 from desktop.xhs_paging import author_url as xhs_author_url
-from desktop.zhihu_paging import track_authors
+from desktop.zhihu_paging import track_raw
 from desktop.comments import CommentCollector
 from desktop.page_context import PageContext
 from desktop.native_platforms import create_native
@@ -68,7 +68,7 @@ class DesktopCrawler:
         limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else None
         pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail), limit)
         if self.platform == 'zhihu':
-            track_authors(self)
+            track_raw(self)
 
     async def logged_in(self):
         if self.platform == 'wb' and urlparse(self.page.url).hostname in ('www.weibo.com', 'weibo.com'):

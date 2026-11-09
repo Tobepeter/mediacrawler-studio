@@ -1,6 +1,7 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from 'react-i18next'
 import { Heart, Loader2 } from 'lucide-react'
+import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { ContentComment, ContentItem } from './types'
 
@@ -24,7 +25,9 @@ export function DetailBody({ item }: { item: ContentItem }) {
         {t('正文暂时没有加载出来，可以查看原文')}
       </p>
     )
-  const body = (
+  const body = item.markdown ? (
+    <MarkdownRenderer content={item.markdown} />
+  ) : (
     <p className='whitespace-pre-wrap break-words text-sm leading-relaxed'>
       {item.text || t('这条作品没有正文')}
     </p>

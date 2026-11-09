@@ -45,6 +45,8 @@ dependencies = [
     "qrcode>=8.2",
     "platformdirs>=4.5.0",
     "m3u8>=6,<7",
+    "markdownify>=1.1,<2",
+    "beautifulsoup4>=4.12,<5",
 ]
 
 [[tool.uv.index]]

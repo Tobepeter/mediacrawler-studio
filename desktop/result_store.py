@@ -43,6 +43,7 @@ class ResultStore:
         self.ids = set()
         self.full_text = {}
         self.author_urls = {}
+        self.markdown = {}
         self.media = {}
         self.items = {}
         self.comments = comments
@@ -55,6 +56,8 @@ class ResultStore:
         item["text"] = self.full_text.get(item["id"], item["text"])
         if self.author_urls.get(item["id"]):
             item["authorUrl"] = self.author_urls[item["id"]]
+        if self.markdown.get(item["id"]):
+            item["markdown"] = self.markdown[item["id"]]
         if item["id"] in self.ids or len(self.ids) >= self.limit:
             return
         from desktop.content.schema import initialize, metadata

@@ -22,7 +22,7 @@ def runner(**client):
         emit=lambda kind, **data: events.append((kind, data)),
         client=SimpleNamespace(_extractor=ZhihuExtractor(), get_creator_info=AsyncMock(return_value=None), **client),
     )
-    zhihu_paging.track_authors(run)
+    zhihu_paging.track_raw(run)
     return run
 
 
@@ -123,3 +123,12 @@ async def test_retry_exhausted_becomes_platform_error():
     with pytest.raises(CreatorError) as error:
         await zhihu_paging.load_feed(run)
     assert error.value.code == 'PLATFORM_ERROR'
+
+
+async def test_feed_card_keeps_structure_and_decodes_entities():
+    target = {**answer(3), 'title': 'A &#34;B&#34;', 'content': '<p>第一段 &#34;引用&#34;</p><h2>小标题</h2><p>第二段</p>'}
+    run = runner(get_home_feed=AsyncMock(return_value={'data': [{'target': target}], 'paging': {}}))
+    item = (await zhihu_paging.load_feed(run))['items'][0]
+    assert item['title'] == 'A "B"'
+    assert item['text'] == '第一段 "引用"\n小标题\n第二段'
+    assert '## 小标题' in item['markdown'] and '&#34;' not in item['markdown']
