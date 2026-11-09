@@ -32,8 +32,8 @@ from media_downloader import MediaItem, MediaType
 # 视频清晰度字段，按优先级排列（h264 与 256 通常为无水印源）
 _VIDEO_ADDR_KEYS = ("play_addr_h264", "play_addr_256", "play_addr")
 
-# 封面字段，按优先级排列
-_COVER_KEYS = ("raw_cover", "origin_cover", "cover", "dynamic_cover")
+# 封面字段，按优先级排列；cover 是作者设的封面，origin_cover 是视频首帧，开头黑场时整张全黑
+_COVER_KEYS = ("cover", "raw_cover", "origin_cover", "dynamic_cover")
 
 
 def _url_list_of(container) -> List[str]:

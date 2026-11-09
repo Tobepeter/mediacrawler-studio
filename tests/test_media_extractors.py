@@ -333,12 +333,12 @@ def test_douyin_cover_key_priority_is_locked():
         },
     }
 
+    assert douyin_media.extract_cover_url(detail) == "https://cdn/cover"
+    del detail["video"]["cover"]
     assert douyin_media.extract_cover_url(detail) == "https://cdn/raw"
     del detail["video"]["raw_cover"]
     assert douyin_media.extract_cover_url(detail) == "https://cdn/origin"
     del detail["video"]["origin_cover"]
-    assert douyin_media.extract_cover_url(detail) == "https://cdn/cover"
-    del detail["video"]["cover"]
     assert douyin_media.extract_cover_url(detail) == "https://cdn/dynamic"
 
 
