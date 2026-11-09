@@ -78,7 +78,7 @@ function BiliPlayer({ src, item }: { src: string; item: ContentItem }) {
 
 export function DetailMedia({ item }: { item: ContentItem }) {
   const [player] = useState(() => {
-    const { autoplay } = usePlayback.getState()
+    const autoplay = !usePlayback.getState().noAutoplay
     return biliPlayer(item, { autoplay, muted: startMuted(autoplay) })
   })
   if (hasNativeVideo(item)) return <NativeVideo key={item.id} item={item} />

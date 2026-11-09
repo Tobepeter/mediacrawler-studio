@@ -191,17 +191,19 @@ export function StudioSettings() {
                     onChange={setAskBeforeDownload}
                   />
                   <SettingCheck
-                    id='studio-autoplay'
-                    title={t('自动播放视频')}
-                    hint={t('打开详情时直接播放，支持 B 站、抖音和小红书')}
-                    checked={playback.autoplay}
-                    onChange={(autoplay) => savePlayback({ autoplay })}
+                    id='studio-no-autoplay'
+                    title={t('禁止自动播放视频')}
+                    hint={t(
+                      '不勾选时打开详情直接播放，支持 B 站、抖音和小红书',
+                    )}
+                    checked={playback.noAutoplay}
+                    onChange={(noAutoplay) => savePlayback({ noAutoplay })}
                   />
                   <SettingCheck
                     id='studio-autoplay-muted'
                     title={t('自动播放时静音')}
                     checked={playback.autoplayMuted}
-                    disabled={!playback.autoplay}
+                    disabled={playback.noAutoplay}
                     onChange={(autoplayMuted) =>
                       savePlayback({ autoplayMuted })
                     }

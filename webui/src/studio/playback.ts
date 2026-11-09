@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-const defaults = { autoplay: true, autoplayMuted: false }
+// 开关都用否定含义，默认全不勾选，恢复默认就是全部取消
+const defaults = { noAutoplay: false, autoplayMuted: false }
 const debugMuteMs = 60000
 let debugDrivenAt = 0
 
 export const usePlayback = create(
-  persist(() => defaults, { name: 'studio-playback' }),
+  persist(() => defaults, { name: 'studio-video-playback' }),
 )
 
 export function setPlayback(value: Partial<typeof defaults>) {

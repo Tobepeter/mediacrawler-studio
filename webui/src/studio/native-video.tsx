@@ -35,7 +35,7 @@ export function NativeVideo({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
   const busy = useStudio((state) => platformBusy(state, item.platform))
   const detailLoading = useDetailMedia(item).loading
-  const autoplay = useRef(usePlayback.getState().autoplay)
+  const autoplay = useRef(!usePlayback.getState().noAutoplay)
   const [muted, setMuted] = useState(false)
   const imagePost =
     item.contentType === 'note' ||
