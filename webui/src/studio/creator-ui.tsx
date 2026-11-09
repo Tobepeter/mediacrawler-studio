@@ -112,16 +112,16 @@ export function CreatorField(props: {
   const detail = creator ? stats(creator).join(' · ') : ''
   return (
     <div
-      className='flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-sm'
+      className='flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-body'
       title={url}
     >
       <CreatorAvatar
         name={name}
         avatar={creator?.avatar}
-        className='size-6 text-xs'
+        className='size-6 text-caption'
       />
       <span className='shrink-0 truncate font-medium'>{name}</span>
-      <span className='hidden min-w-0 truncate text-xs text-muted-foreground sm:inline'>
+      <span className='hidden min-w-0 truncate text-caption text-muted-foreground sm:inline'>
         {detail}
       </span>
       <span className='flex-1' />
@@ -144,7 +144,7 @@ export function CreatorHeader(props: { creator: CreatorInfo; count: number }) {
       />
       <div className='min-w-0'>
         <h2 className='truncate font-semibold'>{creator.name}</h2>
-        <p className='truncate text-xs text-muted-foreground'>
+        <p className='truncate text-caption text-muted-foreground'>
           {[...stats(creator), t('已采 {{count}} 条', { count })].join(' · ')}
         </p>
       </div>

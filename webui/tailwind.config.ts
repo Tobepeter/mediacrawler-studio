@@ -57,6 +57,12 @@ export default {
           to: { height: '0' },
         },
       },
+      // 界面只用这三档字号：标题、正文、辅助说明
+      fontSize: {
+        heading: ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        body: ['0.875rem', { lineHeight: '1.25rem' }],
+        caption: ['0.75rem', { lineHeight: '1rem' }],
+      },
       // 颜色跟随主题变量，亮暗模式不用单独 invert
       typography: {
         DEFAULT: {

@@ -163,7 +163,7 @@ export function ImageGallery(props: ImageGalleryProps) {
             >
               <ChevronRight />
             </Button>
-            <span className='pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-background/90 px-2 py-1 text-xs tabular-nums'>
+            <span className='pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-background/90 px-2 py-1 text-caption tabular-nums'>
               {current + 1} / {props.images.length}
             </span>
           </>

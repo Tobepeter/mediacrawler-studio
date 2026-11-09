@@ -125,7 +125,7 @@ export function CollectOptions({ disabled }: { disabled: boolean }) {
                 }
               />
               <Label htmlFor={`${id}-comments`}>{t('采集评论')}</Label>
-              <span className='ml-auto text-xs text-muted-foreground'>
+              <span className='ml-auto text-caption text-muted-foreground'>
                 {t('最多20条/篇')}
               </span>
             </div>
@@ -139,7 +139,7 @@ export function CollectOptions({ disabled }: { disabled: boolean }) {
                 }
               />
               <Label htmlFor={`${id}-replies`}>{t('包含回复')}</Label>
-              <span className='ml-auto text-xs text-muted-foreground'>
+              <span className='ml-auto text-caption text-muted-foreground'>
                 {t('另取20条/篇')}
               </span>
             </div>

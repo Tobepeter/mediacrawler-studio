@@ -121,10 +121,10 @@ export function StudioSettings() {
           <Settings />
         </IconButton>
       </DialogTrigger>
-      {/* 16:10，桌面设置窗口的常见比例；尺寸固定，切换分页和内容变化都不跳动 */}
+      {/* 宽度占屏幕 70%，比例 16:10；尺寸固定，切换分页和内容变化都不跳动 */}
       <DialogContent
         aria-describedby={undefined}
-        className='h-[min(41.25rem,85dvh)] w-[min(66rem,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden p-0'
+        className='h-[min(max(43.75vw,35rem),85dvh)] w-[max(70vw,min(56rem,calc(100vw-2rem)))] max-w-none gap-0 overflow-hidden p-0'
       >
         <Tabs
           defaultValue='general'
@@ -133,7 +133,9 @@ export function StudioSettings() {
         >
           <div className='shrink-0 space-y-4 border-b bg-muted/40 p-4 sm:w-48 sm:border-b-0 sm:border-r'>
             <DialogHeader className='px-2 text-left'>
-              <DialogTitle>{t('设置')}</DialogTitle>
+              <DialogTitle className='leading-6 tracking-normal'>
+                {t('设置')}
+              </DialogTitle>
             </DialogHeader>
             <TabsList className='flex h-auto gap-1 bg-transparent p-0 sm:flex-col sm:items-stretch'>
               {tabs.map(({ id, label, icon: Icon }) => (
@@ -149,7 +151,7 @@ export function StudioSettings() {
             </TabsList>
           </div>
           <TabsContent value='general' className='mt-0 min-h-0 min-w-0 flex-1'>
-            <SettingPage title={t('通用')}>
+            <SettingPage narrow title={t('通用')}>
               <div className='h-full overflow-y-auto'>
                 <SettingGroup>
                   <SettingRow
@@ -231,6 +233,7 @@ export function StudioSettings() {
           </TabsContent>
           <TabsContent value='account' className='mt-0 min-h-0 min-w-0 flex-1'>
             <SettingPage
+              narrow
               title={t('账号')}
               action={
                 <Button
@@ -268,7 +271,7 @@ export function StudioSettings() {
                           </span>
                         }
                       >
-                        <span className='truncate text-sm text-muted-foreground'>
+                        <span className='truncate text-body text-muted-foreground'>
                           {accounts[platform] === 'connected'
                             ? profiles[platform]?.nickname || t('已连接')
                             : t('未登录')}

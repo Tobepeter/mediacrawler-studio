@@ -73,7 +73,7 @@ export function ScrollSentinel(props: {
   return (
     <div
       ref={anchor}
-      className='flex justify-center pt-6 text-sm text-muted-foreground'
+      className='flex justify-center pt-6 text-body text-muted-foreground'
     >
       {children}
     </div>

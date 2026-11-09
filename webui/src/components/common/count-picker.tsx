@@ -83,7 +83,7 @@ export function CountPicker(props: CountPickerProps) {
             }}
           >
             {t('自动')}
-            <span className='text-xs font-normal text-muted-foreground'>
+            <span className='text-caption font-normal text-muted-foreground'>
               {t('滚动时继续加载')}
             </span>
           </Button>
@@ -113,8 +113,8 @@ export function CountPicker(props: CountPickerProps) {
             id={`${id}-range`}
             className={
               valid || !draft
-                ? 'text-xs text-muted-foreground'
-                : 'text-xs text-destructive'
+                ? 'text-caption text-muted-foreground'
+                : 'text-caption text-destructive'
             }
           >
             1–{max}

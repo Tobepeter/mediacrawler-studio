@@ -26,7 +26,7 @@ const platforms = Object.keys(platformNames) as Platform[]
 const steps = Object.keys(featureLabels) as FeatureResult['id'][]
 // 列宽和行高固定，结果陆续进来时表格不动，说明文字统一放在表格下面
 const gridClass =
-  'grid min-w-[30rem] grid-cols-[minmax(7rem,1.5fr)_repeat(6,minmax(3.5rem,1fr))] items-stretch'
+  'grid min-w-[30rem] grid-cols-[minmax(8rem,1.25fr)_repeat(6,minmax(3.5rem,1fr))] items-stretch'
 const legend = [
   ['入口', '平台能否打开、二维码能否取到，不需要登录'],
   ['推荐、主页、搜索', '接口返回的条数和字段是否正常'],
@@ -50,7 +50,7 @@ function Cell(props: {
   return (
     <span
       title={props.title}
-      className='flex h-full items-center justify-center gap-1 text-xs tabular-nums text-muted-foreground'
+      className='flex h-full items-center justify-center gap-1 text-caption tabular-nums text-muted-foreground'
     >
       {props.active ? (
         <Loader2
@@ -93,7 +93,7 @@ function PlatformRow({ platform }: { platform: Platform }) {
       : undefined,
   )
   return (
-    <div className={cn(gridClass, 'min-h-11 flex-1 border-t border-border/60')}>
+    <div className={cn(gridClass, 'h-11 border-t border-border/60')}>
       <span className='flex h-full items-center gap-2 px-4'>
         <PlatformIcon platform={platform} className='size-4 shrink-0' />
         <span className='truncate'>{t(platformNames[platform])}</span>
@@ -141,7 +141,7 @@ function Issues() {
   })
   if (!lines.length) return null
   return (
-    <ul className='space-y-1.5 text-xs text-muted-foreground'>
+    <ul className='space-y-1.5 text-caption text-muted-foreground'>
       {lines.map((line) => (
         <li key={line}>{line}</li>
       ))}
@@ -153,7 +153,7 @@ function Issues() {
 function Legend() {
   const { t } = useTranslation('studio')
   return (
-    <dl className='space-y-2.5 text-xs text-muted-foreground'>
+    <dl className='grid gap-3 text-caption text-muted-foreground sm:grid-cols-2 xl:grid-cols-4'>
       {legend.map(([name, text]) => (
         <div key={name}>
           <dt className='font-medium text-foreground'>{t(name)}</dt>
@@ -172,7 +172,7 @@ function LoginHint() {
     .map((id) => t(platformNames[id]))
   if (!names.length) return null
   return (
-    <p className='mt-auto pt-3 text-xs text-muted-foreground'>
+    <p className='mt-auto pt-3 text-caption text-muted-foreground'>
       {t('{{names}} 未登录，只检查入口；登录后可以查更多项目', {
         names: names.join(t('、')),
       })}
@@ -215,14 +215,14 @@ export function FeatureSettings() {
         </Button>
       }
     >
-      {/* 表格撑满高度；结果在固定的框里自己滚动，内容多少都不影响布局 */}
-      <div className='flex h-full min-h-0 flex-col gap-4 lg:flex-row'>
-        <div className='min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-muted/40'>
-          <div className='flex h-full min-w-[30rem] flex-col'>
+      {/* 表格行高固定在上面，结果占满下方固定区域并自己滚动，内容多少都不影响布局 */}
+      <div className='flex h-full min-h-0 flex-col gap-4'>
+        <div className='shrink-0 overflow-x-auto rounded-xl bg-muted/40'>
+          <div className='min-w-[30rem]'>
             <div
               className={cn(
                 gridClass,
-                'h-9 shrink-0 items-center text-xs text-muted-foreground',
+                'h-9 shrink-0 items-center text-caption text-muted-foreground',
               )}
               aria-hidden='true'
             >
@@ -241,9 +241,9 @@ export function FeatureSettings() {
         </div>
         <aside
           aria-label={t('检查结果')}
-          className='flex h-40 shrink-0 flex-col overflow-y-auto rounded-xl border p-4 lg:h-full lg:w-72'
+          className='flex min-h-24 flex-1 flex-col overflow-y-auto rounded-xl border p-4'
         >
-          <p role='status' className='pb-3 text-sm font-medium tabular-nums'>
+          <p role='status' className='pb-2 font-medium tabular-nums'>
             {status}
           </p>
           {!running && !summary && <Legend />}

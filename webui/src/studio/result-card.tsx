@@ -67,7 +67,7 @@ export function ResultCard(props: {
         <div className='flex min-w-0 items-center gap-2 text-muted-foreground'>
           {creatorPage ? (
             item.likes && (
-              <span className='inline-flex items-center gap-1 text-xs'>
+              <span className='inline-flex items-center gap-1 text-caption'>
                 <Heart className='size-3' aria-hidden='true' />
                 {Number.isFinite(Number(item.likes))
                   ? compact.format(Number(item.likes))
@@ -79,7 +79,7 @@ export function ResultCard(props: {
           )}
           {item.commentStatus && (
             <span
-              className='inline-flex shrink-0 items-center gap-1 text-xs'
+              className='inline-flex shrink-0 items-center gap-1 text-caption'
               aria-label={t('已获取 {{count}} 条评论', {
                 count: item.comments?.length || 0,
               })}

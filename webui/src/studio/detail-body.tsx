@@ -21,14 +21,14 @@ export function DetailBody({ item }: { item: ContentItem }) {
     )
   if (item.feed && !item.text && item.media?.status === 'failed')
     return (
-      <p className='text-sm text-muted-foreground'>
+      <p className='text-body text-muted-foreground'>
         {t('正文暂时没有加载出来，可以查看原文')}
       </p>
     )
   const body = item.markdown ? (
     <MarkdownRenderer content={item.markdown} />
   ) : (
-    <p className='whitespace-pre-wrap break-words text-sm leading-relaxed'>
+    <p className='whitespace-pre-wrap break-words text-body leading-relaxed'>
       {item.text || t('这条作品没有正文')}
     </p>
   )
@@ -67,7 +67,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
       <TabsContent value='comments' className='space-y-4'>
         {status && (
           <p
-            className='flex items-center gap-2 text-sm text-muted-foreground'
+            className='flex items-center gap-2 text-body text-muted-foreground'
             role='status'
           >
             {loading && (
@@ -77,7 +77,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
           </p>
         )}
         {!comments.length && item.commentStatus === 'completed' && (
-          <p className='text-sm text-muted-foreground'>{t('暂无评论')}</p>
+          <p className='text-body text-muted-foreground'>{t('暂无评论')}</p>
         )}
         {roots.map((comment) => (
           <div key={comment.id} className='space-y-3'>
@@ -101,14 +101,14 @@ function CommentRow({ comment }: { comment: ContentComment }) {
 
   return (
     <div className='space-y-1'>
-      <div className='flex items-center justify-between gap-2 text-xs text-muted-foreground'>
+      <div className='flex items-center justify-between gap-2 text-caption text-muted-foreground'>
         <span className='truncate'>{comment.author || t('匿名用户')}</span>
         <span className='inline-flex shrink-0 items-center gap-1'>
           <Heart className='size-3' />
           {comment.likes}
         </span>
       </div>
-      <p className='whitespace-pre-wrap break-words text-sm leading-relaxed'>
+      <p className='whitespace-pre-wrap break-words text-body leading-relaxed'>
         {comment.text}
       </p>
     </div>

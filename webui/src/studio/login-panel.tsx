@@ -64,7 +64,7 @@ function LegacyLoginPanel() {
       className='flex flex-1 flex-col items-center justify-center gap-6 py-12'
       aria-label={t('扫码登录')}
     >
-      <div className='flex items-center gap-2 text-lg font-medium'>
+      <div className='flex items-center gap-2 text-heading font-medium'>
         <PlatformIcon platform={platform} />
         {t(platformNames[platform])}
       </div>
@@ -95,7 +95,7 @@ function LegacyLoginPanel() {
               onRetry={() => void start('connect')}
               retryDisabled={!window.studio || !ready || busy || pending}
             />
-            <div className='flex h-9 items-center text-sm text-muted-foreground'>
+            <div className='flex h-9 items-center text-body text-muted-foreground'>
               {!suspicious &&
                 (checkTimedOut ||
                 views[platform].error === '获取二维码超时，请重试' ||
@@ -109,7 +109,7 @@ function LegacyLoginPanel() {
       </div>
       {suspicious && (
         <div
-          className='flex max-w-sm items-center gap-2 text-sm text-muted-foreground'
+          className='flex max-w-sm items-center gap-2 text-body text-muted-foreground'
           role='status'
         >
           <span>{t('连续获取超时，登录方式可能需要更新')}</span>

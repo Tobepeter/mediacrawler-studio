@@ -22,7 +22,7 @@ export function Help(props: PropsWithChildren<{ label: string }>) {
           <CircleHelp />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='text-sm' aria-label={props.label}>
+      <PopoverContent className='text-body' aria-label={props.label}>
         {props.children}
       </PopoverContent>
     </Popover>

@@ -48,7 +48,7 @@ export function QrFrame({
         )}
       />
       {(loading || confirming || !image) && (
-        <div className='absolute inset-0 flex items-center justify-center bg-card/80 p-6 text-center text-sm text-foreground'>
+        <div className='absolute inset-0 flex items-center justify-center bg-card/80 p-6 text-center text-body text-foreground'>
           {confirming ? (
             <span role='status' className='flex flex-col items-center gap-2'>
               <Check className='size-5' aria-hidden='true' />

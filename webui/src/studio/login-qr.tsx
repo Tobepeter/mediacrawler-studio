@@ -203,7 +203,7 @@ export function LoginQr({
               : '刷新二维码',
         )}
       />
-      <div className='flex h-9 items-center gap-2 text-sm text-muted-foreground'>
+      <div className='flex h-9 items-center gap-2 text-body text-muted-foreground'>
         {!waiting && !image && error && !loginMayBeBroken(platform) && (
           <span>
             {t(

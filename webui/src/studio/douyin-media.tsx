@@ -168,7 +168,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
                   {status === 'loading' ? (
                     <>
                       <Loader2 className='size-6 animate-spin motion-reduce:animate-none' />
-                      <span className='text-sm'>{t('正在加载视频')}</span>
+                      <span className='text-body'>{t('正在加载视频')}</span>
                       <Button
                         variant='ghost'
                         onClick={() => changeMode('video')}
@@ -178,7 +178,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
                     </>
                   ) : (
                     <>
-                      <p className='text-sm text-muted-foreground'>
+                      <p className='text-body text-muted-foreground'>
                         {t(error)}
                       </p>
                       <Button

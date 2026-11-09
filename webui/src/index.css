@@ -53,6 +53,8 @@
   }
 
   body {
+    /* 弹窗渲染在根容器外，默认字号放在这里才能都继承到 */
+    @apply text-body;
     @apply bg-background text-foreground;
   }
 }

@@ -65,7 +65,7 @@ export function TaskStatus() {
   if (downloadPending)
     return (
       <div
-        className='flex h-9 items-center justify-end gap-2 text-xs text-muted-foreground'
+        className='flex h-9 items-center justify-end gap-2 text-caption text-muted-foreground'
         role='status'
       >
         <Loader2 className='size-3 animate-spin motion-reduce:animate-none' />
@@ -85,7 +85,7 @@ export function TaskStatus() {
   if (currentTask?.action === 'connect') return <div className='h-9' />
   return (
     <div
-      className='flex h-9 min-w-0 items-center justify-end gap-2 text-xs text-muted-foreground'
+      className='flex h-9 min-w-0 items-center justify-end gap-2 text-caption text-muted-foreground'
       role={failed ? 'alert' : 'status'}
     >
       {!!results.length && (

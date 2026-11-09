@@ -1,5 +1,12 @@
 import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+// 自定义字号要登记，否则会被当成文字颜色，和 text-muted-foreground 互相覆盖
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: { 'font-size': [{ text: ['heading', 'body', 'caption'] }] },
+  },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

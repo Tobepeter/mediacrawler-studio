@@ -43,7 +43,7 @@ function CreatorRow(props: {
     >
       <CreatorAvatar name={props.name} avatar={props.avatar} />
       <span className='min-w-0 flex-1'>
-        <span className='block truncate text-sm font-medium'>
+        <span className='block truncate text-body font-medium'>
           {props.name}
           {props.handle && (
             <span className='ml-2 font-normal text-muted-foreground'>
@@ -51,7 +51,7 @@ function CreatorRow(props: {
             </span>
           )}
         </span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-caption text-muted-foreground'>
           {props.detail}
         </span>
       </span>
@@ -80,7 +80,7 @@ function LoadMoreSentinel(props: {
   return (
     <div
       ref={ref}
-      className='flex min-h-12 items-center justify-center gap-2 text-xs text-muted-foreground'
+      className='flex min-h-12 items-center justify-center gap-2 text-caption text-muted-foreground'
     >
       {children}
     </div>
@@ -88,7 +88,7 @@ function LoadMoreSentinel(props: {
 }
 
 function Placeholder({ children }: { children: ReactNode }) {
-  return <p className='p-2 text-sm text-muted-foreground'>{children}</p>
+  return <p className='p-2 text-body text-muted-foreground'>{children}</p>
 }
 
 export function CreatorSearch(props: {
@@ -285,7 +285,7 @@ export function CreatorSearch(props: {
             </div>
           )}
           {search.isError && !search.data && (
-            <div role='alert' className='p-2 text-sm'>
+            <div role='alert' className='p-2 text-body'>
               <p className='text-destructive'>
                 {translateMessage(failure(search.error))}
               </p>
@@ -302,7 +302,7 @@ export function CreatorSearch(props: {
             )}
           {!items.length && !firstLoading && !!recent.length && (
             <>
-              <h3 className='px-2 pb-1 pt-2 text-xs text-muted-foreground'>
+              <h3 className='px-2 pb-1 pt-2 text-caption text-muted-foreground'>
                 {t('最近采集')}
               </h3>
               {recent.map(({ id, task, count }) => (

@@ -53,7 +53,7 @@ export default function App() {
   useEffect(connectStudio, [])
   useEffect(() => new LoginController().start(), [])
   return (
-    <div className='flex h-dvh flex-col overflow-hidden text-sm'>
+    <div className='flex h-dvh flex-col overflow-hidden text-body'>
       <header
         className={cn(
           'shrink-0 bg-background',
