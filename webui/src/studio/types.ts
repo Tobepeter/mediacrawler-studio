@@ -78,6 +78,9 @@ export interface ContentItem {
     variants: {
       id: string
       kind: 'video' | 'audio'
+      url?: string
+      backupUrls?: string[]
+      codec?: string | null
       width?: number | null
       height?: number | null
       bitrate?: number | null

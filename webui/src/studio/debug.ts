@@ -1,3 +1,4 @@
+import { markDebugDriven } from './playback'
 import { activeStatuses, useStudio } from './store'
 import type { CollectRequest, CreatorSummary, Platform } from './types'
 
@@ -63,5 +64,11 @@ declare global {
 }
 
 export function installStudioDebug() {
-  window.__STUDIO_DEBUG__ = debug
+  Object.defineProperty(window, '__STUDIO_DEBUG__', {
+    configurable: true,
+    get: () => {
+      markDebugDriven()
+      return debug
+    },
+  })
 }

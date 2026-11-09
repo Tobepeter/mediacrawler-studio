@@ -4,13 +4,31 @@ import { Loader2, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
+import { startMuted, usePlayback } from './playback'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
+import { useDetailMedia } from './use-detail-media'
+
+// 详情已经带回播放地址，自动播放直接用，不为它多发一次平台请求
+const codecRank = (codec?: string | null) =>
+  codec === 'h264' ? 0 : codec === 'h265' ? 2 : 1
+const detailUrls = (item: ContentItem) => [
+  ...new Set(
+    (item.media?.variants || [])
+      .filter((variant) => variant.kind === 'video' && variant.url)
+      .sort((a, b) => codecRank(a.codec) - codecRank(b.codec))
+      .flatMap((variant) => [variant.url!, ...(variant.backupUrls || [])]),
+  ),
+]
 
 // 播放地址只在当前详情内存中保留，切换封面或卸载即停止请求和播放
 export function DouyinMedia({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
   const busy = useStudio((state) => platformBusy(state, item.platform))
+  const detailLoading = useDetailMedia(item).loading
+  const autoplay = useRef(usePlayback.getState().autoplay)
+  const [muted, setMuted] = useState(false)
+  const imagePost = item.contentType === 'note' || item.images.length > 1
   const [mode, setMode] = useState('video')
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'playing' | 'error'
@@ -32,9 +50,25 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
     [],
   )
 
+  useEffect(() => {
+    if (!autoplay.current || imagePost || status !== 'idle') return
+    const direct = detailUrls(item)
+    if (!direct.length) return
+    autoplay.current = false
+    setMuted(startMuted(true))
+    setUrls(direct)
+    setIndex(0)
+    setBuffering(true)
+    setStatus('playing')
+  }, [item, imagePost, status])
+
   const load = async (refresh = false) => {
     const bridge = window.studio
     if (!bridge || request.current) return
+    if (!refresh) {
+      autoplay.current = false
+      setMuted(startMuted(false))
+    }
     if (platformBusy(useStudio.getState(), item.platform)) {
       setError('请先结束当前任务')
       setStatus('error')
@@ -105,6 +139,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
     const id = request.current
     request.current = null
     if (id) void window.studio?.cancelVideo(id).catch(() => {})
+    autoplay.current = false
     setUrls([])
     setStatus('idle')
     setMode(value)
@@ -122,6 +157,7 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
                 className='absolute inset-0 size-full object-contain'
                 controls
                 autoPlay
+                muted={muted}
                 playsInline
                 preload='metadata'
                 controlsList='nodownload'
@@ -148,7 +184,18 @@ export function DouyinMedia({ item }: { item: ContentItem }) {
                   className='absolute inset-0 size-full object-contain'
                 />
               )}
-              {status === 'idle' ? (
+              {status === 'idle' &&
+              autoplay.current &&
+              !imagePost &&
+              detailLoading ? (
+                <div
+                  className='absolute inset-0 flex items-center justify-center'
+                  role='status'
+                  aria-label={t('正在加载视频')}
+                >
+                  <Loader2 className='size-6 animate-spin text-primary motion-reduce:animate-none' />
+                </div>
+              ) : status === 'idle' ? (
                 <Button
                   variant='ghost'
                   className='group absolute inset-0 h-full w-full rounded-none p-0 hover:bg-transparent focus-visible:ring-inset'

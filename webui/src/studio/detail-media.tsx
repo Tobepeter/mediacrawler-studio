@@ -3,10 +3,14 @@ import { useEffect, useState } from 'react'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
 import { cn } from '@/lib/utils'
 import { DouyinMedia } from './douyin-media'
+import { startMuted, usePlayback } from './playback'
 import type { ContentItem } from './types'
 
 // 仅使用 B站官方外链播放器，不解析或缓存临时视频地址
-export function biliPlayer(item: ContentItem) {
+export function biliPlayer(
+  item: ContentItem,
+  { autoplay = true, muted = false } = {},
+) {
   if (item.platform !== 'bili') return null
   try {
     const url = new URL(item.url)
@@ -17,7 +21,11 @@ export function biliPlayer(item: ContentItem) {
       return null
     const match = url.pathname.match(/^\/video\/(BV[a-zA-Z0-9]+|av\d+)(?:\/|$)/)
     if (!match) return null
-    const params = new URLSearchParams({ autoplay: '1', danmaku: '0' })
+    const params = new URLSearchParams({
+      autoplay: autoplay ? '1' : '0',
+      danmaku: '0',
+    })
+    if (muted) params.set('muted', '1')
     params.set(
       match[1].startsWith('BV') ? 'bvid' : 'aid',
       match[1].startsWith('BV') ? match[1] : match[1].slice(2),
@@ -69,7 +77,10 @@ function BiliPlayer({ src, item }: { src: string; item: ContentItem }) {
 }
 
 export function DetailMedia({ item }: { item: ContentItem }) {
-  const [player] = useState(() => biliPlayer(item))
+  const [player] = useState(() => {
+    const { autoplay } = usePlayback.getState()
+    return biliPlayer(item, { autoplay, muted: startMuted(autoplay) })
+  })
   if (item.platform === 'dy') return <DouyinMedia key={item.id} item={item} />
   return (
     <div className='min-w-0 space-y-3'>

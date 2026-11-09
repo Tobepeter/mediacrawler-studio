@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 export function SettingGroup({ children }: { children: ReactNode }) {
   return <Card className='divide-y'>{children}</Card>
@@ -21,6 +23,33 @@ export function SettingRow(props: {
       </div>
       {props.children}
     </div>
+  )
+}
+
+export function SettingCheck(props: {
+  id: string
+  title: ReactNode
+  hint?: ReactNode
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <SettingRow
+      title={
+        <Label htmlFor={props.id} className='cursor-pointer'>
+          {props.title}
+        </Label>
+      }
+      hint={props.hint}
+    >
+      <Checkbox
+        id={props.id}
+        checked={props.checked}
+        disabled={props.disabled}
+        onCheckedChange={(checked) => props.onChange(checked === true)}
+      />
+    </SettingRow>
   )
 }
 

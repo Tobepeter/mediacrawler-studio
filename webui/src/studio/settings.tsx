@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -37,7 +36,13 @@ import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
 import { panelDialogClass } from './panel-dialog'
-import { SettingGroup, SettingPage, SettingRow } from './settings-row'
+import { resetPlayback, setPlayback, usePlayback } from './playback'
+import {
+  SettingCheck,
+  SettingGroup,
+  SettingPage,
+  SettingRow,
+} from './settings-row'
 import { platformNames, useStudio } from './store'
 import type { Platform } from './types'
 
@@ -64,6 +69,11 @@ export function StudioSettings() {
   } = useStudio()
   const [clearing, setClearing] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const playback = usePlayback()
+  const savePlayback = (value: Parameters<typeof setPlayback>[0]) => {
+    if (!setPlayback(value))
+      toast.error(t('设置保存失败，请重试'), { id: 'settings-save' })
+  }
   const blocked = busy || pending || Object.keys(requests).length > 0
   const changeLanguage = async (language: string) => {
     try {
@@ -84,6 +94,7 @@ export function StudioSettings() {
       setTheme('system')
       const downloadSaved = setAskBeforeDownload(false)
       const loginSaved = setLoginMode('qrcode')
+      if (!resetPlayback()) throw new Error('playback')
       if (downloadSaved && loginSaved)
         toast.success(i18n.t('已恢复默认设置', { ns: 'studio' }), {
           id: 'settings-save',
@@ -173,24 +184,28 @@ export function StudioSettings() {
                   <SettingRow title={t('外观')}>
                     <ThemeToggle />
                   </SettingRow>
-                  <SettingRow
-                    title={
-                      <Label
-                        htmlFor='studio-ask-before-download'
-                        className='cursor-pointer'
-                      >
-                        {t('下载前询问')}
-                      </Label>
+                  <SettingCheck
+                    id='studio-ask-before-download'
+                    title={t('下载前询问')}
+                    checked={askBeforeDownload}
+                    onChange={setAskBeforeDownload}
+                  />
+                  <SettingCheck
+                    id='studio-autoplay'
+                    title={t('自动播放视频')}
+                    hint={t('打开详情时直接播放，支持 B 站和抖音')}
+                    checked={playback.autoplay}
+                    onChange={(autoplay) => savePlayback({ autoplay })}
+                  />
+                  <SettingCheck
+                    id='studio-autoplay-muted'
+                    title={t('自动播放时静音')}
+                    checked={playback.autoplayMuted}
+                    disabled={!playback.autoplay}
+                    onChange={(autoplayMuted) =>
+                      savePlayback({ autoplayMuted })
                     }
-                  >
-                    <Checkbox
-                      id='studio-ask-before-download'
-                      checked={askBeforeDownload}
-                      onCheckedChange={(checked) =>
-                        setAskBeforeDownload(checked === true)
-                      }
-                    />
-                  </SettingRow>
+                  />
                   <CliSettings />
                   <SettingRow
                     title={t('运行日志')}
