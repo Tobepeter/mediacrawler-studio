@@ -845,7 +845,7 @@ test('推荐流校验平台和登录，卡片数据只留在内存里', async ()
     operations: new Map(),
     state: { accounts: { bili: 'connected', dy: 'saved' }, pages: {} },
   })
-  await assert.rejects(service.loadFeed('zhihu'), /暂不支持/)
+  await assert.rejects(service.loadFeed('wb'), /暂不支持/)
   await assert.rejects(service.loadFeed('dy'), /登录后/)
 
   const item = (id) => ({ id, platform: 'bili', title: id })
