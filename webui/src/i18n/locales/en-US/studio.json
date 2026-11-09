@@ -383,6 +383,7 @@
   "通用": "General",
   "体检": "Diagnostics",
   "恢复": "Restore",
+  "语言、外观和开关会重置，登录态和采集记录不受影响": "Language, appearance and toggles will be reset. Logins and collected records stay.",
   "开始体检": "Run check",
   "未登录": "Not signed in",
   "推荐": "Feed",
