@@ -53,9 +53,10 @@ export function ResultCard(props: {
               </Badge>
             </div>
           )}
-          <h3 className='font-semibold'>{item.title}</h3>
+          <h3 className='line-clamp-2 font-semibold'>{item.title}</h3>
         </CardHeader>
-        {item.text && (
+        {/* 抖音等平台没有单独的标题，标题就是正文开头，再显示一遍是重复；完整内容在详情里 */}
+        {item.text && !item.text.startsWith(item.title) && (
           <CardContent>
             <p className='line-clamp-3 text-muted-foreground'>{item.text}</p>
           </CardContent>

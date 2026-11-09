@@ -26,7 +26,7 @@ from typing import List
 import config
 from media_platform.xhs.media import extract_video_urls
 from var import source_keyword_var
-from tools.user_hash import anonymize_user_id, mask_nickname
+from tools.user_hash import anonymize_user_id, creator_name, mask_nickname
 
 from ._store_impl import *
 
@@ -81,7 +81,7 @@ async def update_xhs_note(note_item: Dict):
         "time": note_item.get("time"),  # Note publish time
         "last_update_time": note_item.get("last_update_time", 0),  # Note last update time
         "creator_hash": anonymize_user_id(user_info.get("user_id")),  # 创作者匿名哈希(不存原始 user_id)
-        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "nickname": creator_name(user_info.get("nickname")),  # 作品作者昵称
         "liked_count": interact_info.get("liked_count"),  # Like count
         "collected_count": interact_info.get("collected_count"),  # Collection count
         "comment_count": interact_info.get("comment_count"),  # Comment count

@@ -15,6 +15,9 @@ def emit(kind, **data):
 
 
 async def main(request):
+    from tools.user_hash import show_creator_names
+
+    show_creator_names()
     from desktop.media_download import download_record
     task = asyncio.current_task()
     loop = asyncio.get_running_loop()

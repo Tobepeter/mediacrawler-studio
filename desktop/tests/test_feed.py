@@ -134,3 +134,14 @@ def test_feed_errors_keep_their_message(monkeypatch):
     monkeypatch.setattr('desktop.creators.load_feed', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '暂停访问')))
     with pytest.raises(CreatorError, match='暂停访问'):
         asyncio.run(crawler.run())
+
+
+def test_creator_name_is_real_only_when_desktop_enables_it():
+    from tools import user_hash
+    assert user_hash.creator_name('测试作者') == '测***者'
+    user_hash.show_creator_names()
+    try:
+        assert user_hash.creator_name('测试作者') == '测试作者'
+        assert user_hash.mask_nickname('测试作者') == '测***者'
+    finally:
+        user_hash.show_creator_names(False)

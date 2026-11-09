@@ -19,6 +19,22 @@ def anonymize_user_id(user_id) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:16]
 
 
+_show_creator_names = False
+
+
+def show_creator_names(enabled: bool = True) -> None:
+    """桌面端查看时显示作品作者的公开昵称；评论用户始终脱敏，其他运行方式不受影响"""
+    global _show_creator_names
+    _show_creator_names = enabled
+
+
+def creator_name(name) -> str:
+    """作品作者昵称：默认脱敏，桌面端开启后返回原昵称"""
+    if _show_creator_names:
+        return "" if name is None else str(name)
+    return mask_nickname(name)
+
+
 def mask_nickname(name) -> str:
     """昵称中间脱敏：首尾各保留 1 字，中间替换为星号。
     - 长度 <= 1：返回 "*"
