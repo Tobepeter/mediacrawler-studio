@@ -35,4 +35,22 @@ async def test_qr_delivered_before_second_account_check(monkeypatch, tmp_path):
     monkeypatch.setattr('mediacrawler_cli.auth.terminal_qr', lambda _: events.append('qr'))
     await login(crawler, {'qr': 'terminal', 'action': 'login', 'login_timeout': 5}, tmp_path)
     assert events == ['check', 'qr', 'check']
-    assert not (tmp_path / 'login.png').exists()
+    assert not list(tmp_path.glob('*.png'))
+
+
+@pytest.mark.asyncio
+async def test_image_qr_named_by_platform_and_only_prints_path(monkeypatch, tmp_path, capsys):
+    seen = []
+    async def check():
+        # 第二次检查时二维码已经写好，这时文件还在，登录完成后才清理
+        seen.extend(path.name for path in tmp_path.glob('*.png'))
+        return len(seen) > 0
+    locator = SimpleNamespace(is_visible=AsyncMock(return_value=True))
+    crawler = SimpleNamespace(page=object(), platform='bili', check_login=check)
+    monkeypatch.setattr('mediacrawler_cli.auth.challenge', AsyncMock(return_value=False))
+    monkeypatch.setattr('mediacrawler_cli.auth.open_login', AsyncMock(return_value=locator))
+    monkeypatch.setattr('mediacrawler_cli.auth.read_qr_image', AsyncMock(return_value=b'qr'))
+    await login(crawler, {'qr': 'image', 'action': 'login', 'login_timeout': 5}, tmp_path)
+    assert seen == ['bilibili-login.png']
+    assert str(tmp_path / 'bilibili-login.png') in capsys.readouterr().err
+    assert not list(tmp_path.glob('*.png'))

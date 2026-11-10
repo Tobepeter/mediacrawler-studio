@@ -16,7 +16,7 @@ uv run mediacrawler collect --platform bili --url https://www.bilibili.com/video
 
 支持 xhs / bili / dy / zhihu / wb / tieba / ks，数量 1–100。`--comments` 采集评论，`--replies` 配合评论采集回复
 
-- 默认终端二维码；`--qr image` 使用系统图片预览，二维码文件权限 0600，退出清理
+- 默认终端二维码；`--login-mode image` 把二维码存成 `{平台}-login.png`（如 `bilibili-login.png`）并在 stderr 输出路径，不弹窗口，文件权限 0600，退出清理
 - `--login-mode terminal|image|browser` 选择登录方式，默认 terminal；terminal/image 始终无头，失败只报错，不自动打开浏览器
 - browser 仅在缺少登录态时打开临时扫码窗口，登录完成关闭窗口，采集回到无头模式；已有登录态不显示窗口
 - 所有浏览器始终静音，不提供取消静音参数；已移除 `--headed`，`--qr` 保留为登录方式参数的兼容别名

@@ -1,10 +1,12 @@
 import asyncio
 import hashlib
-import subprocess
 import sys
 import time
 
 from desktop.login_flow import open_login, read_qr_image
+
+# 二维码文件名要能看出是哪个平台
+QR_NAMES = {'bili': 'bilibili', 'dy': 'douyin', 'xhs': 'xiaohongshu', 'ks': 'kuaishou', 'wb': 'weibo'}
 
 
 def terminal_qr(image):
@@ -42,7 +44,7 @@ async def login(crawler, request, run_dir):
         locator = None
         print('请在打开的浏览器中完成登录或验证', file=sys.stderr)
     deadline, previous = time.monotonic() + request['login_timeout'], None
-    qr_path = run_dir / 'login.png'
+    qr_path = run_dir / f'{QR_NAMES.get(crawler.platform, crawler.platform)}-login.png'
     try:
         while time.monotonic() < deadline:
             if not browser_mode and locator is not None and await locator.is_visible():
@@ -57,12 +59,8 @@ async def login(crawler, request, run_dir):
                     else:
                         qr_path.write_bytes(data)
                         qr_path.chmod(0o600)
-                        opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
-                        if sys.platform == 'win32':
-                            import os
-                            os.startfile(qr_path)
-                        else:
-                            subprocess.run([opener, str(qr_path)], timeout=10, check=True, stdout=sys.stderr)
+                        # 只给路径，不弹系统预览，二维码刷新时路径会再输出一次
+                        print(f'登录二维码：{qr_path}', file=sys.stderr, flush=True)
                     previous = digest
             if await crawler.check_login():
                 return

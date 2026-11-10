@@ -76,7 +76,7 @@ def test_success_and_output(tmp_path, monkeypatch, capsys):
     assert json.loads((output / 'run.json').read_text())['complete']
     assert not list((tmp_path / 'runs').rglob('request.json'))
     assert not list((tmp_path / 'runs').rglob('heartbeat.json'))
-    assert not list((tmp_path / 'runs').rglob('login.png'))
+    assert not list((tmp_path / 'runs').rglob('*-login.png'))
 
 
 def test_deadline_kills_worker_and_preserves_partial(tmp_path, monkeypatch, capsys):
