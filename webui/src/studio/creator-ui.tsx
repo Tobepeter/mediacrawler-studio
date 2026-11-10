@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -89,22 +89,6 @@ function OpenCreator({ url, className }: { url: string; className?: string }) {
       onClick={() => void window.studio?.openSource(url)}
     >
       <ArrowUpRight />
-    </IconButton>
-  )
-}
-
-export function AuthorBack(props: { fromPage: boolean; disabled?: boolean }) {
-  const { t } = useTranslation('studio')
-  const leaveAuthor = useStudio((state) => state.leaveAuthor)
-  return (
-    <IconButton
-      variant='ghost'
-      className='shrink-0'
-      label={props.fromPage ? t('返回刚才的结果') : t('返回推荐')}
-      disabled={props.disabled}
-      onClick={() => void leaveAuthor()}
-    >
-      <ArrowLeft />
     </IconButton>
   )
 }

@@ -7,7 +7,7 @@ import { CountPicker } from '@/components/common/count-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectOptions } from './collect-options'
 import { CreatorSearch } from './creator-search'
-import { AuthorBack, CreatorField } from './creator-ui'
+import { CreatorField } from './creator-ui'
 import {
   creatorLimit,
   creatorPlatforms,
@@ -109,14 +109,12 @@ export function CollectForm() {
   }
   const clearQuery = () => {
     setCleared(true)
-    updateForm({
-      query: '',
-      mode: 'search',
-      // 点进博主时临时改过条数和自动，清空时还原
-      ...(trip
-        ? { limit: trip.form.limit, auto: trip.form.auto }
-        : { limit: limitFor('search') }),
-    })
+    // 从列表点进博主的，回到刚才的结果和滚动位置
+    if (trip) {
+      void useStudio.getState().leaveAuthor()
+      return
+    }
+    updateForm({ query: '', mode: 'search', limit: limitFor('search') })
     // 清空输入即回到推荐流，博主结果也一起撤掉；结果仍在历史里
     if (page && (feedPlatforms.includes(form.platform) || pageCreator))
       void useStudio.getState().backToFeed()
@@ -216,17 +214,12 @@ export function CollectForm() {
               className='flex min-w-0 flex-wrap items-center justify-end gap-2 sm:h-9 sm:flex-nowrap'
             >
               <div className='flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1'>
-                {trip && (
-                  <AuthorBack
-                    fromPage={!!trip.pageId}
-                    disabled={!!requests[form.platform]}
-                  />
-                )}
                 {creatorMode ? (
                   <CreatorField
                     url={creatorUrl}
                     creator={creator}
-                    disabled={busy || pending || locked}
+                    // 点进来的博主采集中也能退出，退出时会先停下
+                    disabled={(busy && !trip) || pending || locked}
                     onClear={clearQuery}
                     filter={
                       page &&
