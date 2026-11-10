@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Captions, Download, Images, Film, Loader2 } from 'lucide-react'
+import { Captions, Download, Images, Film, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -69,7 +68,6 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const canDownloadVideo =
     video || !['available', 'not_provided'].includes(item.media?.status || '')
   const hasTranscript = useHasTranscript(item)
-  const downloadLabels = [t('下载'), t('取消下载')]
   const menu = useHoverMenu()
   const primary = video
     ? 'video'
@@ -163,16 +161,21 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   return (
     <>
       {downloading ? (
+        // 文案不变，转圈表示进行中，悬停变成取消
         <Button
           variant='outline'
+          className='group w-full'
+          aria-label={t('取消下载')}
+          title={t('取消下载')}
           onClick={() =>
             void window.studio
               ?.cancel(item.platform)
               .catch(() => toast.error(t('停止失败，请重试')))
           }
         >
-          <Loader2 className='animate-spin motion-reduce:animate-none' />
-          <StableLabel labels={downloadLabels} current={t('取消下载')} />
+          <Loader2 className='animate-spin group-hover:hidden motion-reduce:animate-none' />
+          <X className='hidden group-hover:block' />
+          {t('下载')}
         </Button>
       ) : (
         <DropdownMenu
@@ -192,12 +195,13 @@ export function MediaDownload({ item }: { item: ContentItem }) {
           >
             <Button
               variant='outline'
+              className='w-full'
               disabled={!window.studio || busy || !primary}
               onClick={runPrimary}
               {...menu.hover}
             >
               <Download />
-              <StableLabel labels={downloadLabels} current={t('下载')} />
+              {t('下载')}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align='end' {...menu.hover}>

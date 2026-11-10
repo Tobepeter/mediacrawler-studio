@@ -88,7 +88,8 @@ export function useTranscriptTab(item: ContentItem) {
   )
 }
 
-export function TranscriptPanel({ item }: { item: ContentItem }) {
+// 右上角的操作和字幕列表各用一份，进度靠 mutation 状态共享
+function useExtraction(item: ContentItem) {
   const { t } = useTranslation('studio')
   const client = useQueryClient()
   const { platform, id } = item
@@ -166,8 +167,62 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
     ) : (
       t('长视频需要一会儿，可以先看别的')
     ))
-  if (cached.isLoading) return null
   const transcript = cached.data || platformSubtitle(item)
+  const canRegenerate =
+    transcript?.source === 'stt' &&
+    !!status.data &&
+    status.data.state !== 'missing'
+  return {
+    transcript,
+    loading: cached.isLoading,
+    running,
+    start,
+    progressText,
+    canRegenerate,
+  }
+}
+
+// 放在 Tab 行右侧，滚动时一直可见；转写期间旧字幕继续显示，失败也不丢
+export function TranscriptActions({ item }: { item: ContentItem }) {
+  const { t } = useTranslation('studio')
+  const { transcript, running, start, progressText, canRegenerate } =
+    useExtraction(item)
+  if (!transcript) return null
+  return (
+    <span className='flex min-w-0 items-center gap-1'>
+      <span className='min-w-0 truncate px-1 text-caption text-muted-foreground'>
+        {t(transcript.source === 'stt' ? '语音转写' : '平台字幕')}
+        {progressText && <> · {progressText}</>}
+      </span>
+      {canRegenerate && (
+        <IconButton
+          variant='ghost'
+          className='size-7 shrink-0'
+          label={t('重新生成')}
+          disabled={running}
+          onClick={start}
+        >
+          <RefreshCw
+            className={
+              running ? 'animate-spin motion-reduce:animate-none' : undefined
+            }
+          />
+        </IconButton>
+      )}
+      <CopyButton
+        text={transcript.text}
+        label={t('复制字幕')}
+        className='size-7 shrink-0'
+      />
+    </span>
+  )
+}
+
+export function TranscriptPanel({ item }: { item: ContentItem }) {
+  const { t } = useTranslation('studio')
+  const { transcript, loading, running, start, progressText } =
+    useExtraction(item)
+  if (loading) return null
   if (!transcript)
     return (
       <div className='flex flex-col items-center gap-3 py-12'>
@@ -191,59 +246,23 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
       </div>
     )
   return (
-    <div className='space-y-2'>
-      {/* 字幕很长，滚动时来源和复制按钮留在顶部；右边让出弹窗的关闭按钮 */}
-      <div className='sticky top-0 z-10 mr-8 flex items-center justify-between gap-2 bg-background py-1'>
-        <span className='min-w-0 truncate text-caption text-muted-foreground'>
-          {t(transcript.source === 'stt' ? '语音转写' : '平台字幕')}
-          {progressText && <> · {progressText}</>}
-        </span>
-        <span className='flex shrink-0 items-center'>
-          {/* 平台字幕不用生成；转写期间旧字幕继续显示，失败也不丢 */}
-          {transcript.source === 'stt' &&
-            !!status.data &&
-            status.data.state !== 'missing' && (
-              <IconButton
-                variant='ghost'
-                className='size-7'
-                label={t('重新生成')}
-                disabled={running}
-                onClick={start}
-              >
-                <RefreshCw
-                  className={
-                    running
-                      ? 'animate-spin motion-reduce:animate-none'
-                      : undefined
-                  }
-                />
-              </IconButton>
-            )}
-          <CopyButton
-            text={transcript.text}
-            label={t('复制字幕')}
-            className='size-7'
-          />
-        </span>
-      </div>
-      <div className='space-y-2 text-body'>
-        {transcript.segments.length ? (
-          transcript.segments.map((row, index) => (
-            <p key={index} className='flex gap-3 leading-relaxed'>
-              <span className='shrink-0 text-caption tabular-nums leading-relaxed text-muted-foreground'>
-                {clock(row.start)}
-              </span>
-              <span className='min-w-0 whitespace-pre-wrap break-words'>
-                {row.text}
-              </span>
-            </p>
-          ))
-        ) : (
-          <p className='whitespace-pre-wrap break-words leading-relaxed'>
-            {transcript.text}
+    <div className='space-y-2 text-body'>
+      {transcript.segments.length ? (
+        transcript.segments.map((row, index) => (
+          <p key={index} className='flex gap-3 leading-relaxed'>
+            <span className='shrink-0 text-caption tabular-nums leading-relaxed text-muted-foreground'>
+              {clock(row.start)}
+            </span>
+            <span className='min-w-0 whitespace-pre-wrap break-words'>
+              {row.text}
+            </span>
           </p>
-        )}
-      </div>
+        ))
+      ) : (
+        <p className='whitespace-pre-wrap break-words leading-relaxed'>
+          {transcript.text}
+        </p>
+      )}
     </div>
   )
 }

@@ -1,18 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import { useRef } from 'react'
 import { t } from '@/i18n/studio'
-import { Copy, ExternalLink, Heart } from 'lucide-react'
+import { ExternalLink, Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/common/icon-button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -35,6 +33,13 @@ export function openSource(item: ContentItem) {
     .catch(() => toast.error(t('无法打开来源链接')))
 }
 
+// 抖音这类没有独立标题，标题就是正文开头，再显示一遍是重复的
+function repeatsBody(item: ContentItem) {
+  const clean = (value: string) => value.replace(/\s+/g, '')
+  const title = clean(item.title).replace(/…$/, '')
+  return !!title && clean(item.text).startsWith(title)
+}
+
 export function ContentDetail() {
   const { t } = useTranslation('studio')
   const title = useRef<HTMLHeadingElement>(null)
@@ -48,17 +53,6 @@ export function ContentDetail() {
     (selected.images.length > 0 ||
       hasNativeVideo(selected) ||
       !!biliPlayer(selected))
-  const copy = async () => {
-    if (!selected) return
-    try {
-      await navigator.clipboard.writeText(
-        `${selected.title}\n\n${selected.text}\n\n${selected.url}`,
-      )
-      toast.success(t('已复制内容和来源'))
-    } catch {
-      toast.error(t('复制失败，请重试'))
-    }
-  }
   return (
     <Dialog
       open={!!selected}
@@ -117,48 +111,52 @@ export function ContentDetail() {
                         '[&>[data-radix-scroll-area-viewport]]:max-h-[calc(90dvh-8rem)]',
                     )}
                   >
-                    <div className='space-y-6 p-6'>
-                      <DialogHeader className='pr-8 text-left'>
-                        <div>
-                          <Badge variant='secondary' className='gap-1'>
-                            <PlatformIcon
-                              platform={selected.platform}
-                              className='size-3'
-                            />
-                            {t(platformNames[selected.platform])}
-                          </Badge>
-                        </div>
+                    <div className='space-y-3 p-6 pb-4'>
+                      <DialogHeader className='space-y-2 pr-8 text-left'>
+                        {/* 平台、作者、点赞放一行，标题只有和正文不重复时才显示 */}
+                        <DialogDescription asChild>
+                          <div className='flex min-w-0 items-center gap-2'>
+                            <Badge
+                              variant='secondary'
+                              className='shrink-0 gap-1'
+                            >
+                              <PlatformIcon
+                                platform={selected.platform}
+                                className='size-3'
+                              />
+                              {t(platformNames[selected.platform])}
+                            </Badge>
+                            <span className='flex min-w-0 flex-1'>
+                              <AuthorName item={selected} />
+                            </span>
+                            <span className='inline-flex shrink-0 items-center gap-1 tabular-nums'>
+                              <Heart className='size-4' />
+                              {selected.likes}
+                            </span>
+                          </div>
+                        </DialogDescription>
                         <DialogTitle
                           ref={title}
                           tabIndex={-1}
-                          className='break-words leading-snug outline-none'
+                          className={cn(
+                            'break-words leading-snug outline-none',
+                            repeatsBody(selected) && 'sr-only',
+                          )}
                         >
                           {selected.title}
                         </DialogTitle>
-                        <DialogDescription className='flex items-center justify-between gap-2'>
-                          <AuthorName item={selected} />
-                          <span className='inline-flex shrink-0 items-center gap-1'>
-                            <Heart className='size-4' />
-                            {selected.likes}
-                          </span>
-                        </DialogDescription>
                       </DialogHeader>
                       <DetailBody key={selected.id} item={selected} />
                     </div>
                   </ScrollArea>
-                  <DialogFooter className='shrink-0 flex-row flex-wrap justify-end gap-2 bg-background p-4 sm:space-x-0'>
+                  {/* 两个按钮等宽，下载状态变化时布局不动 */}
+                  <div className='grid shrink-0 grid-cols-2 gap-2 border-t bg-background p-4'>
                     <MediaDownload key={selected.id} item={selected} />
-                    <IconButton
-                      label={t('复制内容')}
-                      onClick={() => void copy()}
-                    >
-                      <Copy />
-                    </IconButton>
                     <Button onClick={() => openSource(selected)}>
                       {t('查看原文')}
                       <ExternalLink />
                     </Button>
-                  </DialogFooter>
+                  </div>
                 </div>
               </div>
             </div>

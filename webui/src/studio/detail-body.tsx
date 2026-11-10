@@ -1,19 +1,26 @@
 import { Skeleton } from '@/components/ui/skeleton'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Heart, Loader2 } from 'lucide-react'
+import { CopyButton } from '@/components/common/copy-button'
 import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RetryNotice } from './retry-notice'
-import { TranscriptPanel, useTranscriptTab } from './transcript'
+import {
+  TranscriptActions,
+  TranscriptPanel,
+  useTranscriptTab,
+} from './transcript'
 import type { ContentComment, ContentItem } from './types'
 import { useDetailMedia } from './use-detail-media'
 
-// 只有正文时不显示 Tab；旧记录不显示评论页，新任务明确区分等待、空结果、失败和取消
+// 只有正文时不显示 Tab，复制按钮仍在同一行；旧记录不显示评论页，新任务明确区分等待、空结果、失败和取消
 export function DetailBody({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
 
   const detail = useDetailMedia(item)
   const hasTranscript = useTranscriptTab(item)
+  const [tab, setTab] = useState('body')
   // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
   if (item.feed && !item.text && !detail.loading) {
     const error =
@@ -51,39 +58,51 @@ export function DetailBody({ item }: { item: ContentItem }) {
       )}
     </div>
   )
-  if (!item.commentStatus && !hasTranscript)
-    return (
-      <>
-        {body}
-        {completing}
-      </>
-    )
   const comments = item.comments || []
+  const bodyText = item.markdown || item.text
+  const multiple = hasTranscript || !!item.commentStatus
   return (
-    <Tabs defaultValue='body' className='space-y-4'>
-      <TabsList aria-label={t('作品内容')}>
-        <TabsTrigger value='body'>{t('正文')}</TabsTrigger>
-        {hasTranscript && (
-          <TabsTrigger value='transcript'>{t('字幕')}</TabsTrigger>
+    <Tabs value={tab} onValueChange={setTab} className='space-y-3'>
+      {/* 复制等操作跟内容放一起，滚动时留在顶部；右边让出弹窗的关闭按钮 */}
+      <div className='sticky top-0 z-10 mr-8 flex min-h-11 items-center justify-between gap-2 bg-background py-1'>
+        {multiple ? (
+          <TabsList className='shrink-0' aria-label={t('作品内容')}>
+            <TabsTrigger value='body'>{t('正文')}</TabsTrigger>
+            {hasTranscript && (
+              <TabsTrigger value='transcript'>{t('字幕')}</TabsTrigger>
+            )}
+            {item.commentStatus && (
+              <TabsTrigger value='comments'>
+                {t('评论')}
+                {comments.length ? ` ${comments.length}` : ''}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        ) : (
+          <span className='text-caption text-muted-foreground'>
+            {t('正文')}
+          </span>
         )}
-        {item.commentStatus && (
-          <TabsTrigger value='comments'>
-            {t('评论')}
-            {comments.length ? ` ${comments.length}` : ''}
-          </TabsTrigger>
+        {tab === 'body' && !!bodyText && (
+          <CopyButton
+            text={bodyText}
+            label={t('复制正文')}
+            className='size-7 shrink-0'
+          />
         )}
-      </TabsList>
-      <TabsContent value='body'>
+        {tab === 'transcript' && <TranscriptActions item={item} />}
+      </div>
+      <TabsContent value='body' className='mt-0'>
         {body}
         {completing}
       </TabsContent>
       {hasTranscript && (
-        <TabsContent value='transcript'>
+        <TabsContent value='transcript' className='mt-0'>
           <TranscriptPanel item={item} />
         </TabsContent>
       )}
       {item.commentStatus && (
-        <TabsContent value='comments' className='space-y-4'>
+        <TabsContent value='comments' className='mt-0 space-y-4'>
           <Comments status={item.commentStatus} comments={comments} />
         </TabsContent>
       )}
