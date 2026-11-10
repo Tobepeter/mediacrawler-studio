@@ -1,6 +1,6 @@
 import {
-  useIsMutating,
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
@@ -9,12 +9,19 @@ import { Captions, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/common/copy-button'
+import { EstimateCountdown } from './estimate-countdown'
 import { SettingRow } from './settings-row'
 import { useStudio } from './store'
+import { recordTranscribe, transcribeEstimate } from './transcribe-estimate'
 import { updateFeedItem } from './use-feed'
 import type { ContentItem, ContentTranscript } from './types'
 
 const statusKey = ['studio', 'stt-status']
+
+interface Extraction {
+  cold: boolean
+  estimate?: number
+}
 
 // 打开应用查一次，之后只在设置里手动检查，或提取时发现不可用才重查
 function useSttStatus() {
@@ -68,11 +75,26 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
   const client = useQueryClient()
   const { platform, id } = item
   const mutationKey = ['studio', 'transcribe', platform, id]
-  // 切 Tab 或关掉详情再打开时，进行中的提取还要显示出来
-  const running = useIsMutating({ mutationKey }) > 0
+  const status = useSttStatus()
+  // 切 Tab 或关掉详情再打开时，进行中的提取和倒计时还要显示出来
+  const [progress] = useMutationState({
+    filters: { mutationKey, status: 'pending' },
+    select: (mutation) => ({
+      startedAt: mutation.state.submittedAt,
+      estimate: (mutation.state.variables as Extraction | undefined)?.estimate,
+    }),
+  })
+  const running = !!progress
   const extract = useMutation({
     mutationKey,
-    mutationFn: () => window.studio!.transcribe!(platform, id),
+    mutationFn: async ({ cold }: Extraction) => {
+      const startedAt = Date.now()
+      const result = await window.studio!.transcribe!(platform, id)
+      // 只有真正转写过的才算速度，平台字幕是直接返回的
+      if (result.transcript?.source === 'stt')
+        recordTranscribe(item.durationSeconds, Date.now() - startedAt, cold)
+      return result
+    },
     onSuccess: (result) => {
       if (result.transcript) {
         const next = { ...item, transcript: result.transcript }
@@ -124,7 +146,12 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
           disabled={running}
           aria-busy={running}
           onClick={() => {
-            if (!running) extract.mutate()
+            if (running) return
+            const cold = status.data?.state === 'installed'
+            extract.mutate({
+              cold,
+              estimate: transcribeEstimate(item.durationSeconds, cold),
+            })
           }}
         >
           {running ? (
@@ -135,8 +162,16 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
           {t('提取字幕')}
         </Button>
         {/* 占位固定，状态变化时按钮不上下移动 */}
-        <p className='h-4 text-caption text-muted-foreground' role='status'>
-          {running && t('长视频需要一会儿，可以先看别的')}
+        <p className='h-4 text-caption text-muted-foreground'>
+          {progress &&
+            (progress.estimate ? (
+              <EstimateCountdown
+                estimateAt={progress.startedAt + progress.estimate}
+                overdue={t('任务有点长，请耐心等待')}
+              />
+            ) : (
+              t('长视频需要一会儿，可以先看别的')
+            ))}
         </p>
       </div>
     )

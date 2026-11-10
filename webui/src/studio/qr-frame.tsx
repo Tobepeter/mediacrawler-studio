@@ -4,7 +4,7 @@ import { Check, Loader2, RefreshCw } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
 import placeholder from '@/assets/qr-placeholder.svg'
 import { cn } from '@/lib/utils'
-import { LoginCountdown } from './login-countdown'
+import { EstimateCountdown } from './estimate-countdown'
 
 // 占位与真码共用尺寸，模糊遮罩明确表示当前不可扫码
 export function QrFrame({
@@ -66,7 +66,7 @@ export function QrFrame({
               >
                 {loadingLabel || t('加载中')}
               </span>
-              {estimateAt && <LoginCountdown estimateAt={estimateAt} />}
+              {estimateAt && <EstimateCountdown estimateAt={estimateAt} />}
             </span>
           ) : onRetry ? (
             <IconButton

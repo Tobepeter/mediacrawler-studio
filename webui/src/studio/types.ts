@@ -101,6 +101,7 @@ export interface ContentItem {
       hasAudio?: boolean | null
     }[]
   }
+  durationSeconds?: number | null
   transcript?: ContentTranscript
   subtitles?: {
     status: string
