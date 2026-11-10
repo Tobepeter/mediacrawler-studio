@@ -1,4 +1,14 @@
 """桌面与 CLI 共用媒体候选选择"""
+def without_silent_duplicates(variants):
+    """抖音长视频同一档位有两份，码率低的只有画面没有声音，接口字段区分不出来（2026-11-10 逐个探测 25 个地址全部吻合）"""
+    videos = [v for v in variants if v.get('kind') == 'video' and v.get('label')]
+    count, top = {}, {}
+    for v in videos:
+        count[v['label']] = count.get(v['label'], 0) + 1
+        top[v['label']] = max(top.get(v['label'], 0), v.get('bitrate') or 0)
+    return [v for v in variants if not (v in videos and count[v['label']] > 1 and (v.get('bitrate') or 0) < top[v['label']])]
+
+
 def selection(candidates, quality):
     videos = [v for v in candidates if v['kind'] == 'video']
     ranked = [v for v in videos if v.get('height')]

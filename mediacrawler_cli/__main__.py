@@ -177,6 +177,91 @@ def search_command(query: Optional[str] = typer.Option(None, help='关键词；�
     invoke('collect', mode='search', paged=True, **options)
 
 
+def load_records(input, platform):
+    """读取采集结果 JSON/JSONL，校验后返回记录和平台"""
+    try:
+        if input == '-':
+            text = sys.stdin.read(20 * 1024 * 1024 + 1)
+        else:
+            with Path(input).open() as stream:
+                text = stream.read(20 * 1024 * 1024 + 1)
+        if len(text) > 20 * 1024 * 1024:
+            raise ValueError('输入超过 20 MB')
+        try:
+            records = json.loads(text)
+        except json.JSONDecodeError:
+            records = [json.loads(line) for line in text.splitlines() if line.strip()]
+        records = records if isinstance(records, list) else [records]
+        if not 1 <= len(records) <= 100 or any(not isinstance(r, dict) or not isinstance(r.get('id'), str) for r in records):
+            raise ValueError('需要 1–100 条带 id/platform 的采集结果')
+        platforms = {r.get('platform') for r in records}
+        if len(platforms) != 1 or next(iter(platforms)) not in PLATFORMS:
+            raise ValueError('输入必须属于同一受支持平台')
+        detected = next(iter(platforms))
+        if platform and platform != detected:
+            raise ValueError('指定平台与输入不一致')
+        platform = detected
+        from media_downloader.selection import validate_record
+        for record in records:
+            validate_record(record)
+    except (OSError, ValueError, TypeError) as error:
+        raise typer.BadParameter(str(error)) from None
+    return records, platform
+
+
+@app.command('transcribe')
+def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='本地音视频文件'),
+                       source: Optional[str] = typer.Option(None, help='作品页面链接，下载最低画质后转写'),
+                       input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin'),
+                       check_only: bool = typer.Option(False, '--check', help='只检查 stt 服务是否可用'),
+                       platform: Optional[str] = None, profile: str = 'default', data_dir: Optional[str] = None,
+                       non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码、image 图片、browser 浏览器'),
+                       timeout: int = typer.Option(1800, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
+    """把视频转成带时间戳的文字，有平台字幕时直接用字幕
+
+    需要本机运行 stt 语音转写服务（127.0.0.1:29556），本工具不安装 stt
+
+    transcribe --check
+
+    transcribe --file ./video.mp4
+
+    transcribe --source '作品链接'
+    """
+    import asyncio
+    import tempfile
+    from desktop.links import allowed
+    from desktop.transcribe import SttError, check, transcribe_file
+    if check_only:
+        state = asyncio.run(check())
+        typer.echo(json.dumps(state, ensure_ascii=False))
+        raise typer.Exit(0 if state['state'] != 'missing' else 1)
+    if sum(bool(v) for v in (file, source, input)) != 1:
+        raise typer.BadParameter('--file、--source、--input 必须且只能选一个')
+    if file:
+        if not Path(file).is_file():
+            raise typer.BadParameter('文件不存在')
+        try:
+            typer.echo(json.dumps(asyncio.run(transcribe_file(file)), ensure_ascii=False))
+        except SttError as error:
+            typer.echo(json.dumps({'code': error.code, 'message': str(error), 'retryable': error.code == 'stt_busy',
+                                   **({'retry_after': error.retry_after} if error.retry_after else {})}, ensure_ascii=False), err=True)
+            raise typer.Exit(1)
+        return
+    records = None
+    if source:
+        platform = platform or next((p for p in PLATFORMS if allowed(source, p)), None)
+        if not platform or platform not in PLATFORMS or not allowed(source, platform):
+            raise typer.BadParameter('无法识别作品平台，请检查 HTTPS 作品链接')
+    else:
+        records, platform = load_records(input, platform)
+    # 下载管线要求一个输出目录，转写用自己的临时目录，这里用完即删
+    with tempfile.TemporaryDirectory(prefix='mediacrawler-stt-run-') as folder:
+        invoke('download', platform, profile, data_dir, query=source or '', mode='link', limit=1,
+               records=records, kind='video', quality='worst', variant_id=None, transcribe=True,
+               output_dir=folder, save=True, non_interactive=non_interactive, qr=qr,
+               timeout=timeout, verbose=verbose, format='json', max_wait=max_wait, no_throttle=no_throttle)
+
+
 @app.command('download')
 def download_command(source: Optional[str] = typer.Option(None, help='作品页面链接，识别平台后获取媒体'),
                      input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin；同平台最多 100 条'),
@@ -218,33 +303,7 @@ def download_command(source: Optional[str] = typer.Option(None, help='作品页�
         if not platform or platform not in PLATFORMS or not allowed(source, platform):
             raise typer.BadParameter('无法识别作品平台，请检查 HTTPS 作品链接')
     elif input:
-        try:
-            if input == '-':
-                text = sys.stdin.read(20 * 1024 * 1024 + 1)
-            else:
-                with Path(input).open() as stream:
-                    text = stream.read(20 * 1024 * 1024 + 1)
-            if len(text) > 20 * 1024 * 1024:
-                raise ValueError('输入超过 20 MB')
-            try:
-                records = json.loads(text)
-            except json.JSONDecodeError:
-                records = [json.loads(line) for line in text.splitlines() if line.strip()]
-            records = records if isinstance(records, list) else [records]
-            if not 1 <= len(records) <= 100 or any(not isinstance(r, dict) or not isinstance(r.get('id'), str) for r in records):
-                raise ValueError('需要 1–100 条带 id/platform 的采集结果')
-            platforms = {r.get('platform') for r in records}
-            if len(platforms) != 1 or next(iter(platforms)) not in PLATFORMS:
-                raise ValueError('输入必须属于同一受支持平台')
-            detected = next(iter(platforms))
-            if platform and platform != detected:
-                raise ValueError('指定平台与输入不一致')
-            platform = detected
-            from media_downloader.selection import validate_record
-            for record in records:
-                validate_record(record)
-        except (OSError, ValueError, TypeError) as error:
-            raise typer.BadParameter(str(error)) from None
+        records, platform = load_records(input, platform)
     else:
         from urllib.parse import urlparse
         if any(urlparse(u).scheme != 'https' for u in (media_url, audio_url) if u):

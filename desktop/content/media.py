@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from desktop.links import media_referer
-from media_downloader.selection import selection
+from media_downloader.selection import selection, without_silent_duplicates
 
 
 from desktop.content.schema import number, initialize, group, CAPABILITIES
@@ -61,6 +61,7 @@ def variants(platform, raw):
         for key in ('play_addr_h264', 'play_addr_265', 'play_addr_256', 'play_addr'):
             address = video.get(key) or {}
             add(address.get('url_list'), address, label=key, codec='h264' if key == 'play_addr_h264' else None, audio=True)
+        result[:] = without_silent_duplicates(result)
     elif platform == 'xhs':
         video = raw.get('video') or {}
         for name, streams in ((video.get('media') or {}).get('stream') or {}).items():

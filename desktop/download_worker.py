@@ -41,6 +41,9 @@ async def main(request):
                     if request['kind'] == 'detail':
                         from desktop.content.detail import load_detail
                         return await load_detail(request['record'], page, request.get('background', False), emit)
+                    if request['kind'] == 'transcribe':
+                        from desktop.transcribe import transcribe_result
+                        return await transcribe_result(request, emit, page)
                     if request['kind'] == 'playback':
                         from desktop.media_resolver import resolve_playback
                         return await resolve_playback(request['record'], page, emit)

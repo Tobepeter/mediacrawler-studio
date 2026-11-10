@@ -55,6 +55,20 @@ export interface FeedPage {
   cancelled?: boolean
 }
 
+export interface ContentTranscript {
+  source: 'stt' | 'subtitle'
+  model?: string
+  language?: string
+  text: string
+  segments: { start: number; end: number; text: string }[]
+  createdAt: string
+}
+
+export interface SttStatus {
+  state: 'ready' | 'installed' | 'missing'
+  busy: boolean
+}
+
 export interface ContentItem {
   id: string
   platform: Platform
@@ -85,6 +99,14 @@ export interface ContentItem {
       height?: number | null
       bitrate?: number | null
       hasAudio?: boolean | null
+    }[]
+  }
+  transcript?: ContentTranscript
+  subtitles?: {
+    status: string
+    items: {
+      language?: string
+      segments?: ContentTranscript['segments']
     }[]
   }
   comments?: ContentComment[]
@@ -256,6 +278,16 @@ export interface StudioBridge {
     requestId: string,
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
+  sttStatus?(): Promise<SttStatus>
+  transcribe?(
+    platform: Platform,
+    id: string,
+  ): Promise<{
+    code: string
+    transcript?: ContentTranscript
+    retryAfter?: number
+    message?: string
+  }>
   loadDetail?(
     platform: Platform,
     id: string,

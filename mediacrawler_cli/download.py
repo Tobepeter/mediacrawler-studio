@@ -4,7 +4,21 @@ from pathlib import Path
 from desktop.media_download import download_record
 
 
+async def transcribe_records(records, emit, runner=None):
+    from desktop.transcribe import transcribe_result
+    results = []
+    for record in records:
+        result = {**await transcribe_result({'record': record, 'runner': runner}, emit, runner.page if runner else None), 'id': record['id']}
+        results.append(result)
+        emit('item', item=result)
+        if result['code']:
+            emit('warning', code=result['code'])
+    return results
+
+
 async def download_records(request, records, emit, runner=None):
+    if request.get('transcribe'):
+        return await transcribe_records(records, emit, runner)
     results = []
     for index, record in enumerate(records, 1):
         try:

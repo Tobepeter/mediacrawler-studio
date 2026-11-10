@@ -176,6 +176,8 @@ app
     handle('cancel-feed', (platform) => service.cancelFeed(platform))
     handle('focus-feed', (platform) => service.focusFeed(platform))
     handle('keep-feed-fresh', (platform) => service.keepFeedFresh(platform))
+    handle('stt-status', () => service.sttStatus())
+    handle('transcribe', (platform, id) => service.transcribe(platform, id))
     handle('load-detail', (platform, id, options) =>
       service.loadDetail(platform, id, options),
     )

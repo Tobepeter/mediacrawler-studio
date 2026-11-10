@@ -9,6 +9,7 @@ import { DownloadJob } from './download-job.mjs'
 import { FeedScheduler } from './feed-scheduler.mjs'
 import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
+import { homedir } from 'node:os'
 import {
   creatorLimit,
   creatorSearchPlatforms,
@@ -41,6 +42,7 @@ function creatorInfo(value, platform) {
 const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
 const feedWaitLimit = 12
+const sttUrl = 'http://127.0.0.1:29556'
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -55,6 +57,7 @@ export class StudioService {
 
   details = new Map()
   feedItems = new Map()
+  transcripts = new Map()
   persistence = Promise.resolve()
   state = {
     policy: healthPolicy,
@@ -327,6 +330,60 @@ export class StudioService {
     } finally {
       if (this.details.get(platform) === job) this.details.delete(platform)
     }
+  }
+
+  // 只依赖 stt 的本机 HTTP 服务；后台空闲会退出，有命令就算能用，提取时再叫醒
+  async sttStatus() {
+    try {
+      const response = await fetch(`${sttUrl}/v1/status`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      const data = await response.json()
+      if (data?.service === 'stt') return { state: 'ready', busy: !!data.busy }
+    } catch {
+      /* 连不上按未运行处理 */
+    }
+    return {
+      state: existsSync(path.join(homedir(), '.local/bin/stt'))
+        ? 'installed'
+        : 'missing',
+      busy: false,
+    }
+  }
+
+  // 只读，不占平台互斥；同一条重复点击共用同一次提取
+  transcribe(platform, id) {
+    if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    const key = `${platform}:${id}`
+    const running = this.transcripts.get(key)
+    if (running) return running.result
+    const job = this.mediaJob(platform)
+    const result = this.runTranscribe(job, platform, id).finally(() =>
+      this.transcripts.delete(key),
+    )
+    this.transcripts.set(key, { job, result })
+    return result
+  }
+
+  async runTranscribe(job, platform, id) {
+    if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
+    const page = this.state.pages[platform]
+    const record = this.findItem(platform, id)
+    if (!record) return { code: 'unavailable' }
+    if (!existsSync(this.python)) return { code: 'environment' }
+    const result = await job.run({ record, kind: 'transcribe' })
+    if (!result.transcript)
+      return {
+        code: result.code || 'failed',
+        retryAfter: result.retryAfter,
+        message: result.message,
+      }
+    const item = { id, platform, transcript: result.transcript }
+    if (this.feedItems.get(platform)?.get(id) === record)
+      this.feedItems.get(platform).set(id, { ...record, ...item })
+    else this.applyDetail(platform, page?.id, item)
+    return { code: '', transcript: result.transcript }
   }
 
   async cancelDetail(platform, id) {
@@ -931,7 +988,12 @@ export class StudioService {
   }
 
   async stopAll() {
-    await Promise.all([...this.details.values()].map((job) => job.cancel()))
+    await Promise.all(
+      [
+        ...this.details.values(),
+        ...[...this.transcripts.values()].map(({ job }) => job),
+      ].map((job) => job.cancel()),
+    )
     this.feed.close()
     await Promise.all(
       [...this.operations.keys()].map((platform) => this.cancel(platform)),

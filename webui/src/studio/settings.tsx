@@ -37,6 +37,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ThemeToggle } from './theme-toggle'
+import { SttSettings } from './transcript'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
@@ -215,6 +216,7 @@ export function StudioSettings() {
                     }
                   />
                   <CliSettings />
+                  <SttSettings />
                   <SettingRow
                     title={t('运行日志')}
                     hint={t('反馈问题时可以附上')}
