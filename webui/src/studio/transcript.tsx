@@ -52,14 +52,23 @@ function clock(seconds: number) {
     : `${pad(minutes)}:${pad(total % 60)}`
 }
 
-// 平台字幕直接显示；没有时才提供提取入口，stt 不可用就整块隐藏
-export function DetailTranscript({ item }: { item: ContentItem }) {
+// 有字幕或能提取时才有这个 Tab；stt 不可用且没有现成字幕时不显示入口
+export function useTranscriptTab(item: ContentItem) {
+  const status = useSttStatus()
+  if (item.contentType !== 'video') return false
+  return (
+    !!item.transcript ||
+    !!platformSubtitle(item) ||
+    (!!status.data && status.data.state !== 'missing')
+  )
+}
+
+export function TranscriptPanel({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
   const client = useQueryClient()
   const { platform, id } = item
   const mutationKey = ['studio', 'transcribe', platform, id]
-  const status = useSttStatus()
-  // 关掉详情再打开时，进行中的提取还要显示出来
+  // 切 Tab 或关掉详情再打开时，进行中的提取还要显示出来
   const running = useIsMutating({ mutationKey }) > 0
   const extract = useMutation({
     mutationKey,
@@ -104,61 +113,65 @@ export function DetailTranscript({ item }: { item: ContentItem }) {
       toast.error(t('字幕提取失败，请重试'), { id: 'transcribe' })
     },
   })
-  if (item.contentType !== 'video') return null
   const transcript = item.transcript || platformSubtitle(item)
-  if (transcript)
+  if (!transcript)
     return (
-      <section className='space-y-2' aria-label={t('字幕')}>
-        <div className='flex items-center justify-between gap-2'>
-          <h3 className='font-medium'>
-            {t('字幕')}
-            <span className='ml-2 text-caption font-normal text-muted-foreground'>
-              {t(transcript.source === 'stt' ? '语音转写' : '平台字幕')}
-            </span>
-          </h3>
-          <CopyButton
-            text={transcript.text}
-            label={t('复制字幕')}
-            className='size-7'
-          />
-        </div>
-        {/* 长视频的字幕在这里滚动，不把详情撑得很长 */}
-        <div className='max-h-72 space-y-1 overflow-y-auto rounded-md bg-muted/40 p-3 text-body'>
-          {transcript.segments.length ? (
-            transcript.segments.map((row, index) => (
-              <p key={index} className='flex gap-3 leading-relaxed'>
-                <span className='shrink-0 text-caption tabular-nums leading-relaxed text-muted-foreground'>
-                  {clock(row.start)}
-                </span>
-                <span className='min-w-0 whitespace-pre-wrap break-words'>
-                  {row.text}
-                </span>
-              </p>
-            ))
+      <div className='flex flex-col items-center gap-3 py-12'>
+        {/* 文案不变、宽度固定，提取中只换图标，按钮不跳动 */}
+        <Button
+          variant='outline'
+          className='w-32'
+          disabled={running}
+          aria-busy={running}
+          onClick={() => {
+            if (!running) extract.mutate()
+          }}
+        >
+          {running ? (
+            <Loader2 className='animate-spin motion-reduce:animate-none' />
           ) : (
-            <p className='whitespace-pre-wrap break-words leading-relaxed'>
-              {transcript.text}
-            </p>
+            <Captions />
           )}
-        </div>
-      </section>
+          {t('提取字幕')}
+        </Button>
+        {/* 占位固定，状态变化时按钮不上下移动 */}
+        <p className='h-4 text-caption text-muted-foreground' role='status'>
+          {running && t('长视频需要一会儿，可以先看别的')}
+        </p>
+      </div>
     )
-  if (!status.data || status.data.state === 'missing') return null
   return (
-    <Button
-      variant='outline'
-      disabled={running}
-      onClick={() => {
-        if (!running) extract.mutate()
-      }}
-    >
-      {running ? (
-        <Loader2 className='animate-spin motion-reduce:animate-none' />
-      ) : (
-        <Captions />
-      )}
-      {t(running ? '正在提取字幕' : '提取字幕')}
-    </Button>
+    <div className='space-y-2'>
+      {/* 字幕很长，滚动时来源和复制按钮留在顶部；右边让出弹窗的关闭按钮 */}
+      <div className='sticky top-0 z-10 mr-8 flex items-center justify-between gap-2 bg-background py-1'>
+        <span className='text-caption text-muted-foreground'>
+          {t(transcript.source === 'stt' ? '语音转写' : '平台字幕')}
+        </span>
+        <CopyButton
+          text={transcript.text}
+          label={t('复制字幕')}
+          className='size-7'
+        />
+      </div>
+      <div className='space-y-2 text-body'>
+        {transcript.segments.length ? (
+          transcript.segments.map((row, index) => (
+            <p key={index} className='flex gap-3 leading-relaxed'>
+              <span className='shrink-0 text-caption tabular-nums leading-relaxed text-muted-foreground'>
+                {clock(row.start)}
+              </span>
+              <span className='min-w-0 whitespace-pre-wrap break-words'>
+                {row.text}
+              </span>
+            </p>
+          ))
+        ) : (
+          <p className='whitespace-pre-wrap break-words leading-relaxed'>
+            {transcript.text}
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 

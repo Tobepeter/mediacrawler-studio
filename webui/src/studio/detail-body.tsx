@@ -4,14 +4,16 @@ import { Heart, Loader2 } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RetryNotice } from './retry-notice'
+import { TranscriptPanel, useTranscriptTab } from './transcript'
 import type { ContentComment, ContentItem } from './types'
 import { useDetailMedia } from './use-detail-media'
 
-// 旧记录不显示评论页；新任务明确区分等待、空结果、失败和取消
+// 只有正文时不显示 Tab；旧记录不显示评论页，新任务明确区分等待、空结果、失败和取消
 export function DetailBody({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
 
   const detail = useDetailMedia(item)
+  const hasTranscript = useTranscriptTab(item)
   // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
   if (item.feed && !item.text && !detail.loading) {
     const error =
@@ -49,7 +51,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
       )}
     </div>
   )
-  if (!item.commentStatus)
+  if (!item.commentStatus && !hasTranscript)
     return (
       <>
         {body}
@@ -57,6 +59,46 @@ export function DetailBody({ item }: { item: ContentItem }) {
       </>
     )
   const comments = item.comments || []
+  return (
+    <Tabs defaultValue='body' className='space-y-4'>
+      <TabsList aria-label={t('作品内容')}>
+        <TabsTrigger value='body'>{t('正文')}</TabsTrigger>
+        {hasTranscript && (
+          <TabsTrigger value='transcript'>{t('字幕')}</TabsTrigger>
+        )}
+        {item.commentStatus && (
+          <TabsTrigger value='comments'>
+            {t('评论')}
+            {comments.length ? ` ${comments.length}` : ''}
+          </TabsTrigger>
+        )}
+      </TabsList>
+      <TabsContent value='body'>
+        {body}
+        {completing}
+      </TabsContent>
+      {hasTranscript && (
+        <TabsContent value='transcript'>
+          <TranscriptPanel item={item} />
+        </TabsContent>
+      )}
+      {item.commentStatus && (
+        <TabsContent value='comments' className='space-y-4'>
+          <Comments status={item.commentStatus} comments={comments} />
+        </TabsContent>
+      )}
+    </Tabs>
+  )
+}
+
+function Comments({
+  status: state,
+  comments,
+}: {
+  status: NonNullable<ContentItem['commentStatus']>
+  comments: ContentComment[]
+}) {
+  const { t } = useTranslation('studio')
   const roots = comments.filter((comment) => !comment.parentId)
   const replies = new Map<string, ContentComment[]>()
   for (const comment of comments) {
@@ -66,56 +108,46 @@ export function DetailBody({ item }: { item: ContentItem }) {
         comment,
       ])
   }
-  const loading = ['pending', 'running'].includes(item.commentStatus)
+  const loading = ['pending', 'running'].includes(state)
   const status =
-    item.commentStatus === 'pending'
+    state === 'pending'
       ? t('等待采集评论')
-      : item.commentStatus === 'running'
+      : state === 'running'
         ? t('正在采集评论')
-        : item.commentStatus === 'error'
+        : state === 'error'
           ? t('评论未取全，已保留现有内容')
-          : item.commentStatus === 'cancelled'
+          : state === 'cancelled'
             ? t('已停止，保留已获取的评论')
             : ''
   return (
-    <Tabs defaultValue='body' className='space-y-4'>
-      <TabsList aria-label={t('作品内容')}>
-        <TabsTrigger value='body'>{t('正文')}</TabsTrigger>
-        <TabsTrigger value='comments'>
-          {t('评论')}
-          {comments.length ? ` ${comments.length}` : ''}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value='body'>{body}</TabsContent>
-      <TabsContent value='comments' className='space-y-4'>
-        {status && (
-          <p
-            className='flex items-center gap-2 text-body text-muted-foreground'
-            role='status'
-          >
-            {loading && (
-              <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
-            )}
-            {status}
-          </p>
-        )}
-        {!comments.length && item.commentStatus === 'completed' && (
-          <p className='text-body text-muted-foreground'>{t('暂无评论')}</p>
-        )}
-        {roots.map((comment) => (
-          <div key={comment.id} className='space-y-3'>
-            <CommentRow comment={comment} />
-            {!!replies.get(comment.id)?.length && (
-              <div className='ml-4 space-y-3 rounded-md bg-muted/40 p-3'>
-                {replies.get(comment.id)!.map((reply) => (
-                  <CommentRow key={reply.id} comment={reply} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </TabsContent>
-    </Tabs>
+    <>
+      {status && (
+        <p
+          className='flex items-center gap-2 text-body text-muted-foreground'
+          role='status'
+        >
+          {loading && (
+            <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
+          )}
+          {status}
+        </p>
+      )}
+      {!comments.length && state === 'completed' && (
+        <p className='text-body text-muted-foreground'>{t('暂无评论')}</p>
+      )}
+      {roots.map((comment) => (
+        <div key={comment.id} className='space-y-3'>
+          <CommentRow comment={comment} />
+          {!!replies.get(comment.id)?.length && (
+            <div className='ml-4 space-y-3 rounded-md bg-muted/40 p-3'>
+              {replies.get(comment.id)!.map((reply) => (
+                <CommentRow key={reply.id} comment={reply} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
   )
 }
 

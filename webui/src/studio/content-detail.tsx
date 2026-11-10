@@ -22,7 +22,6 @@ import { AuthorName } from './creator-ui'
 import { PlatformIcon } from './platform-icon'
 import { biliPlayer, DetailMedia } from './detail-media'
 import { DetailBody } from './detail-body'
-import { DetailTranscript } from './transcript'
 import { hasNativeVideo } from './native-video'
 import { MediaDownload } from './media-download'
 
@@ -145,10 +144,6 @@ export function ContentDetail() {
                         </DialogDescription>
                       </DialogHeader>
                       <DetailBody key={selected.id} item={selected} />
-                      <DetailTranscript
-                        key={`t-${selected.id}`}
-                        item={selected}
-                      />
                     </div>
                   </ScrollArea>
                   <DialogFooter className='shrink-0 flex-row flex-wrap justify-end gap-2 bg-background p-4 sm:space-x-0'>
