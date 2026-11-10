@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useRef } from 'react'
 import { Loader2, LogOut, ScanLine, Square, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
+import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { IconButton } from '@/components/common/icon-button'
@@ -145,7 +146,10 @@ export function LoginGate() {
         ) : (
           <ScanLine />
         )}
-        {label}
+        <StableLabel
+          labels={[t('桌面端登录'), t('正在停止'), t('扫码登录'), t('连接中')]}
+          current={label}
+        />
       </Button>
       {(busy || auth) && (
         <IconButton

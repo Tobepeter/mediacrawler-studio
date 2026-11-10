@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Download, Loader2, Unplug } from 'lucide-react'
 import { toast } from 'sonner'
+import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import { SettingRow } from './settings-row'
 
@@ -70,7 +71,10 @@ export function CliSettings() {
         ) : (
           <Download />
         )}
-        {t(state.installed ? '移除命令' : '安装命令')}
+        <StableLabel
+          labels={[t('移除命令'), t('安装命令')]}
+          current={t(state.installed ? '移除命令' : '安装命令')}
+        />
       </Button>
     </SettingRow>
   )

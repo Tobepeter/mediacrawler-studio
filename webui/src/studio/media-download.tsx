@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Captions, Download, Images, Film, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -68,6 +69,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const canDownloadVideo =
     video || !['available', 'not_provided'].includes(item.media?.status || '')
   const hasTranscript = useHasTranscript(item)
+  const downloadLabels = [t('下载'), t('取消下载')]
   const menu = useHoverMenu()
   const primary = video
     ? 'video'
@@ -170,7 +172,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
           }
         >
           <Loader2 className='animate-spin motion-reduce:animate-none' />
-          {t('取消下载')}
+          <StableLabel labels={downloadLabels} current={t('取消下载')} />
         </Button>
       ) : (
         <DropdownMenu
@@ -195,7 +197,7 @@ export function MediaDownload({ item }: { item: ContentItem }) {
               {...menu.hover}
             >
               <Download />
-              {t('下载')}
+              <StableLabel labels={downloadLabels} current={t('下载')} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align='end' {...menu.hover}>

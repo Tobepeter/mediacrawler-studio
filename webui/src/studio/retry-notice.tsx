@@ -38,6 +38,12 @@ export function RetryNotice(props: {
         )}
       >
         {failureText(error)}
+        {wait > 0 && (
+          <span className='tabular-nums'>
+            {' · '}
+            {t('{{wait}}后可继续', { wait: formatWait(wait) })}
+          </span>
+        )}
       </span>
       <Button
         variant='outline'
@@ -45,9 +51,7 @@ export function RetryNotice(props: {
         disabled={wait > 0}
         onClick={onRetry}
       >
-        {wait > 0
-          ? t('{{wait}}后可继续', { wait: formatWait(wait) })
-          : t(label)}
+        {t(label)}
       </Button>
     </span>
   )

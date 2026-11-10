@@ -4,6 +4,7 @@ import { memo } from 'react'
 import { translateMessage } from '@/i18n/studio'
 import { useStudioRoute } from './route'
 import { Inbox, Loader2 } from 'lucide-react'
+import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import {
   accountChecking,
@@ -75,6 +76,10 @@ const ResultItems = memo(function ResultItems({
     !pagedTask.stalled &&
     ['completed', 'restored'].includes(pagedTask.status)
   const checking = useStudio((state) => accountChecking(state, platform))
+  const continueLabel = t('继续采集 {{count}} 条', {
+    count: pagedTask?.limit,
+  })
+  const moreLabels = [t('采集中'), t('重试'), t('加载更多'), continueLabel]
   if (!page && feedPlatforms.includes(platform))
     return <FeedList platform={platform} />
   // 没有推荐流的平台验证期间留空，不闪“暂无结果”
@@ -131,9 +136,9 @@ const ResultItems = memo(function ResultItems({
                   <span className='sr-only'>{t('加载中')}</span>
                 </span>
               ) : active ? (
-                <Button variant='outline' disabled>
-                  <Loader2 className='animate-spin motion-reduce:animate-none' />
-                  {t('采集中')}
+                <Button variant='outline' className='relative' disabled>
+                  <Loader2 className='absolute left-3 animate-spin motion-reduce:animate-none' />
+                  <StableLabel labels={moreLabels} current={t('采集中')} />
                 </Button>
               ) : pagedTask.nextCursor ? (
                 <span className='flex min-w-0 items-center gap-3'>
@@ -148,13 +153,16 @@ const ResultItems = memo(function ResultItems({
                     disabled={busy}
                     onClick={continueCollect}
                   >
-                    {pagedTask.status === 'error'
-                      ? t('重试')
-                      : autoMode
-                        ? t('加载更多')
-                        : t('继续采集 {{count}} 条', {
-                            count: pagedTask.limit,
-                          })}
+                    <StableLabel
+                      labels={moreLabels}
+                      current={
+                        pagedTask.status === 'error'
+                          ? t('重试')
+                          : autoMode
+                            ? t('加载更多')
+                            : continueLabel
+                      }
+                    />
                   </Button>
                 </span>
               ) : (
