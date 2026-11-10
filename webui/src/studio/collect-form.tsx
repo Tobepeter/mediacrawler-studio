@@ -27,6 +27,7 @@ import { PlatformIcon } from './platform-icon'
 import { ResultActions } from './result-actions'
 import {
   activeStatuses,
+  isContinuing,
   platformBlocked,
   platformNames,
   useForm,
@@ -159,24 +160,28 @@ export function CollectForm() {
             aria-label={t('平台')}
             className='min-w-0 justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
           >
-            {(Object.keys(platformNames) as Platform[]).map((platform) => (
-              <TabsTrigger
-                className='relative shrink-0 gap-2'
-                title={
-                  working[platform] === 'collect' ? t('采集中') : undefined
-                }
-                key={platform}
-                value={platform}
-              >
-                <PlatformIcon platform={platform} />
-                {t(platformNames[platform])}
-                {working[platform] === 'collect' && (
-                  <span className='absolute right-1 top-1 size-1 rounded-full bg-primary'>
-                    <span className='sr-only'>{t('采集中')}</span>
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
+            {(Object.keys(platformNames) as Platform[]).map((platform) => {
+              // 滚动续采是静默的，只有首屏和搜索第一屏才提示
+              const collecting =
+                working[platform] === 'collect' &&
+                !isContinuing(tasks[platform])
+              return (
+                <TabsTrigger
+                  className='relative shrink-0 gap-2'
+                  title={collecting ? t('采集中') : undefined}
+                  key={platform}
+                  value={platform}
+                >
+                  <PlatformIcon platform={platform} />
+                  {t(platformNames[platform])}
+                  {collecting && (
+                    <span className='absolute right-1 top-1 size-1 rounded-full bg-primary'>
+                      <span className='sr-only'>{t('采集中')}</span>
+                    </span>
+                  )}
+                </TabsTrigger>
+              )
+            })}
           </TabsList>
           <div className='flex h-10 shrink-0 items-center gap-2'>
             {(account === 'connected' || !!page) && <LoginGate />}
