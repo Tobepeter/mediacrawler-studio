@@ -102,7 +102,6 @@ export interface ContentItem {
     }[]
   }
   durationSeconds?: number | null
-  transcript?: ContentTranscript
   subtitles?: {
     status: string
     items: {
@@ -280,6 +279,10 @@ export interface StudioBridge {
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
   sttStatus?(): Promise<SttStatus>
+  cachedTranscript?(
+    platform: Platform,
+    id: string,
+  ): Promise<ContentTranscript | null>
   transcribe?(
     platform: Platform,
     id: string,

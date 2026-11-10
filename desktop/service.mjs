@@ -80,6 +80,12 @@ export class StudioService {
     Object.assign(this, options)
     this.spawnProcess = options.spawnProcess || spawn
     this.library = new StudioLibrary(this.dataDir)
+    // 字幕按作品 ID 存，和哪条记录、推荐流是否刷新都无关，可以随时重新生成
+    this.transcriptCache = new JsonCache(
+      path.join(this.dataDir, 'cache'),
+      'transcripts',
+      { maxEntries: 100, logger: this.logger },
+    )
     this.feed = new FeedScheduler({
       platforms: feedPlatforms,
       cache: new JsonCache(path.join(this.dataDir, 'cache'), 'feed', {
@@ -351,6 +357,16 @@ export class StudioService {
     }
   }
 
+  cachedTranscript(platform, id) {
+    if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    return (
+      this.transcriptCache.get(id) ||
+      this.findItem(platform, id)?.transcript ||
+      null
+    )
+  }
+
   // 只读，不占平台互斥；同一条重复点击共用同一次提取
   transcribe(platform, id) {
     if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
@@ -368,7 +384,6 @@ export class StudioService {
 
   async runTranscribe(job, platform, id) {
     if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
-    const page = this.state.pages[platform]
     const record = this.findItem(platform, id)
     if (!record) return { code: 'unavailable' }
     if (!existsSync(this.python)) return { code: 'environment' }
@@ -379,10 +394,7 @@ export class StudioService {
         retryAfter: result.retryAfter,
         message: result.message,
       }
-    const item = { id, platform, transcript: result.transcript }
-    if (this.feedItems.get(platform)?.get(id) === record)
-      this.feedItems.get(platform).set(id, { ...record, ...item })
-    else this.applyDetail(platform, page?.id, item)
+    this.transcriptCache.set(id, result.transcript)
     return { code: '', transcript: result.transcript }
   }
 

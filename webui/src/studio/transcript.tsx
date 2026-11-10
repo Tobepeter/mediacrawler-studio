@@ -9,11 +9,10 @@ import { Captions, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/common/copy-button'
+import { IconButton } from '@/components/common/icon-button'
 import { EstimateCountdown } from './estimate-countdown'
 import { SettingRow } from './settings-row'
-import { useStudio } from './store'
 import { recordTranscribe, transcribeEstimate } from './transcribe-estimate'
-import { updateFeedItem } from './use-feed'
 import type { ContentItem, ContentTranscript } from './types'
 
 const statusKey = ['studio', 'stt-status']
@@ -29,6 +28,16 @@ function useSttStatus() {
     queryKey: statusKey,
     queryFn: () => window.studio!.sttStatus!(),
     enabled: !!window.studio?.sttStatus,
+    staleTime: Infinity,
+  })
+}
+
+// 生成过的字幕在主进程的应用缓存里，详情打开时取一次
+function useCachedTranscript(item: ContentItem) {
+  return useQuery({
+    queryKey: ['studio', 'transcript', item.id],
+    queryFn: () => window.studio!.cachedTranscript!(item.platform, item.id),
+    enabled: item.contentType === 'video' && !!window.studio?.cachedTranscript,
     staleTime: Infinity,
   })
 }
@@ -62,9 +71,10 @@ function clock(seconds: number) {
 // 有字幕或能提取时才有这个 Tab；stt 不可用且没有现成字幕时不显示入口
 export function useTranscriptTab(item: ContentItem) {
   const status = useSttStatus()
+  const cached = useCachedTranscript(item)
   if (item.contentType !== 'video') return false
   return (
-    !!item.transcript ||
+    !!cached.data ||
     !!platformSubtitle(item) ||
     (!!status.data && status.data.state !== 'missing')
   )
@@ -76,6 +86,7 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
   const { platform, id } = item
   const mutationKey = ['studio', 'transcribe', platform, id]
   const status = useSttStatus()
+  const cached = useCachedTranscript(item)
   // 切 Tab 或关掉详情再打开时，进行中的提取和倒计时还要显示出来
   const [progress] = useMutationState({
     filters: { mutationKey, status: 'pending' },
@@ -97,13 +108,7 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
     },
     onSuccess: (result) => {
       if (result.transcript) {
-        const next = { ...item, transcript: result.transcript }
-        updateFeedItem(next)
-        const state = useStudio.getState()
-        if (state.selected?.id === id)
-          state.patch({
-            selected: { ...state.selected, transcript: result.transcript },
-          })
+        client.setQueryData(['studio', 'transcript', id], result.transcript)
         return
       }
       if (result.code === 'stt_unavailable') {
@@ -135,7 +140,26 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
       toast.error(t('字幕提取失败，请重试'), { id: 'transcribe' })
     },
   })
-  const transcript = item.transcript || platformSubtitle(item)
+  const start = () => {
+    if (running) return
+    const cold = status.data?.state === 'installed'
+    extract.mutate({
+      cold,
+      estimate: transcribeEstimate(item.durationSeconds, cold),
+    })
+  }
+  const progressText =
+    progress &&
+    (progress.estimate ? (
+      <EstimateCountdown
+        estimateAt={progress.startedAt + progress.estimate}
+        overdue={t('任务有点长，请耐心等待')}
+      />
+    ) : (
+      t('长视频需要一会儿，可以先看别的')
+    ))
+  if (cached.isLoading) return null
+  const transcript = cached.data || platformSubtitle(item)
   if (!transcript)
     return (
       <div className='flex flex-col items-center gap-3 py-12'>
@@ -145,14 +169,7 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
           className='w-32'
           disabled={running}
           aria-busy={running}
-          onClick={() => {
-            if (running) return
-            const cold = status.data?.state === 'installed'
-            extract.mutate({
-              cold,
-              estimate: transcribeEstimate(item.durationSeconds, cold),
-            })
-          }}
+          onClick={start}
         >
           {running ? (
             <Loader2 className='animate-spin motion-reduce:animate-none' />
@@ -162,31 +179,44 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
           {t('提取字幕')}
         </Button>
         {/* 占位固定，状态变化时按钮不上下移动 */}
-        <p className='h-4 text-caption text-muted-foreground'>
-          {progress &&
-            (progress.estimate ? (
-              <EstimateCountdown
-                estimateAt={progress.startedAt + progress.estimate}
-                overdue={t('任务有点长，请耐心等待')}
-              />
-            ) : (
-              t('长视频需要一会儿，可以先看别的')
-            ))}
-        </p>
+        <p className='h-4 text-caption text-muted-foreground'>{progressText}</p>
       </div>
     )
   return (
     <div className='space-y-2'>
       {/* 字幕很长，滚动时来源和复制按钮留在顶部；右边让出弹窗的关闭按钮 */}
       <div className='sticky top-0 z-10 mr-8 flex items-center justify-between gap-2 bg-background py-1'>
-        <span className='text-caption text-muted-foreground'>
+        <span className='min-w-0 truncate text-caption text-muted-foreground'>
           {t(transcript.source === 'stt' ? '语音转写' : '平台字幕')}
+          {progressText && <> · {progressText}</>}
         </span>
-        <CopyButton
-          text={transcript.text}
-          label={t('复制字幕')}
-          className='size-7'
-        />
+        <span className='flex shrink-0 items-center'>
+          {/* 平台字幕不用生成；转写期间旧字幕继续显示，失败也不丢 */}
+          {transcript.source === 'stt' &&
+            !!status.data &&
+            status.data.state !== 'missing' && (
+              <IconButton
+                variant='ghost'
+                className='size-7'
+                label={t('重新生成')}
+                disabled={running}
+                onClick={start}
+              >
+                <RefreshCw
+                  className={
+                    running
+                      ? 'animate-spin motion-reduce:animate-none'
+                      : undefined
+                  }
+                />
+              </IconButton>
+            )}
+          <CopyButton
+            text={transcript.text}
+            label={t('复制字幕')}
+            className='size-7'
+          />
+        </span>
       </div>
       <div className='space-y-2 text-body'>
         {transcript.segments.length ? (

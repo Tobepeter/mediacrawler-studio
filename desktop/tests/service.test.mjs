@@ -870,3 +870,57 @@ test('推荐流校验平台和登录，卡片数据只留在内存里', async ()
   )
   assert.equal(service.feedItems.get('bili').size, 600)
 })
+
+test('生成的字幕存进应用缓存，失败不覆盖已有内容', async () => {
+  const { service, cleanup } = await createService('process.exit(0)')
+  try {
+    Object.defineProperty(service, 'python', { get: () => process.execPath })
+    const results = [
+      { transcript: { source: 'stt', text: '第一版', segments: [] } },
+      { code: 'stt_busy', retryAfter: 9 },
+    ]
+    service.mediaJob = () => ({
+      run: async () => results.shift(),
+      cancel: async () => {},
+    })
+    service.state.accounts.dy = 'connected'
+    service.state.pages.dy = { id: 'p', results: [{ id: 'dy:1' }] }
+    assert.equal(service.cachedTranscript('dy', 'dy:1'), null)
+    assert.equal((await service.transcribe('dy', 'dy:1')).code, '')
+    assert.equal(service.cachedTranscript('dy', 'dy:1').text, '第一版')
+    // 换到别的结果页后，字幕还能按作品 ID 读到
+    service.state.pages.dy = { id: 'q', results: [] }
+    assert.equal(service.cachedTranscript('dy', 'dy:1').text, '第一版')
+    service.state.pages.dy = { id: 'p', results: [{ id: 'dy:1' }] }
+    const failed = await service.transcribe('dy', 'dy:1')
+    assert.equal(failed.code, 'stt_busy')
+    assert.equal(failed.retryAfter, 9)
+    assert.equal(service.cachedTranscript('dy', 'dy:1').text, '第一版')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('同一条视频重复点击共用一次提取', async () => {
+  const { service, cleanup } = await createService('process.exit(0)')
+  try {
+    Object.defineProperty(service, 'python', { get: () => process.execPath })
+    let runs = 0
+    service.mediaJob = () => ({
+      run: async () => {
+        runs += 1
+        return { transcript: { source: 'stt', text: 'x', segments: [] } }
+      },
+      cancel: async () => {},
+    })
+    service.state.accounts.dy = 'connected'
+    service.state.pages.dy = { id: 'p', results: [{ id: 'dy:1' }] }
+    await Promise.all([
+      service.transcribe('dy', 'dy:1'),
+      service.transcribe('dy', 'dy:1'),
+    ])
+    assert.equal(runs, 1)
+  } finally {
+    await cleanup()
+  }
+})

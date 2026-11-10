@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('studio', {
   keepFeedFresh: (platform) =>
     ipcRenderer.invoke('studio:keep-feed-fresh', platform),
   sttStatus: () => ipcRenderer.invoke('studio:stt-status'),
+  cachedTranscript: (platform, id) =>
+    ipcRenderer.invoke('studio:cached-transcript', platform, id),
   transcribe: (platform, id) =>
     ipcRenderer.invoke('studio:transcribe', platform, id),
   loadDetail: (platform, id, options) =>

@@ -178,6 +178,9 @@ app
     handle('keep-feed-fresh', (platform) => service.keepFeedFresh(platform))
     handle('stt-status', () => service.sttStatus())
     handle('transcribe', (platform, id) => service.transcribe(platform, id))
+    handle('cached-transcript', (platform, id) =>
+      service.cachedTranscript(platform, id),
+    )
     handle('load-detail', (platform, id, options) =>
       service.loadDetail(platform, id, options),
     )
