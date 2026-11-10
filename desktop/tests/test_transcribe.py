@@ -234,11 +234,12 @@ async def test_video_without_audio_has_its_own_code(stt):
     assert caught.value.code == 'no_audio'
 
 
-async def test_enrich_reports_throttling_instead_of_failed(monkeypatch):
+async def test_enrich_reports_throttling_instead_of_failed(monkeypatch, tmp_path):
     from desktop.content import media
+    monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
     monkeypatch.setattr(media, 'fetch', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '冷却中', retry_after=60)))
     with pytest.raises(CreatorError):
-        await media.enrich(SimpleNamespace(platform='dy'), {'id': 'dy:1', 'platform': 'dy', 'url': 'https://www.douyin.com/video/1'})
+        await media.enrich(SimpleNamespace(platform='dy', request={}, emit=None), {'id': 'dy:1', 'platform': 'dy', 'url': 'https://www.douyin.com/video/1'})
 
 
 async def test_cli_download_keeps_throttle_errors(monkeypatch):

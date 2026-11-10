@@ -19,7 +19,7 @@ def record(platform='bili'):
 async def test_player_failure_keeps_media_and_body(monkeypatch):
     monkeypatch.setattr(media, 'fetch', AsyncMock(return_value=({'_cid': 2, '_view': {'aid': 1},
         'dash': {'video': [{'baseUrl': 'https://cdn.example/v', 'height': 720}]}}, 10)))
-    runner = SimpleNamespace(platform='bili', client=SimpleNamespace(get=AsyncMock(side_effect=RuntimeError('Cookie=secret'))))
+    runner = SimpleNamespace(platform='bili', request={}, emit=None, client=SimpleNamespace(get=AsyncMock(side_effect=RuntimeError('Cookie=secret'))))
     r = record()
     await media.enrich(runner, r)
     assert r['media']['status'] == 'available'
@@ -29,7 +29,7 @@ async def test_player_failure_keeps_media_and_body(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_subtitle_login_required_keeps_chapters():
-    runner = SimpleNamespace(client=SimpleNamespace(get=AsyncMock(return_value={
+    runner = SimpleNamespace(request={}, emit=None, client=SimpleNamespace(get=AsyncMock(return_value={
         'need_login_subtitle': True, 'view_points': [{'content': 'Intro', 'from': 0, 'to': 10}]})))
     r = record()
     await capabilities.bilibili(runner, {'_cid': 2, '_view': {'aid': 1}}, r)
@@ -44,14 +44,14 @@ async def test_douyin_units_roles_and_missing_preview():
            'music': {'is_original_sound': True, 'play_url': {'url_list': ['http://cdn.example/audio']}},
            'video': {'big_thumbs': [{'img_urls': ['https://cdn.example/grid'], 'interval': 1, 'img_num': 58,
                                    'img_x_len': 5, 'img_y_len': 5, 'img_x_size': 240, 'img_y_size': 136}]}}
-    await capabilities.enrich(SimpleNamespace(platform='dy'), raw, r)
+    await capabilities.enrich(SimpleNamespace(platform='dy', request={}, emit=None), raw, r)
     assert r['chapters']['items'][0]['start'] == 16
     assert r['storyboards']['items'][0]['frameCount'] == 58
     assert r['audioResources']['items'][0]['matchesFullVideoAudio'] is None
     assert r['audioResources']['items'][0]['role'] == 'original_sound'
     assert r['subtitles']['status'] == 'not_provided'
     empty = record('dy')
-    await capabilities.enrich(SimpleNamespace(platform='dy'), {}, empty)
+    await capabilities.enrich(SimpleNamespace(platform='dy', request={}, emit=None), {}, empty)
     assert empty['storyboards']['status'] == 'not_provided'
 
 
@@ -106,14 +106,14 @@ async def test_desktop_store_emits_stable_schema():
 async def test_cancellation_propagates(monkeypatch):
     monkeypatch.setattr(media, 'fetch', AsyncMock(side_effect=asyncio.CancelledError))
     with pytest.raises(asyncio.CancelledError):
-        await media.enrich(SimpleNamespace(platform='dy'), record('dy'))
+        await media.enrich(SimpleNamespace(platform='dy', request={}, emit=None), record('dy'))
 
 
 @pytest.mark.asyncio
 async def test_media_failure_still_queries_subtitles(monkeypatch):
     monkeypatch.setattr(media, 'fetch', AsyncMock(return_value=({'_cid': 2, '_view': {'aid': 1},
                                                                '_media_error': 'media_request_failed'}, 10)))
-    runner = SimpleNamespace(platform='bili', client=SimpleNamespace(get=AsyncMock(return_value={
+    runner = SimpleNamespace(platform='bili', request={}, emit=None, client=SimpleNamespace(get=AsyncMock(return_value={
         'subtitle': {'subtitles': [{'id': 1, 'lan': 'ai-zh', 'subtitle_url': 'https://cdn.example/sub'}]}})))
     monkeypatch.setattr(capabilities, 'load', AsyncMock(return_value={'status': 'available', 'items': [
         {'language': 'ai-zh', 'segments': [{'start': 0, 'end': 2, 'text': 'hello'}]}]}))

@@ -50,7 +50,7 @@ def test_enrichment_failure_keeps_content_and_hides_exception(monkeypatch):
         raise RuntimeError('Cookie=secret')
     monkeypatch.setattr(media, 'fetch', fail)
     record = {'text': 'retained'}
-    asyncio.run(enrich(SimpleNamespace(platform='bili'), record, 'best'))
+    asyncio.run(enrich(SimpleNamespace(platform='bili', request={}, emit=None), record, 'best'))
     assert record['text'] == 'retained'
     assert record['media']['status'] == 'failed'
     assert 'secret' not in str(record)

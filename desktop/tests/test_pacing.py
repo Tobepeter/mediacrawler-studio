@@ -203,6 +203,30 @@ async def test_visit_takes_one_slot_and_inner_requests_do_not_wait(waits):
     assert len(read_state(state_path('t'))['free_at']) == 2
 
 
+async def test_nested_visit_counts_once(waits):
+    async with visit('t', 'open'):
+        async with visit('t', 'open'):
+            assert current_visit.get().left == pacing.VISIT_REQUESTS
+    assert len(read_state(state_path('t'))['free_at']) == 2 and waits == [0]
+
+
+async def test_enrich_is_one_visit_and_queues_outside_its_timeouts(waits, monkeypatch):
+    from desktop.content import media
+    turns, seen = [], []
+    monkeypatch.setattr(pacing, 'take_turn', lambda *args, **kwargs: (turns.append(args[:2]), 70)[1])
+
+    async def fill(runner, record, quality):
+        seen.append((list(waits), current_visit.get() is not None))
+    monkeypatch.setattr(media, 'fill', fill)
+    bili = SimpleNamespace(platform='bili', request={}, emit=None, bili_details={'bili:1': {}})
+    await media.enrich(bili, {'id': 'bili:1'})
+    assert turns == [('bili', 'detail')] and seen == [([70], True)]
+    # 列表阶段已取过详情，补全不发请求，不能占额度
+    turns.clear()
+    await media.enrich(SimpleNamespace(platform='dy', request={}, emit=None, dy_details={'dy:1': {}}), {'id': 'dy:1'})
+    assert turns == []
+
+
 async def test_visit_budget_runs_out_then_requests_queue(waits):
     call = pacing.paced(AsyncMock(return_value={}), 't', Route('open_page'))
     async with visit('t', 'open', requests=1):

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from desktop.links import media_referer
+from desktop.pacing import reporter, visit
 from desktop.paging import CreatorError
 from media_downloader.selection import selection, without_silent_duplicates
 
@@ -158,7 +159,22 @@ async def fetch(runner, record):
     return {}, None
 
 
+def has_detail(runner, record):
+    """抖音和小红书在列表阶段已经取过详情，补全时不发请求"""
+    return runner.platform in ('dy', 'xhs') and record['id'] in getattr(runner, f'{runner.platform}_details', {})
+
+
 async def enrich(runner, record, quality='best'):
+    """补全一条作品算一次访问，和打开详情页一样，桌面端和 CLI 都走这里
+    排队放在内部超时之外，等额度恢复不能算成请求超时"""
+    if has_detail(runner, record):
+        await fill(runner, record, quality)
+        return
+    async with visit(runner.platform, 'detail', reporter(runner.emit), runner.request.get('waitLimit'), bool(runner.request.get('background'))):
+        await fill(runner, record, quality)
+
+
+async def fill(runner, record, quality):
     initialize(record)
     for key in CAPABILITIES:
         record[key] = group(status='not_requested')

@@ -440,6 +440,11 @@ async def visit(platform, group, report=None, limit=None, background=False, requ
     if group not in PLATFORMS[platform].groups:
         yield
         return
+    # 外层已经算过这次动作，比如打开详情时里面还会补全一次
+    outer = current_visit.get()
+    if outer and outer.covers(platform, group):
+        yield
+        return
     label = f'visit:{group}'
     try:
         wait = take_turn(platform, group, 0 if background else limit, background, opening=True)
