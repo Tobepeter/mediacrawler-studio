@@ -17,7 +17,7 @@ class MediaResolver:
         self.reuse = runner is not None
         self.runner = runner or DesktopCrawler({
             'platform': self.platform, 'mode': 'link', 'query': record['url'],
-            'limit': 1, 'action': 'connect',
+            'limit': 1, 'action': 'connect', 'reusePage': True,
         }, page, lambda *args, **kwargs: None)
 
     async def videos(self):

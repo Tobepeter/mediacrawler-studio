@@ -96,6 +96,11 @@ def resolver(platform):
     return result
 
 
+def test_resolver_reuses_platform_page():
+    item = MediaResolver({'id': 'dy:123', 'platform': 'dy', 'url': 'https://www.douyin.com/video/123'}, SimpleNamespace())
+    assert item.runner.request['reusePage'] is True
+
+
 @pytest.mark.asyncio
 async def test_video_login_checked_before_fetch():
     item = resolver('dy')
