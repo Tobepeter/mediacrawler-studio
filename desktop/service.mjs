@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { StudioLibrary } from './library.mjs'
 import { DownloadJob } from './download-job.mjs'
 import { FeedScheduler } from './feed-scheduler.mjs'
+import { FileCache } from './file-cache.mjs'
 import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
 import { homedir } from 'node:os'
@@ -83,7 +84,7 @@ export class StudioService {
     // 字幕按作品 ID 存，和哪条记录、推荐流是否刷新都无关，可以随时重新生成
     // macOS 目录名不区分大小写，cache 会和 Chromium 的 Cache 混在一起
     const cacheDir = path.join(this.dataDir, 'app-cache')
-    this.transcriptCache = new JsonCache(cacheDir, 'transcripts', {
+    this.transcriptCache = new FileCache(path.join(cacheDir, 'transcripts'), {
       maxEntries: 100,
       logger: this.logger,
     })

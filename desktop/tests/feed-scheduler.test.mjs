@@ -302,19 +302,6 @@ test('JsonCache 清空后文件还在且大小变小', () => {
   assert.equal(new JsonCache(dir, 'transcripts').get('a'), undefined)
 })
 
-test('JsonCache 超过上限淘汰最早写入的，重新写入算最新', () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'studio-cache-'))
-  const open = () => new JsonCache(dir, 'transcripts', { maxEntries: 2 })
-  const cache = open()
-  cache.set('a', 1)
-  cache.set('b', 2)
-  cache.set('a', 3)
-  cache.set('c', 4)
-  assert.equal(open().get('b'), undefined)
-  assert.equal(open().get('a'), 3)
-  assert.equal(open().get('c'), 4)
-})
-
 const throttled = (retryAfter, busy = false) => ({
   items: [],
   hasMore: false,

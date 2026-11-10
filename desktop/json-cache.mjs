@@ -11,12 +11,8 @@ import path from 'node:path'
 export class JsonCache {
   entries = null
 
-  constructor(
-    dir,
-    name,
-    { version = 1, ttlMs = Infinity, maxEntries, now = Date.now, logger } = {},
-  ) {
-    Object.assign(this, { dir, version, ttlMs, maxEntries, now, logger })
+  constructor(dir, name, { version = 1, ttlMs, now = Date.now, logger } = {}) {
+    Object.assign(this, { dir, version, ttlMs, now, logger })
     this.file = path.join(dir, `${name}.json`)
   }
 
@@ -54,12 +50,7 @@ export class JsonCache {
   }
 
   set(key, value) {
-    const entries = this.load()
-    // 重新写入算最新，超出上限时淘汰最早写入的
-    entries.delete(key)
-    entries.set(key, { savedAt: this.now(), value })
-    while (this.maxEntries && entries.size > this.maxEntries)
-      entries.delete(entries.keys().next().value)
+    this.load().set(key, { savedAt: this.now(), value })
     this.write()
   }
 
