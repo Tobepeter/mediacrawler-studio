@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Captions, Download, Images, Film, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -27,7 +27,33 @@ import { useDetailMedia } from './use-detail-media'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
 
-// 一个下载入口：整组图片或视频，失败使用全局弹窗说明，关闭详情后仍能收到结果
+const hoverOpenMs = 120
+const hoverCloseMs = 180
+
+// 鼠标悬停展开、移开稍等再收起，留出从按钮移到菜单的时间；触屏不走悬停
+function useHoverMenu() {
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const later = (value: boolean, delay: number) => (event: PointerEvent) => {
+    if (event.pointerType !== 'mouse') return
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setOpen(value), delay)
+  }
+  return {
+    open,
+    setOpen: (value: boolean) => {
+      clearTimeout(timer.current)
+      setOpen(value)
+    },
+    hover: {
+      onPointerEnter: later(true, hoverOpenMs),
+      onPointerLeave: later(false, hoverCloseMs),
+    },
+  }
+}
+
+// 点击直接下载主要内容，悬停展开清晰度、封面和字幕；失败使用全局弹窗说明，关闭详情后仍能收到结果
 export function MediaDownload({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
   const busy = useStudio((state) => platformBusy(state, item.platform))
@@ -42,6 +68,23 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const canDownloadVideo =
     video || !['available', 'not_provided'].includes(item.media?.status || '')
   const hasTranscript = useHasTranscript(item)
+  const menu = useHoverMenu()
+  const primary = video
+    ? 'video'
+    : item.images.length
+      ? 'images'
+      : canDownloadVideo
+        ? 'video'
+        : null
+  const runPrimary = () => {
+    menu.setOpen(false)
+    if (primary) void download(primary)
+  }
+  // 只有一个选项时不用展开菜单
+  const options =
+    Number(!!item.images.length) +
+    Number(canDownloadVideo) +
+    Number(hasTranscript && !!window.studio?.saveTranscript)
   const setFailure = (downloadFailure: string) =>
     useStudio.getState().patch({ downloadFailure })
   // 字幕已经在本地，不占用平台，保存位置跟随“下载前询问”
@@ -130,14 +173,32 @@ export function MediaDownload({ item }: { item: ContentItem }) {
           {t('取消下载')}
         </Button>
       ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant='outline' disabled={!window.studio || busy}>
+        <DropdownMenu
+          modal={false}
+          open={menu.open && options > 1}
+          onOpenChange={menu.setOpen}
+        >
+          <DropdownMenuTrigger
+            asChild
+            // 点击和回车执行默认下载，方向键仍可展开菜单
+            onPointerDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              runPrimary()
+            }}
+          >
+            <Button
+              variant='outline'
+              disabled={!window.studio || busy || !primary}
+              onClick={runPrimary}
+              {...menu.hover}
+            >
               <Download />
               {t('下载')}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align='end'>
+          <DropdownMenuContent align='end' {...menu.hover}>
             {!!item.images.length && (
               <DropdownMenuItem onSelect={() => void download('images')}>
                 <Images />
