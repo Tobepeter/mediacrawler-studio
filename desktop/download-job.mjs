@@ -49,7 +49,9 @@ export class DownloadJob {
           timedOut = true
           void this.cancel()
         },
-        ['playback', 'detail'].includes(request.kind) ? 45000 : 30 * 60 * 1000,
+        ['playback', 'detail'].includes(request.kind)
+          ? 45000
+          : (request.kind === 'transcribe' ? 60 : 30) * 60 * 1000,
       )
       const lines = createInterface({ input: child.stdout })
       lines.on('line', (line) => {

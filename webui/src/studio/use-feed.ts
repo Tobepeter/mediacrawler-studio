@@ -72,6 +72,7 @@ export function useFeed(platform: Platform) {
 }
 
 const refreshing = new Map<Platform, Promise<boolean>>()
+const forced = new Set<Platform>()
 const refreshListeners = new Set<() => void>()
 const refreshChanged = () => refreshListeners.forEach((listener) => listener())
 
@@ -89,7 +90,11 @@ export const useFeedRefreshing = (platform: Platform) =>
 // 静默刷新要等封面就绪，等待期间用户动了就放弃，不能把正在看的内容换掉
 function replaceFeed(platform: Platform, keep?: () => boolean) {
   const running = refreshing.get(platform)
-  if (running) return running
+  if (running) {
+    // 手动刷新接管进行中的静默刷新，这次点击不算打扰
+    if (!keep) forced.add(platform)
+    return running
+  }
   const task = (async () => {
     const queryKey = feedKey(platform)
     await queryClient.cancelQueries({ queryKey })
@@ -106,7 +111,7 @@ function replaceFeed(platform: Platform, keep?: () => boolean) {
           .flatMap((item) => item.images[0] || []),
         COVER_WAIT_MS,
       )
-      if (!keep()) return false
+      if (!forced.has(platform) && !keep()) return false
     }
     queryClient.setQueryData<InfiniteData<FeedPage>>(queryKey, {
       pages: [page],
@@ -117,6 +122,7 @@ function replaceFeed(platform: Platform, keep?: () => boolean) {
     return true
   })().finally(() => {
     refreshing.delete(platform)
+    forced.delete(platform)
     refreshChanged()
   })
   refreshing.set(platform, task)

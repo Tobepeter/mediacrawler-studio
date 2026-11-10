@@ -57,9 +57,11 @@ const ResultItems = memo(function ResultItems({
   // 自动模式接近底部就继续，看不到按钮；用户停止、失败或一批没有新内容时才交给手动
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
   // 旧博主记录没有这个字段，只有明确选了数字的才是固定数量
-  const filter = useStudio((state) =>
+  const keyword = useStudio((state) =>
     page ? state.creatorFilters[page.id] || '' : '',
   )
+  // 只有空格不算在搜索，否则续采入口会消失
+  const filter = keyword.trim()
   const shown = filter
     ? results.filter((item) => matchesKeyword(item, filter))
     : results

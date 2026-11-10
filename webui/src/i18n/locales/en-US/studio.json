@@ -405,6 +405,8 @@
   "字幕已保存": "Subtitles saved",
   "字幕保存失败，请重试": "Could not save subtitles. Try again",
   "复制正文": "Copy text",
+  "请先登录这个平台": "Sign in to this platform first",
+  "视频暂时拿不到，请重新打开后再试": "Video unavailable. Reopen it and try again",
   "清除博主": "Clear creator",
   "最近采集": "Recent",
   "已采 {{count}} 条": "{{count}} collected",

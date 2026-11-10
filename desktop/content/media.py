@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from desktop.links import media_referer
+from desktop.paging import CreatorError
 from media_downloader.selection import selection, without_silent_duplicates
 
 
@@ -118,6 +119,8 @@ async def fetch(runner, record):
             raise ValueError('missing cid')
         try:
             raw = await client.get_video_play_url(int(identity), cid, fnval=DASH_FNVAL) or {}
+        except CreatorError:
+            raise
         except Exception:
             raw = {'_media_error': 'media_request_failed'}
         selected_part = next((p for p in view.get('pages') or [] if p.get('cid') == cid), {})
@@ -166,6 +169,9 @@ async def enrich(runner, record, quality='best'):
     try:
         async with asyncio.timeout(45):
             raw, duration = await fetch(runner, record)
+    except CreatorError:
+        # 节流和验证要让调用方知道，不能显示成详情失败
+        raise
     except Exception as error:
         code = 'timeout' if isinstance(error, TimeoutError) else 'detail_request_failed'
         media.update(status='failed', error=code, subtitleStatus='failed')
@@ -188,6 +194,8 @@ async def enrich(runner, record, quality='best'):
     from desktop.content.capabilities import enrich as enrich_capabilities
     try:
         await enrich_capabilities(runner, raw, record)
+    except CreatorError:
+        raise
     except Exception:
         for key in CAPABILITIES:
             if record[key]['status'] == 'not_requested':

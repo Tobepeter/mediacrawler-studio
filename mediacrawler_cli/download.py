@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from desktop.media_download import download_record
+from desktop.paging import CreatorError
 
 
 async def transcribe_records(records, emit, runner=None):
@@ -29,6 +30,9 @@ async def download_records(request, records, emit, runner=None):
                 'variant_id': request.get('variant_id'), 'report_files': True,
             }, emit, runner.page if runner else None)
             result['id'] = record['id']
+        except CreatorError:
+            # 节流和验证要带上 retry_after 交给统一的错误出口
+            raise
         except RuntimeError as error:
             code = str(error)
             result = {'id': record['id'], 'saved': 0, 'files': [], 'code': code if code in (

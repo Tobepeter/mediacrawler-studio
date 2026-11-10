@@ -146,7 +146,8 @@ async def test_xhs_block_starts_shared_cooldown(tmp_path, monkeypatch, route):
 async def test_captcha_inside_retry_error_counts_as_block(tmp_path, monkeypatch):
     from tenacity import RetryError
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
-    attempt = SimpleNamespace(exception=lambda: Exception('CAPTCHA appeared, request failed'))
+    from media_platform.xhs.exception import PlatformAccessError
+    attempt = SimpleNamespace(exception=lambda: PlatformAccessError('CAPTCHA appeared, request failed'))
     call = paced(AsyncMock(side_effect=RetryError(attempt)), 'xhs')
     with pytest.raises(CreatorError):
         await call('x')

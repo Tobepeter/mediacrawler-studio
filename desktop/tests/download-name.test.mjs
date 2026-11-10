@@ -33,3 +33,9 @@ test('作者和标题都限制长度', () => {
   })
   assert.equal(name.length, 24 + 3 + 60)
 })
+
+test('截断不切开 emoji', () => {
+  const name = downloadName({ title: '题'.repeat(59) + '😀😀' })
+  assert.equal(Array.from(name).length, 60)
+  assert.ok(name.isWellFormed())
+})

@@ -232,3 +232,18 @@ async def test_video_without_audio_has_its_own_code(stt):
     with pytest.raises(SttError) as caught:
         await transcribe.transcribe_file('a.mp4')
     assert caught.value.code == 'no_audio'
+
+
+async def test_enrich_reports_throttling_instead_of_failed(monkeypatch):
+    from desktop.content import media
+    monkeypatch.setattr(media, 'fetch', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '冷却中', retry_after=60)))
+    with pytest.raises(CreatorError):
+        await media.enrich(SimpleNamespace(platform='dy'), {'id': 'dy:1', 'platform': 'dy', 'url': 'https://www.douyin.com/video/1'})
+
+
+async def test_cli_download_keeps_throttle_errors(monkeypatch):
+    from mediacrawler_cli import download
+    monkeypatch.setattr(download, 'download_record', AsyncMock(side_effect=CreatorError('RATE_COOLDOWN', '冷却中', retry_after=60)))
+    with pytest.raises(CreatorError):
+        await download.download_records({'download_dir': '/tmp/x'}, [{'id': 'dy:1'}], lambda *a, **k: None)
+

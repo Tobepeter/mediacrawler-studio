@@ -25,7 +25,9 @@ async def collect_creator(runner, reference, cursor=None):
         await module.collect_creator(runner, reference, cursor)
         return
     # 打开博主页是一次动作：资料和第一页作品和网页一样不互相等
-    async with visit(runner.platform, 'creator', reporter(runner.emit), runner.request.get('waitLimit'), requests=2):
+    # 小红书打开主页只有作品列表一个请求，多余的额度会让第二页免排队
+    requests = 1 if runner.platform == 'xhs' else 2
+    async with visit(runner.platform, 'creator', reporter(runner.emit), runner.request.get('waitLimit'), requests=requests):
         await module.collect_creator(runner, reference, cursor)
 
 

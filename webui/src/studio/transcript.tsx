@@ -118,6 +118,8 @@ function useExtraction(item: ContentItem) {
     onSuccess: (result) => {
       if (result.transcript) {
         client.setQueryData(['studio', 'transcript', id], result.transcript)
+        // 提取后后台已经起来了，下次预估不能再按冷启动算
+        void client.invalidateQueries({ queryKey: statusKey })
         return
       }
       if (result.code === 'stt_unavailable') {
@@ -139,6 +141,16 @@ function useExtraction(item: ContentItem) {
         toast.warning(t('这条视频没有音轨'), { id: 'transcribe' })
       else if (result.code === 'no_speech')
         toast.warning(t('没有识别到语音'), { id: 'transcribe' })
+      else if (result.code === 'login')
+        toast.warning(t('请先登录这个平台'), { id: 'transcribe' })
+      else if (result.code === 'environment')
+        toast.error(t('下载环境不可用，请检查 Python 环境'), {
+          id: 'transcribe',
+        })
+      else if (['unavailable', 'expired'].includes(result.code))
+        toast.warning(t('视频暂时拿不到，请重新打开后再试'), {
+          id: 'transcribe',
+        })
       else if (result.code === 'throttled')
         toast.warning(result.message || t('操作太频繁，请稍后再试'), {
           id: 'transcribe',
@@ -226,10 +238,9 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
   if (!transcript)
     return (
       <div className='flex flex-col items-center gap-3 py-12'>
-        {/* 文案不变、宽度固定，提取中只换图标，按钮不跳动 */}
+        {/* 文案不变，提取中只换图标，按钮不跳动 */}
         <Button
           variant='outline'
-          className='w-32'
           disabled={running}
           aria-busy={running}
           onClick={start}

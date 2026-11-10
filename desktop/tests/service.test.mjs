@@ -849,12 +849,13 @@ test('推荐流校验平台和登录，卡片数据只留在内存里', async ()
   await assert.rejects(service.loadFeed('dy'), /登录后/)
 
   const item = (id) => ({ id, platform: 'bili', title: id })
-  service.rememberFeed('bili', [item('a'), item('b')], true)
-  service.rememberFeed('bili', [item('c'), { id: 'x', platform: 'dy' }], false)
+  service.rememberFeed('bili', [item('a'), item('b')])
+  service.rememberFeed('bili', [item('c'), { id: 'x', platform: 'dy' }])
   assert.deepEqual([...service.feedItems.get('bili').keys()], ['a', 'b', 'c'])
   assert.equal(service.findItem('bili', 'c').title, 'c')
-  service.rememberFeed('bili', [item('d')], true)
-  assert.equal(service.findItem('bili', 'a'), undefined)
+  // 静默刷新被放弃时界面还显示旧卡片，新一页不能把它们清掉
+  service.rememberFeed('bili', [item('d')])
+  assert.equal(service.findItem('bili', 'a').title, 'a')
   assert.equal(service.state.pages.bili, undefined)
 
   service.state.pages.bili = {
@@ -866,7 +867,6 @@ test('推荐流校验平台和登录，卡片数据只留在内存里', async ()
   service.rememberFeed(
     'bili',
     Array.from({ length: 700 }, (_, index) => item(`n${index}`)),
-    true,
   )
   assert.equal(service.feedItems.get('bili').size, 600)
 })

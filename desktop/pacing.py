@@ -68,7 +68,7 @@ def xhs_blocked(error):
     # 上游对这些异常只跳过当前笔记，不拦住的话会继续逐条请求
     from media_platform.xhs.exception import IPBlockError, PlatformAccessError
     error = unwrapped(error)
-    return isinstance(error, (IPBlockError, PlatformAccessError)) or 'CAPTCHA appeared' in str(error)
+    return isinstance(error, (IPBlockError, PlatformAccessError))
 
 
 def bili_blocked(error):
@@ -204,10 +204,11 @@ PLATFORMS = {
         },
         methods={'get_home_feed': FEED_ROUTE},
     ),
-    'wb': Platform('微博', groups={OTHER: Group(gap=(2, 4))}),
+    # 这几个方法自己发请求，不经过 request，漏掉就完全没有节流
+    'wb': Platform('微博', groups={OTHER: Group(gap=(2, 4))}, transports=('request', 'get_note_info_by_id')),
     # 贴吧有一部分通过页面完成，不经过 request
     'tieba': Platform('贴吧', groups={OTHER: Group(gap=(2, 4))}, transports=('request', '_fetch_json_by_browser', 'get_notes_by_keyword', 'get_note_by_id')),
-    'ks': Platform('快手', groups={OTHER: Group(gap=(2, 4))}),
+    'ks': Platform('快手', groups={OTHER: Group(gap=(2, 4))}, transports=('request', 'request_rest_v2', 'request_rest_v2_signed')),
 }
 # 登录状态检查不算采集，冷却期也要能判断账号是否有效
 EXEMPT = ('pong', 'query_self')
@@ -266,6 +267,13 @@ def bucket_full_at(free, group_name, now):
     return 0 if value > now + CLOCK_JUMP_SECONDS else value
 
 
+def check_cooldown(state, now):
+    blocked = number(state.get('blocked_until'))
+    if blocked > now:
+        minutes = math.ceil((blocked - now) / 60)
+        raise CreatorError('RATE_COOLDOWN', f'平台要求过验证，已暂停访问，请约 {minutes} 分钟后再试', retry_after=math.ceil(blocked - now))
+
+
 def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', background=False, opening=False):
     """从组里取一个名额并返回需要等待的秒数；状态文件异常时放行，不阻断采集
     limit 是调用方能接受的等待上限，超过时不占名额，抛 limit_code"""
@@ -275,10 +283,7 @@ def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', 
     try:
         with locked(path):
             state = read_state(path)
-            blocked = number(state.get('blocked_until'))
-            if blocked > now:
-                minutes = math.ceil((blocked - now) / 60)
-                raise CreatorError('RATE_COOLDOWN', f'平台要求过验证，已暂停访问，请约 {minutes} 分钟后再试', retry_after=math.ceil(blocked - now))
+            check_cooldown(state, now)
             free, used = mapping(state, 'free_at'), mapping(state, 'used')
             full_at = bucket_full_at(free, group_name, now)
             wait = max(0, full_at - (group.burst - 1) * fmean(group.gap) - now)
@@ -356,6 +361,10 @@ def start_cooldown(platform, now=None):
     try:
         with locked(path):
             state = read_state(path)
+            # 多个进程同时命中验证只算一次
+            blocked = number(state.get('blocked_until'))
+            if blocked > now:
+                return math.ceil(blocked - now)
             strikes = fresh_stamps(state.get('strikes'), now - STRIKE_SECONDS)
             seconds = min(config.cooldown * 2 ** len(strikes), MAX_COOLDOWN_SECONDS)
             write_state(path, {**state, 'blocked_until': now + seconds, 'strikes': strikes + [now]})
@@ -456,15 +465,18 @@ def paced(original, platform, route=None, report=None, limit=None, background=Fa
                 report('platform-request', key=platform, group=group, method=method, waited=round(waited, 1), outcome=outcome, **({'bypassed': True} if cli_policy['bypass'] else {}), **extra)
 
         scope = current_visit.get()
-        if scope and scope.covers(platform, group):
-            scope.left -= 1
-            wait = 0
-        else:
-            try:
+        try:
+            if scope and scope.covers(platform, group):
+                # 同一次动作里其他请求可能刚触发验证
+                if not cli_policy['bypass']:
+                    check_cooldown(read_state(state_path(platform)), time.time())
+                scope.left -= 1
+                wait = 0
+            else:
                 wait = take_turn(platform, group, limit, background)
-            except CreatorError as error:
-                record(error.code)
-                raise
+        except CreatorError as error:
+            record(error.code)
+            raise
         if report and wait >= 1:
             report('pacing-wait', key=platform, group=group, seconds=round(wait, 1))
         await asyncio.sleep(wait)

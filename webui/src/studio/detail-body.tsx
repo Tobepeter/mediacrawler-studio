@@ -61,8 +61,14 @@ export function DetailBody({ item }: { item: ContentItem }) {
   const comments = item.comments || []
   const bodyText = item.markdown || item.text
   const multiple = hasTranscript || !!item.commentStatus
+  // 选中的 Tab 可能消失（比如 stt 被卸载），退回正文，不留空白
+  const active =
+    (tab === 'transcript' && !hasTranscript) ||
+    (tab === 'comments' && !item.commentStatus)
+      ? 'body'
+      : tab
   return (
-    <Tabs value={tab} onValueChange={setTab} className='space-y-3'>
+    <Tabs value={active} onValueChange={setTab} className='space-y-3'>
       {/* 复制等操作跟内容放一起，滚动时留在顶部；右边让出弹窗的关闭按钮 */}
       <div className='sticky top-0 z-10 mr-8 flex min-h-11 items-center justify-between gap-2 bg-background py-1'>
         {multiple ? (
@@ -83,14 +89,14 @@ export function DetailBody({ item }: { item: ContentItem }) {
             {t('正文')}
           </span>
         )}
-        {tab === 'body' && !!bodyText && (
+        {active === 'body' && !!bodyText && (
           <CopyButton
             text={bodyText}
             label={t('复制正文')}
             className='size-7 shrink-0'
           />
         )}
-        {tab === 'transcript' && <TranscriptActions item={item} />}
+        {active === 'transcript' && <TranscriptActions item={item} />}
       </div>
       <TabsContent value='body' className='mt-0'>
         {body}

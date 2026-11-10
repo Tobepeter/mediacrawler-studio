@@ -357,12 +357,12 @@ export class StudioService {
     } catch {
       /* 连不上按未运行处理 */
     }
-    return {
-      state: existsSync(path.join(homedir(), '.local/bin/stt'))
-        ? 'installed'
-        : 'missing',
-      busy: false,
-    }
+    // 和 Python 侧一致：先看 PATH，再看 Electron 环境里通常没有的 ~/.local/bin
+    const installed = [
+      ...(process.env.PATH || '').split(path.delimiter).filter(Boolean),
+      path.join(homedir(), '.local/bin'),
+    ].some((dir) => existsSync(path.join(dir, 'stt')))
+    return { state: installed ? 'installed' : 'missing', busy: false }
   }
 
   async cacheSize() {
@@ -659,7 +659,7 @@ export class StudioService {
       throw new Error('登录后才能查看推荐')
     const page = await this.feed.load(platform, cursor)
     if (!page.cancelled && !page.throttled)
-      this.rememberFeed(platform, page.items, !cursor)
+      this.rememberFeed(platform, page.items)
     return page
   }
 
@@ -706,10 +706,14 @@ export class StudioService {
   }
 
   // 卡片数据只留在内存，供详情和下载按 ID 找回，不写历史
-  rememberFeed(platform, items, reset) {
-    const known = reset ? new Map() : this.feedItems.get(platform) || new Map()
+  // 不随首屏清空：静默刷新可能被放弃，界面上的旧卡片还要能打开，靠上限淘汰最旧的
+  rememberFeed(platform, items) {
+    const known = this.feedItems.get(platform) || new Map()
     for (const item of items)
-      if (item?.id && item.platform === platform) known.set(item.id, item)
+      if (item?.id && item.platform === platform) {
+        known.delete(item.id)
+        known.set(item.id, item)
+      }
     while (known.size > feedMemoryLimit) known.delete(known.keys().next().value)
     this.feedItems.set(platform, known)
   }

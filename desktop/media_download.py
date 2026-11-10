@@ -120,7 +120,8 @@ async def download_record(request, emit, page=None):
 
 def delivered_name(request, path):
     """桌面端直接存进下载目录，文件名由主进程定好；多张图片按序号区分"""
-    name = Path(str(request.get('fileName') or '')).name
+    # 文件名里的孤立代理字符写文件时会直接报错，不是 OSError
+    name = Path(str(request.get('fileName') or '').encode('utf-8', 'ignore').decode()).name
     if not name:
         return path.name
     many = request['kind'] == 'images' and len(request['record'].get('images') or []) > 1

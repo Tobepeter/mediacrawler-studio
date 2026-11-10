@@ -233,7 +233,12 @@ class DesktopCrawler:
                 # 列表卡片的媒体等打开详情时再取，否则一页又变成逐条请求
                 if item['id'] in self.store.cards:
                     continue
-                await enrich(self, item, self.request.get('quality', 'best'))
+                try:
+                    await enrich(self, item, self.request.get('quality', 'best'))
+                except CreatorError as error:
+                    # 正文已经拿到，后面的媒体信息等打开详情时再取，不继续请求
+                    self.emit('warning', message=str(error))
+                    break
                 self.emit('item-update', item=item)
         count = len(self.store.ids)
         empty = "这位博主暂无可见作品" if self.request["mode"] == "creator" else "没有找到相关内容，试试其他关键词"

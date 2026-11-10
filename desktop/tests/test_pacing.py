@@ -100,11 +100,18 @@ def test_cooldown_stops_every_group_then_expires(waits):
 
 
 def test_repeated_cooldowns_double_and_are_capped(waits):
-    assert [start_cooldown('t', now=1000 + index) for index in range(3)] == [100, 200, 400]
-    assert start_cooldown('t', now=1000 + 90000) == 100
-    for index in range(10):
-        last = start_cooldown('t', now=2000000 + index)
-    assert last == pacing.MAX_COOLDOWN_SECONDS
+    now, seen = 1000, []
+    for _ in range(9):
+        seen.append(start_cooldown('t', now=now))
+        now += seen[-1] + 1
+    assert seen[:3] == [100, 200, 400] and seen[-1] == pacing.MAX_COOLDOWN_SECONDS
+    assert start_cooldown('t', now=now + 90000) == 100
+
+
+def test_processes_hitting_verification_together_count_once(waits):
+    assert start_cooldown('t', now=1000) == 100
+    assert start_cooldown('t', now=1001) == 99
+    assert start_cooldown('t', now=1101) == 200
 
 
 @pytest.mark.parametrize('content', ['{broken', '[]', '{"free_at":"x","used":["y"],"blocked_until":null}', '{"used":{"limited":5}}', '{"free_at":{"one":"x"}}'])
@@ -177,6 +184,17 @@ async def test_visit_without_group_keeps_normal_pacing(waits):
     assert 'detail' not in PLATFORMS['ks'].groups
     async with visit('ks', 'detail'):
         assert current_visit.get() is None
+
+
+async def test_visit_stops_when_another_process_triggers_cooldown(waits):
+    call = AsyncMock(return_value={})
+    paced_call = pacing.paced(call, 't', Route('open'))
+    async with visit('t', 'open', requests=2):
+        await paced_call()
+        start_cooldown('t')
+        with pytest.raises(CreatorError) as caught:
+            await paced_call()
+    assert caught.value.code == 'RATE_COOLDOWN' and call.await_count == 1
 
 
 async def test_visit_refused_by_cooldown(waits):

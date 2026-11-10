@@ -43,13 +43,13 @@ export function ScrollSentinel(props: {
     if (!root || !needsScroll) return
     // 内容变短时浏览器也会触发 scroll，回到顶部的不算用户往下看
     const mark = () => {
-      if (root.scrollTop > 0) setScrolled(true)
+      if (root.scrollTop > 0 && node?.checkVisibility()) setScrolled(true)
     }
     root.addEventListener('scroll', mark, { passive: true })
     // 调整窗口也算用户在操作；观察器注册时的第一次回调不算
     let measured = false
     const resized = new ResizeObserver(() => {
-      if (measured) setScrolled(true)
+      if (measured && node?.checkVisibility()) setScrolled(true)
       measured = true
     })
     resized.observe(root)
@@ -57,7 +57,7 @@ export function ScrollSentinel(props: {
       root.removeEventListener('scroll', mark)
       resized.disconnect()
     }
-  }, [root, needsScroll])
+  }, [root, node, needsScroll])
   useEffect(() => {
     if (!root || !node || fillScreens === undefined) {
       setShort(false)
@@ -65,6 +65,11 @@ export function ScrollSentinel(props: {
     }
     // 哨兵紧跟列表末尾，用它的位置判断可视区下方还备着多少内容
     const measure = () => {
+      // 隐藏的列表量不出位置，不能据此判断内容不够
+      if (!node.checkVisibility()) {
+        setShort(false)
+        return
+      }
       const view = root.getBoundingClientRect()
       setShort(
         node.getBoundingClientRect().top <
@@ -75,7 +80,7 @@ export function ScrollSentinel(props: {
     const observer = new ResizeObserver(measure)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [root, node, fillScreens])
+  }, [root, node, fillScreens, inView])
   const shouldContinue = active && inView && (!needsScroll || scrolled || short)
   useEffect(() => {
     if (shouldContinue) onReach()
