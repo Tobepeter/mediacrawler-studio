@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { isPreloaded } from './cover-preload'
+import { isCoverReady, markCoverReady } from './cover-preload'
 import { openSource } from './content-detail'
 import { useCoverBackfill } from './cover-backfill'
 import { AuthorName } from './creator-ui'
@@ -113,13 +113,18 @@ export function ResultCard(props: {
   )
 }
 
-// 封面占位尺寸固定；网络图片与缓存图片均按加载完成淡入
+// 封面占位尺寸固定；第一次加载完成时淡入，显示过的直接出现，返回列表不再闪白
 function ResultCover({ src }: { src: string }) {
-  const [loaded, setLoaded] = useState(() => isPreloaded(src))
+  const [known] = useState(() => isCoverReady(src))
+  const [loaded, setLoaded] = useState(known)
+  const finish = () => {
+    markCoverReady(src)
+    setLoaded(true)
+  }
   return (
     <img
       ref={(image) => {
-        if (image?.complete && image.naturalWidth) setLoaded(true)
+        if (image?.complete && image.naturalWidth) finish()
       }}
       className={cn(
         'size-full object-cover transition-[opacity,transform] duration-300 motion-safe:group-hover:scale-105 motion-reduce:transition-none',
@@ -127,10 +132,10 @@ function ResultCover({ src }: { src: string }) {
       )}
       src={src}
       alt=''
-      loading='lazy'
-      decoding='async'
+      loading={known ? 'eager' : 'lazy'}
+      decoding={known ? 'sync' : 'async'}
       referrerPolicy='no-referrer'
-      onLoad={() => setLoaded(true)}
+      onLoad={finish}
     />
   )
 }

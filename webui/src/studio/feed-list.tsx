@@ -4,6 +4,7 @@ import { Inbox, Loader2 } from 'lucide-react'
 import { Reveal } from '@/components/common/reveal'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isCoverReady } from './cover-preload'
 import { ResultCard } from './result-card'
 import { RetryNotice } from './retry-notice'
 import { useStudioRoute } from './route'
@@ -11,12 +12,7 @@ import { ScrollSentinel } from './scroll-sentinel'
 import { useStudio } from './store'
 import { ThrottledError, useRetryWait } from './throttle'
 import type { Platform } from './types'
-import {
-  justSwapped,
-  useFeed,
-  useFeedFreshness,
-  useFeedRefreshing,
-} from './use-feed'
+import { useFeed, useFeedFreshness, useFeedRefreshing } from './use-feed'
 
 const gridClass =
   'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
@@ -25,11 +21,18 @@ const placeholders = Array.from({ length: 10 }, (_, index) => index)
 const AUTO_RESUMES = 3
 
 // 没有搜索结果时的默认内容；只跟滚动翻页，不写历史
-export function FeedList({ platform }: { platform: Platform }) {
+export function FeedList({
+  platform,
+  visible,
+}: {
+  platform: Platform
+  visible: boolean
+}) {
   const { t } = useTranslation('studio')
   const feed = useFeed(platform)
   // 隐藏的 Tab 量不出高度，切回来时重新量
-  const current = useStudio((state) => state.platform === platform)
+  const showing = useStudio((state) => state.platform === platform)
+  const current = showing && visible
   const route = useStudioRoute()
   const paused = useStudio(
     (state) => !!state.selected || state.creatorSearchOpen,
@@ -40,8 +43,6 @@ export function FeedList({ platform }: { platform: Platform }) {
     [fetchNextPage],
   )
   const items = feed.data?.items || []
-  // 静默换内容时直接显示，不重播入场动画
-  const instant = justSwapped(platform)
   useFeedFreshness(platform, current)
   const refreshing = useFeedRefreshing(platform)
   // 被限流时等倒计时结束，用户再滚动或调整窗口才继续；次数用完只留按钮
@@ -94,7 +95,8 @@ export function FeedList({ platform }: { platform: Platform }) {
           <Reveal
             key={item.id}
             delay={Math.min(index, 4) * 40}
-            instant={instant}
+            // 隐藏时加载的、封面已经显示或下好的，都不播入场动画
+            instant={!visible || isCoverReady(item.images[0])}
           >
             <ResultCard item={item} hidePlatform />
           </Reveal>
@@ -107,6 +109,7 @@ export function FeedList({ platform }: { platform: Platform }) {
           !feed.isFetchingNextPage &&
           !refreshing &&
           (!failure || resumable) &&
+          visible &&
           !paused &&
           route !== 'history'
         }

@@ -85,10 +85,6 @@ export const useFeedRefreshing = (platform: Platform) =>
     () => refreshing.has(platform),
   )
 
-const swaps = new Map<Platform, number>()
-export const justSwapped = (platform: Platform) =>
-  Date.now() - (swaps.get(platform) || 0) < 1000
-
 // 新内容回来才整页替换，旧列表一直留着；手动和静默刷新共用，同平台只跑一个
 // 静默刷新要等封面就绪，等待期间用户动了就放弃，不能把正在看的内容换掉
 function replaceFeed(platform: Platform, keep?: () => boolean) {
@@ -111,7 +107,6 @@ function replaceFeed(platform: Platform, keep?: () => boolean) {
         COVER_WAIT_MS,
       )
       if (!keep()) return false
-      swaps.set(platform, Date.now())
     }
     queryClient.setQueryData<InfiniteData<FeedPage>>(queryKey, {
       pages: [page],

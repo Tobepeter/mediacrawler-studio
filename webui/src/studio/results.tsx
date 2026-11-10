@@ -17,6 +17,7 @@ import type { Platform } from './types'
 import { matchesKeyword } from './creator-ui'
 import { feedPlatforms } from './creator-options'
 import { FeedList } from './feed-list'
+import { isCoverReady } from './cover-preload'
 import { ResultCard } from './result-card'
 import { ScrollSentinel } from './scroll-sentinel'
 
@@ -80,13 +81,17 @@ const ResultItems = memo(function ResultItems({
     count: pagedTask?.limit,
   })
   const moreLabels = [t('采集中'), t('重试'), t('加载更多'), continueLabel]
-  if (!page && feedPlatforms.includes(platform))
-    return <FeedList platform={platform} />
-  // 没有推荐流的平台验证期间留空，不闪“暂无结果”
-  if (!page && checking) return null
+  const hasFeed = feedPlatforms.includes(platform)
   return (
     <>
-      {!results.length ? (
+      {/* 看搜索或博主结果时推荐流也留着，否则加载被取消，返回时又要从头转圈 */}
+      {hasFeed && (
+        <div className={page ? 'hidden' : 'flex flex-1 flex-col'}>
+          <FeedList platform={platform} visible={!page} />
+        </div>
+      )}
+      {/* 没有推荐流的平台验证期间留空，不闪“暂无结果” */}
+      {!page && (hasFeed || checking) ? null : !results.length ? (
         <div className='flex flex-1 flex-col items-center justify-center gap-4 py-16 text-muted-foreground'>
           {active ? (
             <Loader2
@@ -113,6 +118,8 @@ const ResultItems = memo(function ResultItems({
               <Reveal
                 key={`${page?.id}:${item.id}`}
                 delay={Math.min(index, 4) * 40}
+                // 返回列表时封面都显示过，不重播入场动画
+                instant={isCoverReady(item.images[0])}
               >
                 <ResultCard item={item} creatorPage={!!creatorTask} />
               </Reveal>

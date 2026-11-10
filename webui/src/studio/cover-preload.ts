@@ -1,13 +1,20 @@
 const ready = new Set<string>()
+const limit = 3000
 
-export const isPreloaded = (src: string) => ready.has(src)
+export const isCoverReady = (src?: string) => !!src && ready.has(src)
+
+export function markCoverReady(src: string) {
+  ready.delete(src)
+  ready.add(src)
+  if (ready.size > limit) ready.delete(ready.values().next().value as string)
+}
 
 function load(src: string) {
   return new Promise<void>((resolve) => {
     const image = new Image()
     image.referrerPolicy = 'no-referrer'
     image.onload = () => {
-      ready.add(src)
+      markCoverReady(src)
       resolve()
     }
     image.onerror = () => resolve()
@@ -17,7 +24,6 @@ function load(src: string) {
 
 // 静默换内容前先把封面下好，超时也继续，慢的那几张按普通方式淡入
 export async function preloadCovers(urls: string[], timeoutMs: number) {
-  ready.clear()
   await Promise.race([
     Promise.all(urls.map(load)),
     new Promise((resolve) => setTimeout(resolve, timeoutMs)),
