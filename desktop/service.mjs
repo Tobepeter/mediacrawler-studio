@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { StudioLibrary } from './library.mjs'
 import { DownloadJob } from './download-job.mjs'
 import { FeedScheduler } from './feed-scheduler.mjs'
+import { downloadName } from './download-name.mjs'
 import { FileCache } from './file-cache.mjs'
 import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
@@ -261,7 +262,12 @@ export class StudioService {
     )
       throw new Error('清晰度无效')
     const record = this.mediaItem(platform, id, kind)
-    return this.runMedia(record, { kind, directory, quality })
+    return this.runMedia(record, {
+      kind,
+      directory,
+      quality,
+      fileName: downloadName(record),
+    })
   }
 
   async resolveVideo(platform, id, requestId) {
@@ -393,7 +399,7 @@ export class StudioService {
         segments: track.segments,
         text: track.segments.map((row) => row.text).join('\n'),
       })
-    return { transcript: transcript || null, title: item?.title }
+    return { transcript: transcript || null, item }
   }
 
   cachedTranscript(platform, id) {

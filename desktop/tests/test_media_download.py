@@ -235,3 +235,22 @@ async def test_specific_quality_without_variants_fetches_first(monkeypatch):
     monkeypatch.setattr('media_downloader.selection.choose_items', lambda record, quality, variant: [SimpleNamespace(url=record['media']['variants'][0]['id'], is_dash=False)])
     result = await media_download.download_record({'record': stored, 'kind': 'video', 'quality': '720p', 'runner': object()}, lambda *a, **k: None)
     assert result['used'][0].url == 'new'
+
+
+@pytest.mark.asyncio
+async def test_desktop_saves_flat_with_given_name(tmp_path, transport):
+    transport(lambda req: httpx.Response(200, headers={'content-type': 'image/jpeg'}, content=req.url.path.encode()))
+    result = await download.download_media({**request(tmp_path), 'fileName': '作者 - 标题'}, lambda *a, **k: None)
+    assert result['saved'] == 2
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['作者 - 标题 001.jpg', '作者 - 标题 002.jpg']
+
+
+@pytest.mark.asyncio
+async def test_same_name_is_not_overwritten(tmp_path, transport):
+    transport(lambda req: httpx.Response(200, headers={'content-type': 'image/jpeg'}, content=b'new'))
+    (tmp_path / '作者 - 标题.jpg').write_bytes(b'old')
+    result = await download.download_media({**request(tmp_path, count=1), 'fileName': '作者 - 标题'}, lambda *a, **k: None)
+    assert result['saved'] == 1
+    assert (tmp_path / '作者 - 标题.jpg').read_bytes() == b'old'
+    assert (tmp_path / '作者 - 标题 (2).jpg').read_bytes() == b'new'
+

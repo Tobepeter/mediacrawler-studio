@@ -3,11 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import {
-  availablePath,
-  transcriptContent,
-  transcriptName,
-} from '../transcript-file.mjs'
+import { availablePath, transcriptContent } from '../transcript-file.mjs'
 
 const transcript = {
   text: '第一句\n第二句',
@@ -33,13 +29,6 @@ test('没有分段时 SRT 退回纯文字', () => {
     transcriptContent({ text: '全文', segments: [] }, 'srt'),
     '全文\n',
   )
-})
-
-test('文件名去掉路径字符并限制长度', () => {
-  assert.equal(transcriptName('a/b:c?\n d', 'srt'), 'a b c d.srt')
-  assert.equal(transcriptName('', 'txt'), '字幕.txt')
-  assert.equal(transcriptName('长'.repeat(200), 'txt').length, 84)
-  assert.ok(!transcriptName('../../etc/passwd', 'txt').includes('/'))
 })
 
 test('同名文件不覆盖', () => {

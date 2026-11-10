@@ -18,16 +18,6 @@ export function transcriptContent(transcript, format) {
     .join('\n')
 }
 
-// 标题来自平台，去掉路径和文件系统不允许的字符
-export function transcriptName(title, format) {
-  const clean = String(title || '')
-    .replace(/[\\/:*?"<>|\p{Cc}]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80)
-  return `${clean || '字幕'}.${format}`
-}
-
 // 已有同名文件时加序号，不覆盖之前下载的
 export function availablePath(target) {
   if (!existsSync(target)) return target

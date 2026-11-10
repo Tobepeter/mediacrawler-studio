@@ -10,7 +10,7 @@ import {
   WebContentsView,
 } from 'electron'
 import { createServer } from 'node:net'
-import { writeFile, mkdir, mkdtemp, readdir, rmdir } from 'node:fs/promises'
+import { writeFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PlatformWindows } from './platform-windows.mjs'
@@ -22,11 +22,8 @@ import { appIcon } from './app-icon.mjs'
 import { installPlaybackHeaders } from './playback-headers.mjs'
 import { HealthCheck } from './health-check.mjs'
 import { resolveCreatorLink } from './share-links.mjs'
-import {
-  availablePath,
-  transcriptContent,
-  transcriptName,
-} from './transcript-file.mjs'
+import { availablePath, transcriptContent } from './transcript-file.mjs'
+import { downloadName } from './download-name.mjs'
 import { CliInstall } from './cli-install.mjs'
 import { acquireInstance } from './single-instance.mjs'
 
@@ -185,10 +182,10 @@ app
     handle('transcribe', (platform, id) => service.transcribe(platform, id))
     handle('save-transcript', async (platform, id, format, ask = false) => {
       if (!['srt', 'txt'].includes(format)) throw new Error('不支持的格式')
-      const { transcript, title } = service.transcriptExport(platform, id)
+      const { transcript, item } = service.transcriptExport(platform, id)
       if (!transcript) throw new Error('这条视频还没有字幕')
       let target = availablePath(
-        path.join(app.getPath('downloads'), transcriptName(title, format)),
+        path.join(app.getPath('downloads'), `${downloadName(item)}.${format}`),
       )
       if (ask === true) {
         const result = await dialog.showSaveDialog(mainWindow, {
@@ -230,7 +227,6 @@ app
         service.mediaItem(platform, id, kind)
         if (choosingDownload.has(platform)) throw new Error('请先结束当前任务')
         choosingDownload.add(platform)
-        let directory
         try {
           let destination = app.getPath('downloads')
           if (askBeforeDownload === true) {
@@ -243,12 +239,11 @@ app
             destination = selected.filePaths[0]
           }
           await mkdir(destination, { recursive: true })
-          directory = await mkdtemp(path.join(destination, 'MediaCrawler-'))
           const result = await service.downloadMedia(
             platform,
             id,
             kind,
-            directory,
+            destination,
             quality,
           )
           return result
@@ -262,13 +257,6 @@ app
           throw error
         } finally {
           choosingDownload.delete(platform)
-          if (directory) {
-            try {
-              if (!(await readdir(directory)).length) await rmdir(directory)
-            } catch {
-              /* 清理空目录失败不覆盖下载结果 */
-            }
-          }
         }
       },
     )

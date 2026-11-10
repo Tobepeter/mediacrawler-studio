@@ -6,6 +6,7 @@ import socket
 import tempfile
 from contextlib import nullcontext
 from dataclasses import replace
+from itertools import count as forever
 from pathlib import Path
 from urllib.parse import urlsplit
 import httpx
@@ -117,6 +118,25 @@ async def download_record(request, emit, page=None):
     return result
 
 
+def delivered_name(request, path):
+    """桌面端直接存进下载目录，文件名由主进程定好；多张图片按序号区分"""
+    name = Path(str(request.get('fileName') or '')).name
+    if not name:
+        return path.name
+    many = request['kind'] == 'images' and len(request['record'].get('images') or []) > 1
+    return f'{name} {path.stem}{path.suffix}' if many else f'{name}{path.suffix}'
+
+
+def link_unique(source, output, name):
+    target = output / name
+    for index in forever(2):
+        try:
+            os.link(source, target)
+            return target
+        except FileExistsError:
+            target = output / f'{Path(name).stem} ({index}){Path(name).suffix}'
+
+
 async def download_media(request, emit, page=None):
     record, kind = request['record'], request['kind']
     platform = record['platform']
@@ -151,13 +171,13 @@ async def download_media(request, emit, page=None):
                     except httpx.HTTPError:
                         downloader.failure = 'network'
                 if path:
-                    # 同一文件系统内原子交付；目标目录由主进程新建，不覆盖已有文件
+                    # 同一文件系统内原子交付，不覆盖已有文件
                     try:
-                        os.link(path, output / path.name)
+                        delivered = link_unique(path, output, delivered_name(request, path))
                     except OSError:
                         errors.append('disk')
                         return False
-                    files.append(str(output / path.name))
+                    files.append(str(delivered))
                     saved += 1
                     emit('download-progress', saved=saved)
                     return True
