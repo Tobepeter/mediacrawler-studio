@@ -124,6 +124,21 @@ mediacrawler transcribe --input results.json
 
 有平台字幕时直接用字幕，否则下载最低画质的视频转写，完成后删除临时文件。结果含 `text`、`segments[{start,end,text}]`、`source`（`subtitle` 或 `stt`）。`stt` 正忙时返回 `stt_busy` 和 `retry_after`，不排队。
 
+## 图片转文字
+
+图文帖的干货常写在图里，正文只有一句“见图”，这时用 OCR 把图里的字提出来。依赖本机 `rapidocr` 命令（`uv tool install rapidocr`），本工具不安装 OCR 引擎；没有时返回 `ocr_unavailable`。
+
+```bash
+mediacrawler ocr --check
+mediacrawler ocr --file ./note.jpg
+mediacrawler ocr --source '作品链接'
+mediacrawler ocr --input results.json --auto
+```
+
+下载作品全部图片后逐张识别，完成后删除临时文件。结果在 `ocr` 里，含合并后的 `text` 和逐张的 `images[{index,text}]`，`source` 为 `ocr`；置信度低于 0.5 的行丢弃。视频返回 `video`（请用 `transcribe`），没有图片返回 `no_images`，识别不到文字返回 `no_text`。
+
+`--auto` 只处理正文不到 100 字、至少两张图的图文帖，跳过多少条输出到 stderr。做调研时先 `search` 存下结果，再对它跑 `ocr --input --auto`，不用逐条判断。图片走 CDN 下载，不占平台接口额度；`--source` 会先打开作品页，算一次详情。
+
 ## 数据目录与并行
 
 默认 macOS `~/Library/Application Support/mediacrawler`，Linux `~/.local/share/mediacrawler`（遵循 XDG），Windows `%LOCALAPPDATA%/mediacrawler`

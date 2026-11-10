@@ -281,3 +281,16 @@ def test_metadata_write_failure_keeps_stdout_and_releases_lock(tmp_path, monkeyp
         run(request(tmp_path))
     assert json.loads(capsys.readouterr().out) == {'id': 'a'}
     recover(tmp_path, 'bili', 'default')
+
+
+def test_load_records_accepts_search_output(tmp_path):
+    from mediacrawler_cli.__main__ import load_records
+    item = {'id': 'xhs:1', 'platform': 'xhs', 'url': 'https://www.xiaohongshu.com/explore/1', 'images': []}
+    page = {'type': 'page', 'next_cursor': None, 'has_more': False, 'count': 1, 'complete': True}
+    jsonl = tmp_path / 'a.jsonl'
+    jsonl.write_text(json.dumps(item) + '\n' + json.dumps(page) + '\n')
+    wrapped = tmp_path / 'a.json'
+    wrapped.write_text(json.dumps({'items': [item], 'page': page}))
+    for path in (jsonl, wrapped):
+        records, platform = load_records(str(path), None)
+        assert [r['id'] for r in records] == ['xhs:1'] and platform == 'xhs'

@@ -205,7 +205,11 @@ def load_records(input, platform):
             records = json.loads(text)
         except json.JSONDecodeError:
             records = [json.loads(line) for line in text.splitlines() if line.strip()]
+        # 直接接 search/collect 的输出：--format json 是 {items, page}，JSONL 末行是分页信息
+        if isinstance(records, dict) and isinstance(records.get('items'), list):
+            records = records['items']
         records = records if isinstance(records, list) else [records]
+        records = [r for r in records if not (isinstance(r, dict) and r.get('type') == 'page')]
         if not 1 <= len(records) <= 100 or any(not isinstance(r, dict) or not isinstance(r.get('id'), str) for r in records):
             raise ValueError('需要 1–100 条带 id/platform 的采集结果')
         platforms = {r.get('platform') for r in records}
@@ -297,6 +301,72 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
     with tempfile.TemporaryDirectory(prefix='mediacrawler-stt-run-') as folder:
         invoke('download', platform, profile, data_dir, query=source or '', mode='link', limit=1,
                records=records, kind='video', quality='worst', variant_id=None, transcribe=True,
+               output_dir=folder, save=True, non_interactive=non_interactive, qr=qr,
+               timeout=timeout, verbose=verbose, format='json', max_wait=max_wait, no_throttle=no_throttle)
+
+
+@app.command('ocr')
+def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地图片'),
+                source: Optional[str] = typer.Option(None, help='作品页面链接，下载全部图片后识别'),
+                input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin'),
+                auto: bool = typer.Option(False, '--auto', help='配合 --input，只识别正文不到 100 字、至少两张图的图文帖'),
+                check_only: bool = typer.Option(False, '--check', help='只检查本机 rapidocr 是否可用'),
+                platform: Optional[str] = None, profile: str = 'default', data_dir: Optional[str] = None,
+                non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码、image 图片、browser 浏览器'),
+                timeout: int = typer.Option(900, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
+    """识别图文帖图片里的文字，干货写在图里、正文只有一句“见图”时用
+
+    需要本机安装 rapidocr，本工具不安装 OCR 引擎；视频请用 transcribe
+
+    ocr --check
+
+    ocr --file ./note.jpg
+
+    ocr --source '作品链接'
+
+    ocr --input results.json --auto
+    """
+    import asyncio
+    import tempfile
+    from desktop.links import allowed
+    from desktop.ocr import OcrError, check, needs_ocr, ocr_file
+    if check_only:
+        state = check()
+        typer.echo(json.dumps(state, ensure_ascii=False))
+        raise typer.Exit(0 if state['state'] == 'ready' else 1)
+    if sum(bool(v) for v in (file, source, input)) != 1:
+        raise typer.BadParameter('--file、--source、--input 必须且只能选一个')
+    if auto and not input:
+        raise typer.BadParameter('--auto 只能配合 --input 使用')
+    if file:
+        if not Path(file).is_file():
+            raise typer.BadParameter('文件不存在')
+        try:
+            typer.echo(json.dumps(asyncio.run(ocr_file(file)), ensure_ascii=False))
+        except OcrError as error:
+            typer.echo(json.dumps({'code': error.code, 'message': str(error), 'retryable': False}, ensure_ascii=False), err=True)
+            raise typer.Exit(1)
+        return
+    if check()['state'] != 'ready':
+        typer.echo(json.dumps({'code': 'ocr_unavailable', 'message': '需要本机安装 rapidocr', 'retryable': False}, ensure_ascii=False), err=True)
+        raise typer.Exit(1)
+    records = None
+    if source:
+        platform = platform or next((p for p in PLATFORMS if allowed(source, p)), None)
+        if not platform or platform not in PLATFORMS or not allowed(source, platform):
+            raise typer.BadParameter('无法识别作品平台，请检查 HTTPS 作品链接')
+    else:
+        records, platform = load_records(input, platform)
+        if auto:
+            picked = [record for record in records if needs_ocr(record)]
+            typer.echo(f'--auto：{len(records)} 条里有 {len(picked)} 条需要识别', err=True)
+            if not picked:
+                typer.echo('[]')
+                return
+            records = picked
+    with tempfile.TemporaryDirectory(prefix='mediacrawler-ocr-run-') as folder:
+        invoke('download', platform, profile, data_dir, query=source or '', mode='link', limit=1,
+               records=records, kind='images', quality='best', variant_id=None, ocr=True,
                output_dir=folder, save=True, non_interactive=non_interactive, qr=qr,
                timeout=timeout, verbose=verbose, format='json', max_wait=max_wait, no_throttle=no_throttle)
 
