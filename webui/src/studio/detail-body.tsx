@@ -1,25 +1,26 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Heart, Loader2 } from 'lucide-react'
 import { CopyButton } from '@/components/common/copy-button'
 import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CommentsPanel, useCommentsTab } from './comments-panel'
 import { RetryNotice } from './retry-notice'
 import {
   TranscriptActions,
   TranscriptPanel,
   useTranscriptTab,
 } from './transcript'
-import type { ContentComment, ContentItem } from './types'
+import type { ContentItem } from './types'
 import { useDetailMedia } from './use-detail-media'
 
-// 只有正文时不显示 Tab，复制按钮仍在同一行；旧记录不显示评论页，新任务明确区分等待、空结果、失败和取消
+// 只有正文时不显示 Tab，复制按钮仍在同一行
 export function DetailBody({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
 
   const detail = useDetailMedia(item)
   const hasTranscript = useTranscriptTab(item)
+  const hasComments = useCommentsTab(item)
   const [tab, setTab] = useState('body')
   // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
   if (item.feed && !item.text && !detail.loading) {
@@ -60,11 +61,11 @@ export function DetailBody({ item }: { item: ContentItem }) {
   )
   const comments = item.comments || []
   const bodyText = item.markdown || item.text
-  const multiple = hasTranscript || !!item.commentStatus
+  const multiple = hasTranscript || hasComments
   // 选中的 Tab 可能消失（比如 stt 被卸载），退回正文，不留空白
   const active =
     (tab === 'transcript' && !hasTranscript) ||
-    (tab === 'comments' && !item.commentStatus)
+    (tab === 'comments' && !hasComments)
       ? 'body'
       : tab
   return (
@@ -77,7 +78,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
             {hasTranscript && (
               <TabsTrigger value='transcript'>{t('字幕')}</TabsTrigger>
             )}
-            {item.commentStatus && (
+            {hasComments && (
               <TabsTrigger value='comments'>
                 {t('评论')}
                 {comments.length ? ` ${comments.length}` : ''}
@@ -107,90 +108,11 @@ export function DetailBody({ item }: { item: ContentItem }) {
           <TranscriptPanel item={item} />
         </TabsContent>
       )}
-      {item.commentStatus && (
-        <TabsContent value='comments' className='mt-0 space-y-4'>
-          <Comments status={item.commentStatus} comments={comments} />
+      {hasComments && (
+        <TabsContent value='comments' className='mt-0'>
+          <CommentsPanel item={item} />
         </TabsContent>
       )}
     </Tabs>
-  )
-}
-
-function Comments({
-  status: state,
-  comments,
-}: {
-  status: NonNullable<ContentItem['commentStatus']>
-  comments: ContentComment[]
-}) {
-  const { t } = useTranslation('studio')
-  const roots = comments.filter((comment) => !comment.parentId)
-  const replies = new Map<string, ContentComment[]>()
-  for (const comment of comments) {
-    if (comment.parentId)
-      replies.set(comment.parentId, [
-        ...(replies.get(comment.parentId) || []),
-        comment,
-      ])
-  }
-  const loading = ['pending', 'running'].includes(state)
-  const status =
-    state === 'pending'
-      ? t('等待采集评论')
-      : state === 'running'
-        ? t('正在采集评论')
-        : state === 'error'
-          ? t('评论未取全，已保留现有内容')
-          : state === 'cancelled'
-            ? t('已停止，保留已获取的评论')
-            : ''
-  return (
-    <>
-      {status && (
-        <p
-          className='flex items-center gap-2 text-body text-muted-foreground'
-          role='status'
-        >
-          {loading && (
-            <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
-          )}
-          {status}
-        </p>
-      )}
-      {!comments.length && state === 'completed' && (
-        <p className='text-body text-muted-foreground'>{t('暂无评论')}</p>
-      )}
-      {roots.map((comment) => (
-        <div key={comment.id} className='space-y-3'>
-          <CommentRow comment={comment} />
-          {!!replies.get(comment.id)?.length && (
-            <div className='ml-4 space-y-3 rounded-md bg-muted/40 p-3'>
-              {replies.get(comment.id)!.map((reply) => (
-                <CommentRow key={reply.id} comment={reply} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </>
-  )
-}
-
-function CommentRow({ comment }: { comment: ContentComment }) {
-  const { t } = useTranslation('studio')
-
-  return (
-    <div className='space-y-1'>
-      <div className='flex items-center justify-between gap-2 text-caption text-muted-foreground'>
-        <span className='truncate'>{comment.author || t('匿名用户')}</span>
-        <span className='inline-flex shrink-0 items-center gap-1'>
-          <Heart className='size-3' />
-          {comment.likes}
-        </span>
-      </div>
-      <p className='whitespace-pre-wrap break-words text-body leading-relaxed'>
-        {comment.text}
-      </p>
-    </div>
   )
 }

@@ -45,6 +45,7 @@ const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
 const feedWaitLimit = 12
 const sttUrl = 'http://127.0.0.1:29556'
+const commentPlatforms = ['bili', 'dy', 'xhs']
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -60,6 +61,7 @@ export class StudioService {
   details = new Map()
   feedItems = new Map()
   transcripts = new Map()
+  commentJobs = new Set()
   persistence = Promise.resolve()
   state = {
     policy: healthPolicy,
@@ -164,8 +166,6 @@ export class StudioService {
       query: value.query,
       mode: value.mode,
       limit: value.limit,
-      comments: value.comments === true,
-      replies: value.comments === true && value.replies === true,
       filters: validateFilters(platform, value.filters),
       ...(typeof value.auto === 'boolean' ? { auto: value.auto } : {}),
     }
@@ -382,6 +382,43 @@ export class StudioService {
     await Promise.all(
       this.windows.cacheSessions().map((session) => session.clearCache()),
     )
+  }
+
+  // 详情页滚动时一次取一页；只读，不占平台互斥
+  async loadComments(platform, id, { cursor, parent } = {}) {
+    if (!commentPlatforms.includes(platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    if (
+      !['undefined', 'string', 'number'].includes(typeof cursor) ||
+      String(cursor ?? '').length > 4096 ||
+      !['undefined', 'string'].includes(typeof parent)
+    )
+      throw new Error('翻页位置无效')
+    if (this.state.accounts[platform] !== 'connected') return { code: 'login' }
+    const record = this.findItem(platform, id)
+    if (!record) return { code: 'unavailable' }
+    if (!existsSync(this.python)) return { code: 'environment' }
+    const job = this.mediaJob(platform)
+    this.commentJobs.add(job)
+    try {
+      const result = await job.run({
+        record,
+        kind: 'comments',
+        cursor,
+        parent,
+      })
+      return {
+        code: result.code || '',
+        items: result.comments || [],
+        nextCursor: result.nextCursor ?? null,
+        hasMore: !!result.hasMore,
+        throttleCode: result.throttleCode,
+        retryAfter: result.retryAfter,
+        message: result.message,
+      }
+    } finally {
+      this.commentJobs.delete(job)
+    }
   }
 
   // 保存字幕时用：生成过的优先，否则用平台字幕，中文轨优先
@@ -1052,6 +1089,7 @@ export class StudioService {
     await Promise.all(
       [
         ...this.details.values(),
+        ...this.commentJobs,
         ...[...this.transcripts.values()].map(({ job }) => job),
       ].map((job) => job.cancel()),
     )

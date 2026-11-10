@@ -209,6 +209,31 @@ def load_records(input, platform):
     return records, platform
 
 
+@app.command('comments')
+def comments_command(source: str = typer.Option(..., help='作品页面链接'), cursor: Optional[str] = typer.Option(None, help='上一页返回的 next_cursor'),
+                     parent: Optional[str] = typer.Option(None, help='主评论 ID，传了就取这条评论的回复'),
+                     platform: Optional[str] = None, profile: str = 'default', data_dir: Optional[str] = None,
+                     non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码、image 图片、browser 浏览器'),
+                     timeout: int = typer.Option(180, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False,
+                     format: str = 'jsonl'):
+    """取一页评论，支持 B 站、抖音、小红书
+
+    comments --source '作品链接'
+
+    comments --source '作品链接' --cursor '上一页的 next_cursor'
+
+    comments --source '作品链接' --parent 主评论ID
+
+    要批量就循环调用；collect --comments 仍可随采集带上有界评论
+    """
+    from desktop.links import allowed
+    platform = platform or next((p for p in PLATFORMS if allowed(source, p)), None)
+    if platform not in ('bili', 'dy', 'xhs') or not allowed(source, platform):
+        raise typer.BadParameter('评论支持 B 站、抖音、小红书的 HTTPS 作品链接')
+    invoke('comments', platform, profile, data_dir, query=source, mode='link', limit=1, cursor=cursor, parent=parent, paged=True,
+           non_interactive=non_interactive, qr=qr, timeout=timeout, verbose=verbose, format=format, max_wait=max_wait, no_throttle=no_throttle)
+
+
 @app.command('transcribe')
 def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='本地音视频文件'),
                        source: Optional[str] = typer.Option(None, help='作品页面链接，下载最低画质后转写'),

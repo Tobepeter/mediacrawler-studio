@@ -35,8 +35,20 @@ def normalize(item, platform):
     }
 
 
+def comment_fields(raw):
+    identity = str(raw.get('comment_id') or '')
+    if not identity:
+        return None
+    parent = str(raw.get('parent_comment_id') or '')
+    return {
+        'id': identity, 'parentId': '' if parent == '0' else parent, 'text': raw.get('content') or '',
+        'author': str(raw.get('nickname') or raw.get('user_nickname') or '')[:AUTHOR_LIMIT], 'likes': str(raw.get('like_count') or raw.get('comment_like_count') or '0'),
+    }
+
+
 class ResultStore:
     def __init__(self, platform, limit, emit, comments=False):
+        self.page_rows = None  # 按页取评论时用，不写进作品
         self.platform = platform
         self.limit = limit
         self.emit = emit
@@ -82,22 +94,22 @@ class ResultStore:
 
     async def store_comment(self, comment_item):
         raw = comment_item
+        if self.page_rows is not None:
+            fields = comment_fields(raw)
+            if fields:
+                self.page_rows.append(fields)
+            return
         content_id = raw.get('video_id') or raw.get('aweme_id') or raw.get('note_id') or raw.get('content_id')
         if self.platform == 'zhihu':
             content_id = f"{raw.get('content_type') or 'answer'}:{content_id}"
         item = self.items.get(f'{self.platform}:{content_id}')
         if not item or not self.comments:
             return
-        identity = str(raw.get('comment_id') or '')
-        if not identity or any(comment['id'] == identity for comment in item['comments']):
+        fields = comment_fields(raw)
+        if not fields or any(comment['id'] == fields['id'] for comment in item['comments']):
             return
-        parent = str(raw.get('parent_comment_id') or '')
-        parent = '' if parent == '0' else parent
         # 主评论与回复各最多20条，独立于上游页大小
-        if sum(bool(comment['parentId']) == bool(parent) for comment in item['comments']) >= 20:
+        if sum(bool(comment['parentId']) == bool(fields['parentId']) for comment in item['comments']) >= 20:
             return
-        item['comments'].append({
-            'id': identity, 'parentId': parent, 'text': raw.get('content') or '',
-            'author': str(raw.get('nickname') or raw.get('user_nickname') or '')[:AUTHOR_LIMIT], 'likes': str(raw.get('like_count') or raw.get('comment_like_count') or '0'),
-        })
+        item['comments'].append(fields)
         self.emit('item-update', item=item)

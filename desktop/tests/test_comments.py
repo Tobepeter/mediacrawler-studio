@@ -71,3 +71,46 @@ async def test_disabled_comments_never_fetch(monkeypatch):
     # 无 client 仍可完成，证明关闭选项不访问评论接口
     await runner.run()
     assert 'comments' not in runner.store.items['dy:1']
+
+
+def page_collector(platform, responses):
+    from desktop.comments import CommentCollector
+    from desktop.result_store import ResultStore
+    from unittest.mock import AsyncMock
+    from types import SimpleNamespace
+    client = SimpleNamespace(**{name: AsyncMock(return_value=value) for name, value in responses.items()})
+    collector = CommentCollector(platform, client, ResultStore(platform, 1, lambda *a, **k: None))
+
+    async def save(content_id, raw, parent=''):
+        await collector.store.store_comment({'comment_id': collector.identity(raw), 'content': raw.get('t'), 'parent_comment_id': parent, 'nickname': 'n', 'like_count': 3})
+    collector.save = save
+    return collector, client
+
+
+RECORD = {'id': 'dy:9', 'url': 'https://www.douyin.com/video/9'}
+
+
+async def test_comment_page_returns_one_page_with_cursor():
+    from desktop.comments import comment_page
+    collector, client = page_collector('dy', {'get_aweme_comments': {'comments': [{'cid': 'a', 't': '一', 'reply_comment_total': 2}, {'cid': '', 't': '无 ID'}], 'has_more': 1, 'cursor': 20}})
+    page = await comment_page(collector, RECORD)
+    assert client.get_aweme_comments.await_count == 1
+    assert page['hasMore'] is True and page['nextCursor'] == 20
+    assert [row['id'] for row in page['comments']] == ['a'] and page['comments'][0]['replyCount'] == 2
+
+
+async def test_comment_page_stops_when_cursor_repeats_or_empty():
+    from desktop.comments import comment_page
+    collector, _ = page_collector('dy', {'get_aweme_comments': {'comments': [{'cid': 'a', 't': '一'}], 'has_more': 1, 'cursor': 20}})
+    assert (await comment_page(collector, RECORD, cursor=20))['hasMore'] is False
+    collector, _ = page_collector('dy', {'get_aweme_comments': {'comments': [], 'has_more': 1, 'cursor': 40}})
+    assert (await comment_page(collector, RECORD))['nextCursor'] is None
+
+
+async def test_comment_page_loads_replies_of_one_comment():
+    from desktop.comments import comment_page
+    collector, client = page_collector('dy', {'get_sub_comments': {'comments': [{'cid': 'r', 't': '回复'}], 'has_more': 0, 'cursor': 0}})
+    page = await comment_page(collector, RECORD, parent='a')
+    client.get_sub_comments.assert_awaited_once_with('9', 'a', 0)
+    assert page['comments'][0]['parentId'] == 'a' and page['hasMore'] is False
+

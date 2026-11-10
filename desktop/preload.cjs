@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('studio', {
   focusFeed: (platform) => ipcRenderer.invoke('studio:focus-feed', platform),
   keepFeedFresh: (platform) =>
     ipcRenderer.invoke('studio:keep-feed-fresh', platform),
+  loadComments: (platform, id, options) =>
+    ipcRenderer.invoke('studio:load-comments', platform, id, options),
   sttStatus: () => ipcRenderer.invoke('studio:stt-status'),
   saveTranscript: (platform, id, format, ask) =>
     ipcRenderer.invoke('studio:save-transcript', platform, id, format, ask),

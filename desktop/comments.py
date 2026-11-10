@@ -119,3 +119,43 @@ class CommentCollector:
                 cursor = next_cursor
             else:
                 raise RuntimeError('回复未取全')
+
+
+async def comment_page(collector, record, cursor=None, parent=None):
+    """取一页评论：详情页滚动和命令行都走这里，每次只发一个请求"""
+    content_id = record['id'].split(':', 1)[1]
+    token = parse_qs(urlparse(record['url']).query).get('xsec_token', [''])[0]
+    rows, more, next_cursor = await collector.page(content_id, token, cursor, parent)
+    store = collector.store
+    store.page_rows = []
+    items = []
+    for raw in rows:
+        before = len(store.page_rows)
+        await collector.save(content_id, raw, parent or '')
+        if len(store.page_rows) > before:
+            items.append({**store.page_rows[-1], 'replyCount': collector.reply_count(raw)})
+    has_more = bool(more and rows and next_cursor not in (None, cursor))
+    return {'comments': items, 'nextCursor': next_cursor if has_more else None, 'hasMore': has_more}
+
+
+async def load_comments(request, emit, page):
+    """桌面详情页按需取评论；节流错误继续向上，由调用方显示倒计时"""
+    from desktop.crawler import DesktopCrawler
+    from desktop.paging import CreatorError
+    from desktop.pacing import log_only
+    record = request['record']
+    runner = DesktopCrawler({
+        'platform': record['platform'], 'mode': 'link', 'query': record['url'],
+        'limit': 1, 'action': 'connect', 'reusePage': True,
+    }, page, log_only(emit))
+    await runner.setup()
+    await runner.client.update_cookies(runner.context)
+    collector = CommentCollector(record['platform'], runner.client, runner.store)
+    try:
+        result = await comment_page(collector, record, request.get('cursor'), request.get('parent'))
+    except CreatorError:
+        raise
+    except Exception:
+        return {'saved': 0, 'code': 'failed'}
+    return {'saved': 0, 'code': '', **result}
+

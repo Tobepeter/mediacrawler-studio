@@ -79,6 +79,16 @@ uv run mediacrawler creator posts --platform bili --creator https://space.bilibi
 - 任何接口返回验证要求时返回 `SEARCH_VERIFICATION_REQUIRED`，整个平台进入冷却（抖音、小红书 30 分钟，B站 15 分钟，24 小时内再次触发翻倍，最长 6 小时），期间本地直接返回 `RATE_COOLDOWN`，不再请求平台。这些错误都带 `retry_after`（秒）
 - 频率只改 `desktop/pacing.py` 的 `PLATFORMS` 一张表：`groups` 定义两个桶，`methods` 和 `paths` 把接口归到组
 
+## 评论
+
+```bash
+mediacrawler comments --source '作品链接'
+mediacrawler comments --source '作品链接' --cursor '上一页的 next_cursor'
+mediacrawler comments --source '作品链接' --parent 主评论ID
+```
+
+支持 B 站、抖音、小红书，一次取一页，要批量就循环调用。`collect --comments` 仍可随采集带上有界评论（每篇最多 20 条主评论）。
+
 ## 视频转文字
 
 依赖本机 `stt` 语音转写服务的 HTTP 接口（`127.0.0.1:29556`），本工具不安装也不管理 `stt`。没有服务时返回 `stt_unavailable`；后台空闲退出时，有 `stt` 命令就自动叫醒。

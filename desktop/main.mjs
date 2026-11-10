@@ -178,6 +178,9 @@ app
     handle('cancel-feed', (platform) => service.cancelFeed(platform))
     handle('focus-feed', (platform) => service.focusFeed(platform))
     handle('keep-feed-fresh', (platform) => service.keepFeedFresh(platform))
+    handle('load-comments', (platform, id, options) =>
+      service.loadComments(platform, id, options),
+    )
     handle('stt-status', () => service.sttStatus())
     handle('transcribe', (platform, id) => service.transcribe(platform, id))
     handle('save-transcript', async (platform, id, format, ask = false) => {

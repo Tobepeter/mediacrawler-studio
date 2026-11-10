@@ -76,14 +76,11 @@ test('CSV 保留正文换行、转义引号、阻止表格公式执行', () => {
   assert.deepEqual(JSON.parse(serializeResults([item], 'json')), [item])
 })
 
-test('评论默认关闭，回复依赖评论，导出保留评论', () => {
-  assert.equal(validateRequest(request).comments, false)
-  assert.equal(validateRequest({ ...request, replies: true }).replies, false)
+test('桌面采集不带评论，导出保留已有评论', () => {
   assert.equal(
-    validateRequest({ ...request, comments: true, replies: true }).replies,
-    true,
+    validateRequest({ ...request, comments: true }).comments,
+    undefined,
   )
-  assert.throws(() => validateRequest({ ...request, comments: 'true' }))
   const item = {
     title: '标题',
     text: '正文',

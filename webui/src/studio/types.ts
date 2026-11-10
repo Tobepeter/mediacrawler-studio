@@ -17,8 +17,6 @@ export interface CollectRequest {
   query: string
   limit: number
   action: 'collect' | 'connect'
-  comments?: boolean
-  replies?: boolean
   filters?: Record<string, string>
   cursor?: string
   // 抖音默认：按批采集，滚动到底继续；false 表示用户选了固定数量
@@ -42,6 +40,17 @@ export interface ContentComment {
   author: string
   text: string
   likes: string
+  replyCount?: number
+}
+
+export interface CommentPage {
+  code: string
+  items: ContentComment[]
+  nextCursor: string | number | null
+  hasMore: boolean
+  throttleCode?: string
+  retryAfter?: number
+  message?: string
 }
 
 export type CommentStatus =
@@ -279,6 +288,11 @@ export interface StudioBridge {
     requestId: string,
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
+  loadComments?(
+    platform: Platform,
+    id: string,
+    options?: { cursor?: string | number; parent?: string },
+  ): Promise<CommentPage>
   sttStatus?(): Promise<SttStatus>
   saveTranscript?(
     platform: Platform,

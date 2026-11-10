@@ -98,6 +98,19 @@ async def execute(request, emit):
                     return None
                 crawler.setup = ready
                 crawler.authenticate = ready
+                if request['action'] == 'comments':
+                    from desktop.comments import CommentCollector, comment_page
+                    from desktop.paging import CreatorError, decode_cursor, encode_cursor
+                    # 只为拿到作品 ID，不把作品当结果输出
+                    crawler.store.emit = lambda *args, **kwargs: None
+                    await crawler.detail()
+                    record = next(iter(crawler.store.items.values()), None)
+                    if not record:
+                        raise CreatorError('NOT_FOUND', '没有找到这条作品')
+                    state = decode_cursor(request.get('cursor'), 'comments')
+                    page = await comment_page(CommentCollector(request['platform'], crawler.client, crawler.store), record, state.get('c'), request.get('parent'))
+                    emit('page', next_cursor=encode_cursor('comments', c=page['nextCursor']) if page['hasMore'] else None, has_more=page['hasMore'])
+                    return page['comments']
                 if request['action'] == 'creator-search':
                     from desktop.creators import search_creators
                     page = await search_creators(crawler, request['query'], request['limit'], request.get('cursor'))

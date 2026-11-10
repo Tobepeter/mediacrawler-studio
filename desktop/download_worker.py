@@ -41,6 +41,9 @@ async def main(request):
                     if request['kind'] == 'detail':
                         from desktop.content.detail import load_detail
                         return await load_detail(request['record'], page, request.get('background', False), emit)
+                    if request['kind'] == 'comments':
+                        from desktop.comments import load_comments
+                        return await load_comments(request, emit, page)
                     if request['kind'] == 'transcribe':
                         from desktop.transcribe import transcribe_result
                         return await transcribe_result(request, emit, page)

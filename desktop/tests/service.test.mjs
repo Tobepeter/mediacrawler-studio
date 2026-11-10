@@ -195,12 +195,8 @@ test('评论增量更新、取消保留、草稿选项和历史恢复', async ()
   });`,
   )
   try {
-    await service.saveDraft('bili', {
-      ...request,
-      comments: true,
-      replies: true,
-    })
-    await service.start({ ...request, comments: true, replies: true })
+    await service.saveDraft('bili', request)
+    await service.start(request)
     await until(
       () =>
         (service.state.pages.bili?.results || [])[0]?.comments?.length === 1,
@@ -217,7 +213,6 @@ test('评论增量更新、取消保留、草稿选项和历史恢复', async ()
     assert.deepEqual(service.state.drafts, {})
     const record = await service.openHistory(id)
     assert.equal(record.results[0].comments[0].text, '已收到的评论')
-    assert.equal(record.task.comments, true)
   } finally {
     await service.stopAll()
     await cleanup()
@@ -941,6 +936,52 @@ test('清理缓存只清字幕、推荐预取和网络缓存', async () => {
     assert.deepEqual(calls, ['browser', 'browser'])
     assert.equal(service.transcriptCache.get('dy:1'), undefined)
     assert.equal(service.feed.cache.get('dy'), undefined)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('评论按页取，节流结果原样返回，只支持三个平台', async () => {
+  const { service, cleanup } = await createService('process.exit(0)')
+  try {
+    Object.defineProperty(service, 'python', { get: () => process.execPath })
+    const seen = []
+    const results = [
+      {
+        comments: [{ id: 'c1', text: '一' }],
+        nextCursor: 20,
+        hasMore: true,
+        code: '',
+      },
+      { code: 'throttled', throttleCode: 'RATE_COOLDOWN', retryAfter: 60 },
+    ]
+    service.mediaJob = () => ({
+      run: async (input) => {
+        seen.push(input)
+        return results.shift()
+      },
+      cancel: async () => {},
+    })
+    await assert.rejects(service.loadComments('wb', 'wb:1'), /不支持/)
+    assert.equal((await service.loadComments('dy', 'dy:1')).code, 'login')
+    service.state.accounts.dy = 'connected'
+    service.state.pages.dy = { id: 'p', results: [{ id: 'dy:1' }] }
+    const first = await service.loadComments('dy', 'dy:1')
+    assert.deepEqual(
+      [first.items[0].id, first.nextCursor, first.hasMore],
+      ['c1', 20, true],
+    )
+    const second = await service.loadComments('dy', 'dy:1', {
+      cursor: 20,
+      parent: 'c1',
+    })
+    assert.equal(second.code, 'throttled')
+    assert.equal(second.retryAfter, 60)
+    assert.deepEqual(
+      [seen[1].kind, seen[1].cursor, seen[1].parent],
+      ['comments', 20, 'c1'],
+    )
+    assert.equal(service.commentJobs.size, 0)
   } finally {
     await cleanup()
   }

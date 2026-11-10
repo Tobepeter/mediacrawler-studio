@@ -49,7 +49,7 @@ export class DownloadJob {
           timedOut = true
           void this.cancel()
         },
-        ['playback', 'detail'].includes(request.kind)
+        ['playback', 'detail', 'comments'].includes(request.kind)
           ? 45000
           : (request.kind === 'transcribe' ? 60 : 30) * 60 * 1000,
       )

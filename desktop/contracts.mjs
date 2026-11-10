@@ -134,15 +134,9 @@ export function validateRequest(value) {
       value.cursor.length > 4096)
   )
     throw new Error('翻页位置无效，请重新采集')
-  for (const key of ['comments', 'replies']) {
-    if (value[key] !== undefined && typeof value[key] !== 'boolean')
-      throw new Error('采集选项无效')
-  }
   return {
     loginMode: value.loginMode || 'embedded',
     silent: value.action === 'connect' && value.silent === true,
-    comments: value.comments === true,
-    replies: value.comments === true && value.replies === true,
     filters:
       mode === 'search' ? validateFilters(value.platform, value.filters) : {},
     platform: value.platform,

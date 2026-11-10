@@ -43,8 +43,6 @@ const initialForm = (platform: Platform): PlatformForm => ({
   mode: 'search',
   query: '',
   limit: 5,
-  comments: false,
-  replies: false,
   filters: {},
 })
 const initialView = () => ({ error: '', historyId: '' })
@@ -480,8 +478,6 @@ export const useStudio = create<StudioStore>((set, get) => ({
       query: record.task.query,
       mode: record.task.mode,
       limit: record.task.limit,
-      comments: record.task.comments === true,
-      replies: record.task.replies === true,
       filters: record.task.filters || {},
     })
     get().updateView({ error: '', historyId: record.id }, record.task.platform)
@@ -573,8 +569,6 @@ export const useStudio = create<StudioStore>((set, get) => ({
               mode: page.mode,
               query: page.query,
               limit: page.auto === false ? page.limit : autoBatchSize,
-              comments: page.comments,
-              replies: page.replies,
               filters: page.filters,
               auto: page.auto !== false,
             }

@@ -4,7 +4,6 @@ import { SlidersHorizontal } from 'lucide-react'
 import searchOptions from '../../../desktop/search-options.json'
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -30,7 +29,7 @@ type SearchField = {
   options: { value: string; label: string }[]
 }
 
-// 平台原生筛选与评论采集，应用后仅影响下一次采集
+// 平台原生筛选，应用后仅影响下一次采集；没有可选项的模式不显示入口
 export function CollectOptions({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation('studio')
   const form = useForm()
@@ -38,18 +37,14 @@ export function CollectOptions({ disabled }: { disabled: boolean }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState({
     filters: form.filters || {},
-    comments: !!form.comments,
-    replies: !!form.replies,
   })
   const fields: Record<string, SearchField> =
     form.mode === 'search' ? searchOptions[form.platform] : {}
-  const changed =
-    form.comments ||
-    Object.entries(fields).some(
-      ([key, field]) =>
-        (form.filters?.[key] || field.default) !== field.default,
-    )
+  const changed = Object.entries(fields).some(
+    ([key, field]) => (form.filters?.[key] || field.default) !== field.default,
+  )
   const id = useId()
+  if (!Object.keys(fields).length) return null
   return (
     <Dialog
       open={open}
@@ -57,8 +52,6 @@ export function CollectOptions({ disabled }: { disabled: boolean }) {
         if (value)
           setDraft({
             filters: form.filters || {},
-            comments: !!form.comments,
-            replies: !!form.replies,
           })
         setOpen(value)
       }}
@@ -110,48 +103,12 @@ export function CollectOptions({ disabled }: { disabled: boolean }) {
               ))}
             </div>
           )}
-          <div className='space-y-4'>
-            <div className='flex items-center gap-2'>
-              <Checkbox
-                id={`${id}-comments`}
-                checked={draft.comments}
-                disabled={disabled}
-                onCheckedChange={(value) =>
-                  setDraft({
-                    ...draft,
-                    comments: value === true,
-                    replies: value === true && draft.replies,
-                  })
-                }
-              />
-              <Label htmlFor={`${id}-comments`}>{t('采集评论')}</Label>
-              <span className='ml-auto text-caption text-muted-foreground'>
-                {t('最多20条/篇')}
-              </span>
-            </div>
-            <div className='flex items-center gap-2'>
-              <Checkbox
-                id={`${id}-replies`}
-                checked={draft.replies}
-                disabled={disabled || !draft.comments}
-                onCheckedChange={(value) =>
-                  setDraft({ ...draft, replies: value === true })
-                }
-              />
-              <Label htmlFor={`${id}-replies`}>{t('包含回复')}</Label>
-              <span className='ml-auto text-caption text-muted-foreground'>
-                {t('另取20条/篇')}
-              </span>
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button
             variant='ghost'
             disabled={disabled}
-            onClick={() =>
-              setDraft({ filters: {}, comments: false, replies: false })
-            }
+            onClick={() => setDraft({ filters: {} })}
           >
             {t('重置')}
           </Button>
