@@ -158,3 +158,61 @@ async def test_other_errors_pass_through(tmp_path, monkeypatch):
     call = paced(AsyncMock(side_effect=ValueError('bad')), 'xhs')
     with pytest.raises(ValueError):
         await call('x')
+
+
+def user(identity='u1', **fields):
+    return {'id': identity, 'name': '博主' + identity, 'xsec_token': 'tok', 'image': '//img/a.jpg', 'red_id': 'r1', 'fans': '1.2万', 'note_count': 5, 'sub_title': '小红书号：r1', **fields}
+
+
+def creator_task(**responses):
+    client = SimpleNamespace(search_users=AsyncMock(**responses))
+    return SimpleNamespace(client=client, request={}, emit=lambda *a, **k: None)
+
+
+@pytest.mark.parametrize('value,expected', [('123', 123), ('1.2万', 12000), ('10万+', 100000), ('', None), (None, None), ('很多', None)])
+def test_fans_text_is_parsed(value, expected):
+    from desktop.xhs_paging import fans_count
+    assert fans_count(value) == expected
+
+
+@pytest.mark.asyncio
+async def test_creator_search_maps_users_and_pages():
+    from desktop.xhs_paging import search_creators
+    task = creator_task(return_value={'users': [user('u1'), user('u2')], 'has_more': True})
+    page = await search_creators(task, '咖啡', 20)
+    first = page['items'][0]
+    assert first['platform'] == 'xhs' and first['id'] == 'u1' and first['followers'] == 12000 and first['posts'] == 5
+    assert 'xsec_token=tok' in first['url'] and 'xsec_source=pc_search' in first['url'] and first['avatar'].startswith('https://')
+    assert first['signature'] == '' and page['has_more'] is True
+    task.client.search_users.return_value = {'users': [user('u3')], 'has_more': False}
+    following = await search_creators(task, '咖啡', 20, page['next_cursor'])
+    assert task.client.search_users.await_args.kwargs['page'] == 2 and following['has_more'] is False and following['next_cursor'] is None
+    assert task.client.search_users.await_args_list[0].kwargs['search_id'] == task.client.search_users.await_args.kwargs['search_id']
+
+
+@pytest.mark.asyncio
+async def test_creator_search_skips_users_without_token():
+    from desktop.xhs_paging import search_creators
+    task = creator_task(return_value={'users': [user('u1', xsec_token=''), user('u2')], 'has_more': False})
+    assert [item['id'] for item in (await search_creators(task, '咖啡'))['items']] == ['u2']
+
+
+@pytest.mark.asyncio
+async def test_creator_search_rejects_cursor_of_another_keyword():
+    from desktop.xhs_paging import search_creators
+    task = creator_task(return_value={'users': [user()], 'has_more': True})
+    cursor = (await search_creators(task, '咖啡', 20))['next_cursor']
+    with pytest.raises(CreatorError) as caught:
+        await search_creators(task, '别的词', 20, cursor)
+    assert caught.value.code == 'INVALID_CURSOR'
+
+
+@pytest.mark.asyncio
+async def test_creator_search_platform_error_is_structured():
+    from desktop.xhs_paging import search_creators
+    from media_platform.xhs.exception import DataFetchError
+    task = creator_task(side_effect=DataFetchError('boom'))
+    with pytest.raises(CreatorError) as caught:
+        await search_creators(task, '咖啡')
+    assert caught.value.code == 'PLATFORM_ERROR'
+

@@ -1,8 +1,9 @@
 """小红书关键词搜索与博主主页的游标分页；列表只有摘要，每条笔记再取一次详情"""
 import asyncio
+import re
 
-from desktop.paging import (EMPTY_PAGE_RETRIES, CreatorError, Page, creator_summary, decode_cursor, encode_cursor, feed_record, invalid_cursor, wants_cards,
-                            is_index, walk)
+from desktop.paging import (AUTHOR_LIMIT, EMPTY_PAGE_RETRIES, CreatorError, Page, count, creator_summary, decode_cursor, encode_cursor, feed_record, https_url,
+                            invalid_cursor, wants_cards, is_index, walk)
 
 MAX_PAGES = 10
 LABEL = {'label': '小红书', 'noun': '笔记'}
@@ -11,6 +12,66 @@ PROFILE = 'https://www.xiaohongshu.com/user/profile/'
 
 def valid_text(*values):
     return all(isinstance(value, str) for value in values)
+
+
+def fans_count(value):
+    """接口给的是展示文案，比如 1.2万"""
+    match = re.fullmatch(r'([\d.]+)(万|亿)?\+?', str(value or '').strip())
+    if not match:
+        return None
+    return round(float(match.group(1)) * {'万': 10000, '亿': 100000000}.get(match.group(2), 1))
+
+
+def user_summary(row):
+    identity, token, name = row.get('id'), row.get('xsec_token'), row.get('name')
+    # 主页必须带 xsec_token，没有的进不去
+    if not identity or not token or not name:
+        return None
+    # 小红书号已经单独显示，副标题经常只是重复它
+    signature = '' if str(row.get('sub_title') or '').startswith('小红书号') else str(row.get('sub_title') or '')
+    return creator_summary(
+        'xhs', identity, str(name)[:AUTHOR_LIMIT], creator_url(identity, token, 'pc_search'), uniqueId=str(row.get('red_id') or ''),
+        avatar=https_url(row.get('image')), signature=signature, followers=fans_count(row.get('fans')),
+        posts=count(row.get('note_count')), verified='已认证' if row.get('red_official_verified') else '',
+    )
+
+
+async def search_creators(runner, keyword, limit=10, cursor=None, requests=1):
+    from media_platform.xhs.exception import DataFetchError
+    from media_platform.xhs.help import get_search_id
+    state = decode_cursor(cursor, 'xhs-user')
+    if state and state.get('q') != keyword:
+        raise invalid_cursor()
+    page, skip, search_id = state.get('p', 1), state.get('s', 0), state.get('i') or get_search_id()
+    if not is_index(page, 1) or not isinstance(search_id, str):
+        raise invalid_cursor()
+    found = {}
+
+    def result(next_page=None, next_skip=0):
+        return {
+            'items': list(found.values()),
+            'next_cursor': None if next_page is None else encode_cursor('xhs-user', q=keyword, p=next_page, s=next_skip, i=search_id),
+            'has_more': next_page is not None,
+        }
+
+    for _ in range(requests):
+        try:
+            response = await runner.client.search_users(keyword, page=page, search_id=search_id)
+        except DataFetchError as error:
+            raise CreatorError('PLATFORM_ERROR', '小红书暂时没有返回数据，请稍后重试', cause=str(error)[:300]) from None
+        rows = response.get('users') or []
+        for index in range(skip, len(rows)):
+            if len(found) >= limit:
+                return result(page, index)
+            creator = user_summary(rows[index])
+            if creator:
+                found[creator['id']] = creator
+        if not rows or not response.get('has_more'):
+            return result()
+        page, skip = page + 1, 0
+        if len(found) >= limit:
+            break
+    return result(page)
 
 
 async def collect_search(runner, query, cursor=None, options=None):

@@ -156,6 +156,7 @@ PLATFORMS = {
         },
         methods={
             'get_note_by_keyword': SEARCH_ROUTE,
+            'search_users': SEARCH_ROUTE,
             'get_home_feed': Route('feed', 'feed_page', first_feed_page),
             'get_notes_by_creator': Route('creator_page'),
         },

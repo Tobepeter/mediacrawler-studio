@@ -193,7 +193,8 @@ test('小红书博主主页走博主模式，搜索博主仍只支持抖音', ()
     false,
   )
   assert.equal(isCreatorUrl(url, 'dy'), false)
-  assert.equal(creatorSearchPlatforms.includes('xhs'), false)
+  assert.equal(creatorSearchPlatforms.includes('xhs'), true)
+  assert.equal(creatorSearchPlatforms.includes('wb'), false)
   const request = validateRequest({
     platform: 'xhs',
     action: 'collect',

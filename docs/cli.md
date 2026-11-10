@@ -46,6 +46,7 @@ uv run mediacrawler creator posts --platform bili --creator https://space.bilibi
 - `--creator` 接受主页链接、`v.douyin.com` 分享短链、App 整段分享文案、sec_uid 或名称。名称必须在搜索首页唯一且完全匹配昵称或抖音号，否则返回 `CREATOR_AMBIGUOUS` / `CREATOR_NOT_FOUND` 和 `candidates`
 - stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`
 - 游标不透明，精确到页内位置，换 `--limit` 继续也不漏条，绑定关键词或博主，不匹配返回 `INVALID_CURSOR`。失败或风控时也会输出最近的游标，可稍后继续；跨次搜索可能出现重复候选，按 `id` 去重
+- 小红书（`--platform xhs`）支持 `creator search`，结果带可直接采集的主页链接
 - B站（`--platform bili`）支持 `creator search`、`creator posts` 和 `search`，`--creator` 接受 `space.bilibili.com` 主页链接、`b23.tv` 短链、UID 或完全匹配的昵称
 - search 的 `source=user` 是博主卡片，`source=video` 是相关视频作者，字段较少。抖音这条接口只返回混排结果，不等于平台完整的用户搜索
 - 敏感接口经统一节流，见下方“访问节奏”；posts 单次最多 100 条

@@ -279,9 +279,6 @@ export function CreatorSearch(props: {
                   </div>
                 </div>
               ))}
-              <Placeholder>
-                {t('为避免触发平台验证，搜索会放慢一些')}
-              </Placeholder>
             </div>
           )}
           {search.isError && !search.data && (

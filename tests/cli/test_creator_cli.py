@@ -23,7 +23,7 @@ def test_failure_reports_retry_after(tmp_path, monkeypatch):
 
 def test_cli_validates_creator_options():
     runner = CliRunner()
-    assert runner.invoke(app, ['creator', 'search', '--query', 'a', '--platform', 'xhs']).exit_code == 2
+    assert runner.invoke(app, ['creator', 'search', '--query', 'a', '--platform', 'wb']).exit_code == 2
     assert runner.invoke(app, ['creator', 'search', '--query', '  ']).exit_code == 2
     assert runner.invoke(app, ['creator', 'search', '--query', 'a', '--limit', '51']).exit_code == 2
     assert runner.invoke(app, ['creator', 'posts']).exit_code == 2

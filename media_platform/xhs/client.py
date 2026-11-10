@@ -19,6 +19,8 @@
 
 import asyncio
 import json
+import random
+import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 from urllib.parse import quote, urlencode
 
@@ -314,6 +316,27 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         )
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
+
+    async def search_users(
+        self,
+        keyword: str,
+        page: int = 1,
+        page_size: int = 15,
+        search_id: Optional[str] = None,
+    ) -> Dict:
+        """Search creators, same request as the user tab on the web search page"""
+        uri = "/api/sns/web/v1/search/usersearch"
+        data = {
+            "search_user_request": {
+                "keyword": keyword,
+                "search_id": search_id or get_search_id(),
+                "page": page,
+                "page_size": page_size,
+                "biz_type": "web_search_user",
+                "request_id": f"{random.randint(100000000, 999999999)}-{int(time.time() * 1000)}",
+            }
+        }
+        return await self.post(uri, data)
 
     async def get_note_by_keyword(
         self,
