@@ -69,13 +69,17 @@ export function MediaDownload({ item }: { item: ContentItem }) {
     video || !['available', 'not_provided'].includes(item.media?.status || '')
   const hasTranscript = useHasTranscript(item)
   const menu = useHoverMenu()
-  const primary = video
-    ? 'video'
-    : item.images.length
-      ? 'images'
-      : canDownloadVideo
-        ? 'video'
-        : null
+  // 抖音图集也带配乐幻灯片，点击默认下图片，幻灯片留在菜单里
+  const gallery = item.contentType === 'note' && item.images.length > 1
+  const primary = gallery
+    ? 'images'
+    : video
+      ? 'video'
+      : item.images.length
+        ? 'images'
+        : canDownloadVideo
+          ? 'video'
+          : null
   const runPrimary = () => {
     menu.setOpen(false)
     if (primary) void download(primary)

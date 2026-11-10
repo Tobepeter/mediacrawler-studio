@@ -203,7 +203,10 @@ async def fill(runner, record, quality):
                      resolvedAt=datetime.now(timezone.utc).isoformat())
         if raw.get('_media_error'):
             media['error'] = raw['_media_error']
-        if any(v['kind'] == 'video' for v in candidates):
+        if runner.platform == 'dy' and raw.get('images'):
+            # 抖音图集也带一段配乐幻灯片视频，按图集算
+            record['contentType'] = 'note'
+        elif any(v['kind'] == 'video' for v in candidates):
             record['contentType'] = 'video'
     except Exception:
         media.update(status='failed', error='media_parse_failed')

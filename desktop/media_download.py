@@ -64,6 +64,13 @@ class DesktopMediaDownloader(MediaDownloader):
             raise
 
 
+def auto_kind(record):
+    """图集的配乐幻灯片不算正片，默认下图片"""
+    if record.get('contentType') == 'note' and record.get('images'):
+        return 'images'
+    return 'video' if (record.get('media') or {}).get('variants') or record.get('contentType') == 'video' else 'images'
+
+
 async def download_record(request, emit, page=None):
     """入口共用选择与兜底策略；固定版本/画质和离线输入不改选"""
     from media_downloader.selection import choose_items
@@ -72,7 +79,7 @@ async def download_record(request, emit, page=None):
     record = request['record']
     kind = request.get('kind', 'auto')
     if kind == 'auto':
-        kind = 'video' if (record.get('media') or {}).get('variants') or record.get('contentType') == 'video' else 'images'
+        kind = auto_kind(record)
     quality = request.get('quality', 'best')
     variant_id = request.get('variant_id')
     has_context = page is not None or request.get('runner') is not None

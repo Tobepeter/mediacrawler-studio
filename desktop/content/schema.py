@@ -39,7 +39,11 @@ def metadata(raw):
             published = datetime.fromtimestamp(timestamp / 1000 if timestamp > 100000000000 else timestamp, timezone.utc).isoformat()
         except (OverflowError, ValueError, OSError):
             pass
-    return dict(contentType=first(raw, 'content_type', 'video_type', 'type') or 'unknown',
+    content = first(raw, 'content_type', 'video_type', 'type')
+    if not content and 'aweme_type' in raw:
+        # 抖音没有类型字段，图集会带图片地址，视频没有
+        content = 'note' if raw.get('note_download_url') else 'video'
+    return dict(contentType=content or 'unknown',
         publishedAt=published, durationSeconds=None, creatorHash=raw.get('creator_hash'),
         statistics={
             'likes': number(first(raw, 'liked_count', 'voteup_count')),
