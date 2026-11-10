@@ -60,6 +60,7 @@ test('已有历史结果时主动扫码仍可展示，登录完成后恢复结�
     useEffect() {},
     useStudio: (selector) => selector(state),
     useStudioRoute: () => 'collect',
+    accountChecking: () => false,
     cn: (...values) => values.filter(Boolean).join(' '),
     appIcon: 'icon.png',
   })

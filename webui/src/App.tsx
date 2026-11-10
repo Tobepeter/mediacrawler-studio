@@ -24,7 +24,7 @@ import { LoginDialog } from './studio/login-dialog'
 import { LoginPanel } from './studio/login-panel'
 import { LoginController } from './studio/login-controller'
 import { StudioSettings } from './studio/settings'
-import { connectStudio, useStudio } from './studio/store'
+import { connectStudio, accountChecking, useStudio } from './studio/store'
 import { CollectionHistory } from './studio/collection-history'
 import { useStudioRoute } from './studio/route'
 
@@ -49,8 +49,10 @@ export default function App() {
       (state.tasks[state.platform]?.status === 'auth' &&
         state.tasks[state.platform]?.loginMode === 'qrcode'),
   )
+  const checking = useStudio((state) => accountChecking(state))
   const showContent =
     historyPreview ||
+    (!!window.studio && checking) ||
     (!inlineLogin && (!window.studio || account === 'connected' || !!page))
   useEffect(connectStudio, [])
   useEffect(() => new LoginController().start(), [])

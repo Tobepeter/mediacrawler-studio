@@ -5,7 +5,13 @@ import { translateMessage } from '@/i18n/studio'
 import { useStudioRoute } from './route'
 import { Inbox, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { activeStatuses, platformBusy, platformNames, useStudio } from './store'
+import {
+  accountChecking,
+  activeStatuses,
+  platformBusy,
+  platformNames,
+  useStudio,
+} from './store'
 import type { Platform } from './types'
 import { matchesKeyword } from './creator-ui'
 import { feedPlatforms } from './creator-options'
@@ -68,8 +74,11 @@ const ResultItems = memo(function ResultItems({
     !!pagedTask.nextCursor &&
     !pagedTask.stalled &&
     ['completed', 'restored'].includes(pagedTask.status)
+  const checking = useStudio((state) => accountChecking(state, platform))
   if (!page && feedPlatforms.includes(platform))
     return <FeedList platform={platform} />
+  // 没有推荐流的平台验证期间留空，不闪“暂无结果”
+  if (!page && checking) return null
   return (
     <>
       {!results.length ? (

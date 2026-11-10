@@ -177,6 +177,7 @@ export interface AccountProfile {
 }
 
 export interface PlatformLoginState {
+  retrying?: boolean
   id?: string
   status:
     | 'queued'

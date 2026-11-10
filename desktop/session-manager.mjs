@@ -112,6 +112,7 @@ export class SessionManager {
       id: job.id,
       startedAt: Date.now(),
       status: 'preparing',
+      retrying: reload,
     }
     this.service.publish()
     job.deadline = setTimeout(

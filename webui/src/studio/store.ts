@@ -136,6 +136,18 @@ export function platformBlocked(state: StudioStore, platform = state.platform) {
   )
 }
 
+// 启动时有登录 Cookie 但还没验证完，大概率已登录，不能先按未登录显示二维码
+// 用户手动刷新二维码时账号也是这个状态，要继续留在二维码上
+export function accountChecking(state: StudioStore, platform = state.platform) {
+  if (!state.ready) return true
+  if (state.accounts[platform] !== 'saved') return false
+  const login = state.logins?.[platform]
+  return (
+    !login ||
+    (['queued', 'preparing'].includes(login.status) && !login.retrying)
+  )
+}
+
 export const mainScroller = () =>
   document
     .querySelector('main')
