@@ -86,3 +86,18 @@ def test_failure_keeps_items_cursor_and_candidates(tmp_path, monkeypatch, capsys
     assert error.value.code == 'CREATOR_AMBIGUOUS' and error.value.candidates == [{'id': 'x'}]
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert lines[-1]['next_cursor'] == 'resume' and lines[-1]['complete'] is False and lines[0] == {'id': 'a'}
+
+
+def test_failure_before_any_page_is_not_reported_as_the_end(tmp_path, monkeypatch, capsys):
+    fake_worker(monkeypatch, worker({'type': 'failure', 'code': 'RATE_LIMITED', 'retry_after': 42}))
+    with pytest.raises(CLIError):
+        run(request(tmp_path, mode='creator'))
+    page = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert page['has_more'] is None and page['complete'] is False and page['next_cursor'] is None
+
+
+def test_success_without_page_info_means_no_more(tmp_path, monkeypatch, capsys):
+    fake_worker(monkeypatch, worker({'type': 'complete', 'items': [{'id': 'a'}]}))
+    run(request(tmp_path, mode='creator'))
+    page = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert page['has_more'] is False and page['complete'] is True

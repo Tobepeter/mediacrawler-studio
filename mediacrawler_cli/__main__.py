@@ -16,12 +16,24 @@ app.add_typer(auth, name='auth')
 app.add_typer(session, name='session')
 creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品；posts 支持 dy、bili、xhs、zhihu，search 支持 dy、bili')
 app.add_typer(creator, name='creator')
+rate = typer.Typer(no_args_is_help=True, help='查看访问额度')
+app.add_typer(rate, name='rate')
+
+
+@rate.command('status')
+def rate_status(platform: Optional[str] = typer.Option(None, help='不传时列出所有平台')):
+    """各平台 10 分钟额度的已用和剩余，以及冷却秒数；只读本地状态，不发请求、不占额度"""
+    from desktop.pacing import quota
+    if platform and platform not in PLATFORMS:
+        raise typer.BadParameter('平台：' + ', '.join(PLATFORMS))
+    for name in [platform] if platform else PLATFORMS:
+        typer.echo(json.dumps(quota(name), ensure_ascii=False))
 
 
 # 排队太久宁可立刻报错，调用方按 retry_after 决定等不等，比闷头卡住好
 DEFAULT_MAX_WAIT = 3
 MAX_WAIT = typer.Option(DEFAULT_MAX_WAIT, '--max-wait', min=0, max=600,
-                        help='开始前最多排队多少秒，超过返回 RATE_WAIT_EXCEEDED 和 retry_after；任务开始后的翻页间隔不受影响')
+                        help='单次最多排队多少秒，包括等 10 分钟额度恢复。开始前超过返回 RATE_WAIT_EXCEEDED，开始后额度用满且超过返回 RATE_LIMITED，都带 retry_after；要小于 --timeout')
 NO_THROTTLE = typer.Option(False, '--no-throttle', help='跳过本地节流直接请求，可能触发平台验证，只在排查时手动使用')
 
 
@@ -38,6 +50,8 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
                    non_interactive=False, lock_timeout=0, format='jsonl',
                    max_wait=DEFAULT_MAX_WAIT, no_throttle=False)
     request.update(options)
+    if request['max_wait'] > DEFAULT_MAX_WAIT and request['max_wait'] >= request['timeout']:
+        raise typer.BadParameter('--timeout 要大于 --max-wait，否则排队途中任务就超时了')
     if request['no_throttle']:
         typer.echo('已跳过本地节流，这次请求可能触发平台验证', err=True)
     if request['qr'] not in ('terminal', 'image', 'browser') or request['format'] not in ('json', 'jsonl'):
@@ -49,7 +63,7 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
             typer.echo(json.dumps({'type': 'platform', 'platform': platform, 'status': 'failed', 'policy': {**POLICY, 'qr_timeout_ms': options.get('qr_timeout_ms', POLICY['qr_timeout_ms'])},
                                   'error': {'code': 'TIMEOUT' if error.code == 'TASK_TIMEOUT' else 'UNKNOWN',
                                             'stage': 'worker', 'cause': error.code, 'retryable': True}}))
-        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_WAIT_EXCEEDED': '排队时间超过 --max-wait，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_WAIT_EXCEEDED': '排队时间超过 --max-wait，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
         typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
                                'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'SEARCH_VERIFICATION_REQUIRED', 'RATE_LIMITED', 'RATE_WAIT_EXCEEDED', 'RATE_COOLDOWN'), 'run_id': error.run_id,
                                **({'candidates': error.candidates} if error.candidates else {}),
@@ -67,7 +81,7 @@ def collect(platform: str = typer.Option(...), query: Optional[str] = None, url:
             lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl',
             save: bool = False, output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
             quality: str = typer.Option('best', help='推荐画质：best、worst 或具体高度如 720p；保留全部候选，指定档位缺失不静默降级'),
-            media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕、章节等能力；--no-media 保留为旧版兼容开关'),
+            media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕、章节等能力；--no-media 只要列表字段，B站能省额度'),
             include_source: bool = typer.Option(False, help='附带上游标准化作品字段（不是账号信息或完整 HTTP 响应）'),
             max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = typer.Option(False, '--verbose', '-v', help='额外阶段日志写到 stderr，不改变 JSON 结果')):
     """采集作品，默认返回完整能力与字幕正文，不自动下载视频、音频和图片
@@ -127,7 +141,7 @@ def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', hel
                   lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', save: bool = False,
                   output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
                   quality: str = typer.Option('best', help='best、worst 或 720p 等'),
-                  media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
+                  media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕等能力；--no-media 只要列表字段，B站能省额度'),
                   include_source: bool = False, max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """按主页顺序翻页采集博主作品，末行 type=page 给出 next_cursor 与博主资料
 
@@ -157,7 +171,7 @@ def search_command(query: Optional[str] = typer.Option(None, help='关键词；�
                    lock_timeout: float = typer.Option(0, min=0, max=300), format: str = 'jsonl', save: bool = False,
                    output_dir: Optional[str] = None, comments: bool = False, replies: bool = False,
                    quality: str = typer.Option('best', help='best、worst 或 720p 等'),
-                   media: bool = typer.Option(True, '--media/--no-media', help='补齐媒体、字幕等能力'),
+                   media: bool = typer.Option(True, '--media/--no-media', help='默认补齐媒体、字幕等能力；--no-media 只要列表字段，B站能省额度'),
                    include_source: bool = False, max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """按关键词分页采集作品，末行 type=page 给出 next_cursor
 

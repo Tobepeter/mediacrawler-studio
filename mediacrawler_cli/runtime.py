@@ -73,7 +73,8 @@ def run(request):
     run_created = False
     process = None
     records = []
-    page = {'next_cursor': None, 'has_more': False}
+    # 没等到分页信息就失败时是“不知道”，不能说成已到末尾
+    page = {'next_cursor': None, 'has_more': None}
     items = {}
     complete = False
     partial = False
@@ -213,6 +214,8 @@ def run(request):
         finally:
             lock.release()
     values = list(items.values())
+    if error is None and page['has_more'] is None:
+        page['has_more'] = False
     # 博主和分页搜索需要分页位置；失败时也输出，已取结果可从该位置继续
     paged = request['action'] == 'creator-search' or request.get('mode') == 'creator' or request.get('paged') is True
     summary = {'type': 'page', **page, 'count': len(values), 'complete': error is None}

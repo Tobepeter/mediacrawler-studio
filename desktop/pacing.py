@@ -274,9 +274,10 @@ def check_cooldown(state, now):
         raise CreatorError('RATE_COOLDOWN', f'平台要求过验证，已暂停访问，请约 {minutes} 分钟后再试', retry_after=math.ceil(blocked - now))
 
 
-def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', background=False, opening=False):
+def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', background=False, opening=False, patience=0):
     """从组里取一个名额并返回需要等待的秒数；状态文件异常时放行，不阻断采集
-    limit 是调用方能接受的等待上限，超过时不占名额，抛 limit_code"""
+    limit 是调用方能接受的等待上限，超过时不占名额，抛 limit_code
+    patience 用于已经开始的任务：单次等待或大桶恢复超过它时才抛 RATE_LIMITED"""
     now = time.time() if now is None else now
     group = PLATFORMS[platform].groups[group_name]
     path = state_path(platform)
@@ -288,16 +289,19 @@ def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', 
             full_at = bucket_full_at(free, group_name, now)
             wait = max(0, full_at - (group.burst - 1) * fmean(group.gap) - now)
             pool = group.pool or group_name
-            stamps = fresh_stamps(used.get(pool), now - group.window[1]) if group.window else []
-            full = group.window and len(stamps) >= group.window[0]
-            retry_after = max(wait, stamps[0] + group.window[1] - now if full else 0)
+            stamps = sorted(fresh_stamps(used.get(pool), now - group.window[1])) if group.window else []
+            # 排队中的请求也占名额，要等够多的旧记录滑出窗口才轮到这一次
+            over = len(stamps) - group.window[0] if group.window else -1
+            full = over >= 0
+            retry_after = max(wait, stamps[over] + group.window[1] - now if full else 0)
             if background and group.window and len(stamps) >= group.window[0] * BACKGROUND_SHARE:
                 raise CreatorError(limit_code, '额度留给前台操作，稍后再试', retry_after=math.ceil(stamps[0] + group.window[1] - now))
             if limit is not None and retry_after > limit:
                 raise CreatorError(limit_code, f'需要排队约 {math.ceil(retry_after)} 秒，稍后再试', retry_after=math.ceil(retry_after))
-            if full or retry_after > max(MAX_WAIT_SECONDS, limit or 0):
+            willing = max(limit or 0, patience)
+            if retry_after > max(MAX_WAIT_SECONDS, willing) or (full and retry_after > willing):
                 raise CreatorError('RATE_LIMITED', f'操作太频繁，请约 {math.ceil(retry_after)} 秒后再试', retry_after=math.ceil(retry_after))
-            start = now + wait
+            start = now + retry_after
             free[group_name] = max(full_at, start) + random.uniform(*group.gap)
             # 打开页面时已经取了第一页，紧接着的翻页要按翻页间隔来
             page_group = PLATFORMS[platform].groups.get(f'{group_name}_page')
@@ -311,7 +315,26 @@ def reserve(platform, group_name, now=None, limit=None, limit_code='FEED_BUSY', 
         return group.gap[1]
     except OSError:
         return 0
-    return wait
+    return retry_after
+
+
+def quota(platform, now=None):
+    """各额度当前用量，只读状态，不占名额，也不发请求"""
+    now = time.time() if now is None else now
+    state = read_state(state_path(platform))
+    used = mapping(state, 'used')
+    quotas = {}
+    for name, group in PLATFORMS[platform].groups.items():
+        if not group.window:
+            continue
+        pool = group.pool or name
+        stamps = sorted(fresh_stamps(used.get(pool), now - group.window[1]))
+        over = len(stamps) - group.window[0]
+        quotas[pool] = {
+            'name': pool, 'used': len(stamps), 'limit': group.window[0], 'remaining': max(0, -over), 'window_seconds': group.window[1],
+            'retry_after': math.ceil(stamps[over] + group.window[1] - now) if over >= 0 else 0,
+        }
+    return {'platform': platform, 'cooldown_seconds': max(0, math.ceil(number(state.get('blocked_until')) - now)), 'quotas': list(quotas.values())}
 
 
 def record_bypass(platform, group_name, now=None):
@@ -345,8 +368,10 @@ def take_turn(platform, group_name, limit=None, background=False, opening=False)
     if cli_policy['bypass']:
         record_bypass(platform, group_name)
         return 0
-    if limit is not None or cli_policy['queue_limit'] is None or cli_policy['queued']:
+    if limit is not None or cli_policy['queue_limit'] is None:
         return reserve(platform, group_name, limit=limit, background=background, opening=opening)
+    if cli_policy['queued']:
+        return reserve(platform, group_name, opening=opening, patience=cli_policy['queue_limit'])
     wait = reserve(platform, group_name, limit=cli_policy['queue_limit'], limit_code='RATE_WAIT_EXCEEDED', opening=opening)
     cli_policy['queued'] = True
     return wait

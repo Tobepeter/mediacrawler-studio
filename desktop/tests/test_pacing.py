@@ -57,6 +57,53 @@ def test_big_bucket_limits_total_then_recovers(waits):
     assert reserve('t', 'limited', now=1101) == 0
 
 
+def test_big_bucket_waits_only_as_long_as_the_caller_accepts(waits):
+    for offset in (0, 10, 20):
+        reserve('t', 'limited', now=1000 + offset)
+    with pytest.raises(CreatorError) as caught:
+        reserve('t', 'limited', now=1030, limit=60, limit_code='RATE_WAIT_EXCEEDED')
+    assert caught.value.code == 'RATE_WAIT_EXCEEDED' and caught.value.retry_after == 70
+    assert reserve('t', 'limited', now=1030, limit=70, limit_code='RATE_WAIT_EXCEEDED') == 70
+    # 第一个位置已被排队的请求占了，下一次要等第二条旧记录滑出窗口
+    with pytest.raises(CreatorError) as caught:
+        reserve('t', 'limited', now=1030, patience=70)
+    assert caught.value.code == 'RATE_LIMITED' and caught.value.retry_after == 80
+    assert reserve('t', 'limited', now=1030, patience=80) == 80
+
+
+def test_cli_max_wait_covers_the_big_bucket_before_and_after_start(waits, monkeypatch):
+    monkeypatch.setattr(pacing, 'cli_policy', {'queue_limit': None, 'queued': False, 'bypass': False})
+    monkeypatch.setattr(pacing.time, 'time', lambda: 1030)
+    for offset in (0, 10, 20):
+        reserve('t', 'limited', now=1000 + offset)
+    pacing.configure_cli(5)
+    with pytest.raises(CreatorError) as caught:
+        pacing.take_turn('t', 'limited')
+    assert caught.value.code == 'RATE_WAIT_EXCEEDED'
+    pacing.configure_cli(500)
+    assert pacing.take_turn('t', 'limited') == 70
+    assert pacing.take_turn('t', 'limited') == 80
+    pacing.configure_cli(3)
+    pacing.cli_policy['queued'] = True
+    with pytest.raises(CreatorError) as caught:
+        pacing.take_turn('t', 'limited')
+    assert caught.value.code == 'RATE_LIMITED'
+
+
+def test_quota_reports_usage_without_taking_a_slot(waits):
+    for offset in (0, 10, 20):
+        reserve('t', 'limited', now=1000 + offset)
+    reserve('t', 'a', now=1000)
+    report = pacing.quota('t', now=1030)
+    rows = {row['name']: row for row in report['quotas']}
+    assert rows['limited'] == {'name': 'limited', 'used': 3, 'limit': 3, 'remaining': 0, 'window_seconds': 100, 'retry_after': 70}
+    assert rows['shared']['remaining'] == 1 and rows['shared']['retry_after'] == 0
+    assert report['cooldown_seconds'] == 0
+    assert pacing.quota('t', now=1030) == report
+    start_cooldown('t', now=1030)
+    assert pacing.quota('t', now=1040)['cooldown_seconds'] == 90
+
+
 def test_groups_in_one_pool_share_the_big_bucket(waits):
     reserve('t', 'a', now=1000)
     reserve('t', 'b', now=1000)

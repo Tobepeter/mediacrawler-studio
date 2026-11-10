@@ -44,7 +44,7 @@ uv run mediacrawler creator posts --platform bili --creator https://space.bilibi
 ```
 
 - `--creator` 接受主页链接、`v.douyin.com` 分享短链、App 整段分享文案、sec_uid 或名称。名称必须在搜索首页唯一且完全匹配昵称或抖音号，否则返回 `CREATOR_AMBIGUOUS` / `CREATOR_NOT_FOUND` 和 `candidates`
-- stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`
+- stdout 每行一条结果，末行固定为 `{"type":"page","next_cursor":...,"has_more":...,"count":...,"complete":...}`，posts 首页还带 `creator`；`--format json` 输出 `{items, page}`。`has_more=false` 才表示已到末尾；还没拿到分页信息就失败时是 `null`，同时 `complete=false`，要按错误码重试，不能当作没有更多
 - 游标不透明，精确到页内位置，换 `--limit` 继续也不漏条，绑定关键词或博主，不匹配返回 `INVALID_CURSOR`。失败或风控时也会输出最近的游标，可稍后继续；跨次搜索可能出现重复候选，按 `id` 去重
 - 小红书（`--platform xhs`）支持 `creator search`，结果带可直接采集的主页链接
 - B站（`--platform bili`）支持 `creator search`、`creator posts` 和 `search`，`--creator` 接受 `space.bilibili.com` 主页链接、`b23.tv` 短链、UID 或完全匹配的昵称
@@ -73,11 +73,31 @@ uv run mediacrawler creator posts --platform bili --creator https://space.bilibi
 | 知乎、微博、贴吧、快手 | 其他请求 | 1 | 2–4 秒 | 无 |
 
 - 桌面端、CLI 和体检共用同一份节奏和冷却，都由 `desktop/pacing.py` 统一放行；不经过这里的只有内嵌窗口的普通页面加载和媒体文件下载
-- 任务开始前最多排队 `--max-wait` 秒（默认 3，上限 600），超过立刻返回 `RATE_WAIT_EXCEEDED` 和 `retry_after`，不会闷头卡住；可以按 `retry_after` 重试，或调大 `--max-wait`
-- 任务开始后的翻页和详情按上表间隔自动等待，不受 `--max-wait` 影响；单次等待超过 30 秒（或 `--max-wait`，取较大值）或达到上限时返回 `RATE_LIMITED`
+- `--max-wait`（默认 3，上限 600）是单次最多排队的秒数，包括等 10 分钟额度恢复，要小于 `--timeout`。任务开始前超过时立刻返回 `RATE_WAIT_EXCEEDED` 和 `retry_after`，不会闷头卡住；可以按 `retry_after` 重试，或调大 `--max-wait`
+- 任务开始后的翻页和详情按上表间隔自动等待，单次等待超过 30 秒（或 `--max-wait`，取较大值）时返回 `RATE_LIMITED`。10 分钟额度用满时，恢复时间不超过 `--max-wait` 就继续等，否则返回 `RATE_LIMITED`，默认的 3 秒基本等于不等
 - `--no-throttle` 跳过本地间隔、上限和冷却直接请求，只在排查时手动传。这些请求仍会计入节奏，平台返回验证时同样进入冷却，之后不带这个参数的调用要等冷却结束
 - 任何接口返回验证要求时返回 `SEARCH_VERIFICATION_REQUIRED`，整个平台进入冷却（抖音、小红书 30 分钟，B站 15 分钟，24 小时内再次触发翻倍，最长 6 小时），期间本地直接返回 `RATE_COOLDOWN`，不再请求平台。这些错误都带 `retry_after`（秒）
 - 频率只改 `desktop/pacing.py` 的 `PLATFORMS` 一张表：`groups` 定义两个桶，`methods` 和 `paths` 把接口归到组
+
+### 一次命令用多少额度
+
+搜索本身只占 1 次新搜索额度，真正消耗大的是按条补详情，它和评论共用“详情、评论”这个额度。批量前先看余量：
+
+```sh
+uv run mediacrawler rate status --platform bili
+```
+
+只读本地状态，不发请求。`quotas` 里 `detail` 是详情和评论，`remaining` 是 10 分钟内还剩多少次，`retry_after` 是用满时多少秒后恢复，`cooldown_seconds` 大于 0 表示平台在冷却
+
+| 操作 | B站 | 小红书 | 抖音 |
+| --- | --- | --- | --- |
+| `search` 每条作品，默认 | 3 次 | 1 次 | 0 次 |
+| `search` 每条作品，`--no-media` | 1 次 | 1 次 | 0 次 |
+| 10 分钟内默认最多补多少条 | 约 26 条 | 40 条 | 不受此额度限制 |
+
+以上按每平台 3 条实测（2026-11-11）。`comments` 每次先取作品信息再取一页评论，小红书和抖音实测共 2 次；`transcribe --source` 抖音实测 1 次，这两项 B站没有单独测过
+
+做多关键词调研时，B站先用 `--no-media` 粗筛，选中的作品再用 `collect --url` 补字幕，能省下大部分额度。`--no-media` 不返回时长和字幕，B站部分作品也没有正文
 
 ## 评论
 
@@ -233,7 +253,7 @@ mediacrawler auth login --help
 - 分轨视频的推荐结果另给出音频 ID；缺失音频时 selection.status=audio_unavailable。未解析多语言音轨，不能保证列出所有音轨
 - `media.status` 区分 available / not_provided / failed / not_requested。媒体失败不会丢弃正文，成功退出不代表所有附加信息都完整，调用方必须检查此状态
 - 默认补查支持的平台能力；顶层 `subtitles` 包含字幕语言、来源、地址与 `segments`（start/end/text，时间单位秒）。兼容保留 `media.subtitles` 与 `media.subtitleStatus`
-- 默认逐作品补查：详情最多 45 秒，B站播放器信息最多 15 秒，字幕正文合计最多 30 秒；仍受整体任务超时约束。局部失败保留其余结果，旧 `--no-media` 开关保留兼容，不新增平台专用过滤选项
+- 默认逐作品补查：详情最多 45 秒，B站播放器信息最多 15 秒，字幕正文合计最多 30 秒；仍受整体任务超时约束。局部失败保留其余结果，`--no-media` 跳过这一步，消耗见“一次命令用多少额度”，不新增平台专用过滤选项
 - `--verbose` / `-v` 仅增加脱敏阶段日志至 stderr，不改变 stdout JSON，不打开上游可能含凭据的原始调试日志
 
 ### 统一能力结构

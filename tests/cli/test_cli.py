@@ -68,6 +68,23 @@ def test_native_lock_releases_on_crash(tmp_path):
         assert Path(path).exists()
 
 
+def test_max_wait_must_fit_inside_timeout():
+    from typer.testing import CliRunner
+    from mediacrawler_cli.__main__ import app
+    result = CliRunner().invoke(app, ['search', '--platform', 'dy', '--query', 'x', '--max-wait', '200', '--timeout', '100'])
+    assert result.exit_code == 2 and 'max-wait' in result.output
+
+
+def test_rate_status_reads_local_state_only(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from mediacrawler_cli.__main__ import app
+    monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
+    result = CliRunner().invoke(app, ['rate', 'status', '--platform', 'bili'])
+    report = json.loads(result.output)
+    assert result.exit_code == 0 and report['platform'] == 'bili' and report['cooldown_seconds'] == 0
+    assert {'name': 'detail', 'used': 0, 'limit': 80, 'remaining': 80, 'window_seconds': 600, 'retry_after': 0} in report['quotas']
+
+
 def test_success_and_output(tmp_path, monkeypatch, capsys):
     fake_worker(monkeypatch, 'import json; print(json.dumps({"type":"complete","items":[{"id":"a"}]}))')
     run(request(tmp_path, output_dir=str(tmp_path / 'output')))
