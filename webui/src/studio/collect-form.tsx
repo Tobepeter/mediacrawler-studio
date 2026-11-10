@@ -56,6 +56,15 @@ export function CollectForm() {
   const form = useForm()
   const page = usePage()
   const task = tasks[form.platform]
+  // 输入框没内容时跟随当前结果，博主始终显示在输入框里
+  const pageCreator = page?.task.mode === 'creator' ? page.task : undefined
+  const followsPage = !!pageCreator && !form.query.trim()
+  const creatorMode = form.mode === 'creator' || followsPage
+  const creatorUrl = followsPage ? pageCreator.query : form.query
+  const creatorFilter = useStudio((state) =>
+    page ? state.creatorFilters[page.id] || '' : '',
+  )
+  const setCreatorFilter = useStudio((state) => state.setCreatorFilter)
   const pending =
     clearing ||
     (!!requests[form.platform] && requests[form.platform] !== 'continue')
@@ -81,12 +90,12 @@ export function CollectForm() {
   // 输入换了别的内容后来处自动失效，不用到处清理
   const trip = (() => {
     const value = authorTrips[form.platform]
-    return value?.url === form.query ? value : undefined
+    return value?.url === creatorUrl ? value : undefined
   })()
   const creator =
-    (picked?.url === form.query && picked) ||
-    (page?.task.query === form.query && page.task.creator) ||
-    history.find((entry) => entry.task.query === form.query)?.task.creator ||
+    (picked?.url === creatorUrl && picked) ||
+    (page?.task.query === creatorUrl && page.task.creator) ||
+    history.find((entry) => entry.task.query === creatorUrl)?.task.creator ||
     (trip && { name: trip.name, url: trip.url }) ||
     undefined
   const chooseCreator = (summary: CreatorSummary) => {
@@ -108,8 +117,8 @@ export function CollectForm() {
         ? { limit: trip.form.limit, auto: trip.form.auto }
         : { limit: limitFor('search') }),
     })
-    // 清空输入即回到推荐流；结果仍在历史里
-    if (page && feedPlatforms.includes(form.platform))
+    // 清空输入即回到推荐流，博主结果也一起撤掉；结果仍在历史里
+    if (page && (feedPlatforms.includes(form.platform) || pageCreator))
       void useStudio.getState().backToFeed()
   }
   const updateQuery = (input: string) => {
@@ -196,7 +205,10 @@ export function CollectForm() {
             aria-describedby={locked ? 'login-gate-label' : undefined}
             onSubmit={(event) => {
               event.preventDefault()
-              if (!blocked) void start()
+              if (blocked) return
+              if (followsPage)
+                updateForm({ query: creatorUrl, mode: 'creator' })
+              void start()
             }}
           >
             <fieldset
@@ -210,12 +222,24 @@ export function CollectForm() {
                     disabled={!!requests[form.platform]}
                   />
                 )}
-                {form.mode === 'creator' ? (
+                {creatorMode ? (
                   <CreatorField
-                    url={form.query}
+                    url={creatorUrl}
                     creator={creator}
                     disabled={busy || pending || locked}
                     onClear={clearQuery}
+                    filter={
+                      page &&
+                      pageCreator?.query === creatorUrl &&
+                      page.results.length
+                        ? {
+                            value: creatorFilter,
+                            count: page.results.length,
+                            onChange: (value) =>
+                              setCreatorFilter(page.id, value),
+                          }
+                        : undefined
+                    }
                   />
                 ) : (
                   <ClearableInput
@@ -276,7 +300,7 @@ export function CollectForm() {
                   (blocked && !busy) ||
                   locked ||
                   task?.status === 'stopping' ||
-                  (!busy && !form.query.trim())
+                  (!busy && !creatorUrl.trim())
                 }
                 aria-busy={busy}
                 onClick={

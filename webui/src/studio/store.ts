@@ -87,6 +87,8 @@ interface StudioStore extends StudioState {
   searchAuthor: (name: string) => void
   // 从作品点进博主后记下来处，一步回到刚才看的位置
   authorTrips: Partial<Record<Platform, AuthorTrip>>
+  creatorFilters: Record<string, string>
+  setCreatorFilter: (pageId: string, value: string) => void
   openAuthor: (item: ContentItem) => Promise<void>
   leaveAuthor: () => Promise<void>
   backToFeed: () => Promise<void>
@@ -222,6 +224,12 @@ export const useStudio = create<StudioStore>((set, get) => ({
     void start()
   },
   authorTrips: {},
+  // 按结果页记，换一批结果自然失效
+  creatorFilters: {},
+  setCreatorFilter: (pageId, value) =>
+    set((state) => ({
+      creatorFilters: { ...state.creatorFilters, [pageId]: value },
+    })),
   openAuthor: async (item) => {
     const { platform, forms, pages, history } = get()
     const url = item.authorUrl

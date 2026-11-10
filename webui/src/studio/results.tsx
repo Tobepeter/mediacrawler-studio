@@ -7,7 +7,7 @@ import { Inbox, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { activeStatuses, platformBusy, platformNames, useStudio } from './store'
 import type { Platform } from './types'
-import { CreatorHeader } from './creator-ui'
+import { matchesKeyword } from './creator-ui'
 import { feedPlatforms } from './creator-options'
 import { FeedList } from './feed-list'
 import { ResultCard } from './result-card'
@@ -49,7 +49,12 @@ const ResultItems = memo(function ResultItems({
   // 自动模式接近底部就继续，看不到按钮；用户停止、失败或一批没有新内容时才交给手动
   const pagedTask = creatorTask || (page?.task.auto ? page.task : null)
   // 旧博主记录没有这个字段，只有明确选了数字的才是固定数量
-  const formQuery = useStudio((state) => state.forms[platform].query)
+  const filter = useStudio((state) =>
+    page ? state.creatorFilters[page.id] || '' : '',
+  )
+  const shown = filter
+    ? results.filter((item) => matchesKeyword(item, filter))
+    : results
   const autoMode = !!pagedTask && pagedTask.auto !== false
   // 看详情、找博主或翻历史时暂停：续采占用平台，会让这些操作失败或被打断
   const route = useStudioRoute()
@@ -81,15 +86,16 @@ const ResultItems = memo(function ResultItems({
         </div>
       ) : (
         <div className='pb-2 pt-1'>
-          {/* 输入框已显示同一位博主时不重复，改看别的内容时才在这里标明结果归属 */}
-          {creatorTask?.creator && formQuery !== creatorTask.query && (
-            <CreatorHeader
-              creator={creatorTask.creator}
-              count={results.length}
-            />
+          {!shown.length && (
+            <p
+              className='py-16 text-center text-muted-foreground'
+              role='status'
+            >
+              {t('没有匹配的作品')}
+            </p>
           )}
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
-            {results.map((item, index) => (
+            {shown.map((item, index) => (
               <Reveal
                 key={`${page?.id}:${item.id}`}
                 delay={Math.min(index, 4) * 40}
@@ -98,7 +104,8 @@ const ResultItems = memo(function ResultItems({
               </Reveal>
             ))}
           </div>
-          {pagedTask && (
+          {/* 搜索只看已采的内容，不触发继续采集 */}
+          {pagedTask && !filter && (
             <ScrollSentinel
               key={`${page?.id}:${results.length}`}
               active={autoReady && !busy && !paused && route !== 'history'}

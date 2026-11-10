@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { ClearButton } from '@/components/common/clearable-input'
 import { IconButton } from '@/components/common/icon-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
 import { platformBlocked, useStudio } from './store'
 import type { ContentItem, CreatorInfo } from './types'
 
@@ -68,6 +69,16 @@ export function AuthorName({ item }: { item: ContentItem }) {
   )
 }
 
+// 空格分开的词都要出现，大小写不敏感
+export function matchesKeyword(item: ContentItem, keyword: string) {
+  const text = `${item.title} ${item.text}`.toLowerCase()
+  return keyword
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => text.includes(word))
+}
+
 function OpenCreator({ url, className }: { url: string; className?: string }) {
   const { t } = useTranslation('studio')
   return (
@@ -98,57 +109,61 @@ export function AuthorBack(props: { fromPage: boolean; disabled?: boolean }) {
   )
 }
 
-// 博主模式下代替输入框，也是这批结果的标题；完整链接只放在悬浮提示里
+// 博主模式下代替输入框：左边是这批结果属于谁，右边在已采的作品里继续搜
 export function CreatorField(props: {
   url: string
   creator?: CreatorInfo
   disabled?: boolean
   onClear: () => void
+  filter?: { value: string; count: number; onChange: (value: string) => void }
 }) {
-  const { url, creator, disabled, onClear } = props
+  const { url, creator, disabled, onClear, filter } = props
   const { t } = useTranslation('studio')
   const stats = useCreatorStats()
   const name = creator?.name || t('博主主页')
   const detail = creator ? stats(creator).join(' · ') : ''
   return (
-    <div
-      className='flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input pl-2 pr-1 text-body'
-      title={url}
-    >
-      <CreatorAvatar
-        name={name}
-        avatar={creator?.avatar}
-        className='size-6 text-caption'
-      />
-      <span className='shrink-0 truncate font-medium'>{name}</span>
-      <span className='hidden min-w-0 truncate text-caption text-muted-foreground sm:inline'>
-        {detail}
+    <div className='flex h-9 min-w-0 flex-1 items-center gap-1 rounded-md border border-input px-1 text-body focus-within:ring-1 focus-within:ring-ring'>
+      <span
+        className='flex h-7 min-w-0 max-w-[60%] shrink-0 items-center gap-1.5 rounded-sm bg-muted pl-1'
+        title={[detail, url].filter(Boolean).join('\n')}
+      >
+        <CreatorAvatar
+          name={name}
+          avatar={creator?.avatar}
+          className='size-5 text-caption'
+        />
+        <span className='truncate font-medium'>{name}</span>
+        <OpenCreator url={creator?.url || url} className='size-7' />
+        {!disabled && <ClearButton label={t('清除博主')} onClick={onClear} />}
       </span>
-      <span className='flex-1' />
-      <OpenCreator url={creator?.url || url} className='size-7' />
-      {!disabled && <ClearButton label={t('清除博主')} onClick={onClear} />}
-    </div>
-  )
-}
-
-export function CreatorHeader(props: { creator: CreatorInfo; count: number }) {
-  const { creator, count } = props
-  const { t } = useTranslation('studio')
-  const stats = useCreatorStats()
-  return (
-    <div className='flex items-center gap-3 pb-4'>
-      <CreatorAvatar
-        name={creator.name}
-        avatar={creator.avatar}
-        className='size-10'
-      />
-      <div className='min-w-0'>
-        <h2 className='truncate font-semibold'>{creator.name}</h2>
-        <p className='truncate text-caption text-muted-foreground'>
-          {[...stats(creator), t('已采 {{count}} 条', { count })].join(' · ')}
-        </p>
-      </div>
-      <OpenCreator url={creator.url} />
+      {filter ? (
+        <>
+          <Input
+            className='h-7 min-w-0 flex-1 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0'
+            aria-label={t('在这位博主的作品里搜索')}
+            placeholder={t('在已采的 {{count}} 条里搜索', {
+              count: filter.count,
+            })}
+            value={filter.value}
+            onChange={(event) => filter.onChange(event.target.value)}
+            // 回车是筛选，不是重新采集
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.preventDefault()
+            }}
+          />
+          {filter.value && (
+            <ClearButton
+              label={t('清除搜索')}
+              onClick={() => filter.onChange('')}
+            />
+          )}
+        </>
+      ) : (
+        <span className='hidden min-w-0 flex-1 truncate px-1 text-caption text-muted-foreground sm:inline'>
+          {detail}
+        </span>
+      )}
     </div>
   )
 }
