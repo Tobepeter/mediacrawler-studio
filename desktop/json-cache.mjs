@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import path from 'node:path'
 
 // 一类缓存一个文件，条目带写入时间；文件损坏或版本变化都当作没有缓存，缓存不能影响主流程
@@ -55,6 +61,19 @@ export class JsonCache {
     while (this.maxEntries && entries.size > this.maxEntries)
       entries.delete(entries.keys().next().value)
     this.write()
+  }
+
+  clear() {
+    this.entries = new Map()
+    this.write()
+  }
+
+  bytes() {
+    try {
+      return statSync(this.file).size
+    } catch {
+      return 0
+    }
   }
 
   delete(key) {

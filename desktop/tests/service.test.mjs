@@ -924,3 +924,24 @@ test('同一条视频重复点击共用一次提取', async () => {
     await cleanup()
   }
 })
+
+test('清理缓存只清字幕、推荐预取和网络缓存', async () => {
+  const { service, cleanup } = await createService('process.exit(0)')
+  try {
+    const calls = []
+    const session = {
+      getCacheSize: async () => 1000,
+      clearCache: async () => calls.push('browser'),
+    }
+    service.windows.cacheSessions = () => [session, session]
+    service.transcriptCache.set('dy:1', { text: 'x' })
+    service.feed.cache.set('dy', { account: 'a', page: { items: [{}] } })
+    assert.ok((await service.cacheSize()) > 2000)
+    await service.clearCache()
+    assert.deepEqual(calls, ['browser', 'browser'])
+    assert.equal(service.transcriptCache.get('dy:1'), undefined)
+    assert.equal(service.feed.cache.get('dy'), undefined)
+  } finally {
+    await cleanup()
+  }
+})

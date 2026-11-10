@@ -81,14 +81,15 @@ export class StudioService {
     this.spawnProcess = options.spawnProcess || spawn
     this.library = new StudioLibrary(this.dataDir)
     // 字幕按作品 ID 存，和哪条记录、推荐流是否刷新都无关，可以随时重新生成
-    this.transcriptCache = new JsonCache(
-      path.join(this.dataDir, 'cache'),
-      'transcripts',
-      { maxEntries: 100, logger: this.logger },
-    )
+    // macOS 目录名不区分大小写，cache 会和 Chromium 的 Cache 混在一起
+    const cacheDir = path.join(this.dataDir, 'app-cache')
+    this.transcriptCache = new JsonCache(cacheDir, 'transcripts', {
+      maxEntries: 100,
+      logger: this.logger,
+    })
     this.feed = new FeedScheduler({
       platforms: feedPlatforms,
-      cache: new JsonCache(path.join(this.dataDir, 'cache'), 'feed', {
+      cache: new JsonCache(cacheDir, 'feed', {
         version: 4,
         ttlMs: feedCacheTtl,
         logger: this.logger,
@@ -355,6 +356,25 @@ export class StudioService {
         : 'missing',
       busy: false,
     }
+  }
+
+  async cacheSize() {
+    const browser = await Promise.all(
+      this.windows.cacheSessions().map((session) => session.getCacheSize()),
+    )
+    return browser.reduce(
+      (sum, value) => sum + value,
+      this.transcriptCache.bytes() + this.feed.cache.bytes(),
+    )
+  }
+
+  // 只清可以重新获取的内容，登录态和采集记录不在缓存里
+  async clearCache() {
+    this.transcriptCache.clear()
+    this.feed.cache.clear()
+    await Promise.all(
+      this.windows.cacheSessions().map((session) => session.clearCache()),
+    )
   }
 
   cachedTranscript(platform, id) {

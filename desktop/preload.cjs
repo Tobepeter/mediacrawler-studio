@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('studio', {
     ipcRenderer.invoke('studio:cancel-detail', platform, id),
   cancelVideo: (requestId) =>
     ipcRenderer.invoke('studio:cancel-video', requestId),
+  cacheSize: () => ipcRenderer.invoke('studio:cache-size'),
+  clearCache: () => ipcRenderer.invoke('studio:clear-cache'),
   clearSessions: () => ipcRenderer.invoke('studio:clear-sessions'),
   logout: (platform) => ipcRenderer.invoke('studio:logout', platform),
   downloadMedia: (

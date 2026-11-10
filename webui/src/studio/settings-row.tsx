@@ -1,7 +1,14 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 export function SettingGroup({ children }: { children: ReactNode }) {
   return <Card className='divide-y'>{children}</Card>
@@ -23,6 +30,45 @@ export function SettingRow(props: {
       </div>
       {props.children}
     </div>
+  )
+}
+
+// 不可逆或影响范围大的操作，点一下先在浮层里说清楚再确认
+export function ConfirmButton(props: {
+  icon: ReactNode
+  label: string
+  confirm: string
+  message: string
+  disabled?: boolean
+  onConfirm: () => void
+}) {
+  const { t } = useTranslation('studio')
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant='outline' disabled={props.disabled}>
+          {props.icon}
+          {props.label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align='end' className='space-y-3'>
+        <p>{props.message}</p>
+        <div className='flex justify-end gap-2'>
+          <Button variant='ghost' onClick={() => setOpen(false)}>
+            {t('取消')}
+          </Button>
+          <Button
+            onClick={() => {
+              setOpen(false)
+              props.onConfirm()
+            }}
+          >
+            {props.confirm}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 

@@ -187,6 +187,8 @@ app
     handle('cancel-detail', (platform, id) =>
       service.cancelDetail(platform, id),
     )
+    handle('cache-size', () => service.cacheSize())
+    handle('clear-cache', () => service.clearCache())
     handle('clear-sessions', () => service.clearSessions())
     handle('logout', (platform) => {
       if (typeof platform !== 'string') throw new Error('不支持的平台')

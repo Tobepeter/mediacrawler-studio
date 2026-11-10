@@ -292,6 +292,16 @@ test('JsonCache 按大类存一个文件，过期和损坏都当作没有缓存'
   assert.deepEqual(open().get('bili'), { c: 3 })
 })
 
+test('JsonCache 清空后文件还在且大小变小', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'studio-cache-'))
+  const cache = new JsonCache(dir, 'transcripts')
+  cache.set('a', 'x'.repeat(2000))
+  const before = cache.bytes()
+  cache.clear()
+  assert.ok(cache.bytes() < before)
+  assert.equal(new JsonCache(dir, 'transcripts').get('a'), undefined)
+})
+
 test('JsonCache 超过上限淘汰最早写入的，重新写入算最新', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'studio-cache-'))
   const open = () => new JsonCache(dir, 'transcripts', { maxEntries: 2 })

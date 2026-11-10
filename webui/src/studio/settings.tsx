@@ -14,11 +14,6 @@ import {
 import { IconButton } from '@/components/common/icon-button'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
@@ -38,12 +33,14 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ThemeToggle } from './theme-toggle'
 import { SttSettings } from './transcript'
+import { CacheSettings } from './cache-settings'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
 import { PlatformIcon } from './platform-icon'
 import { panelDialogClass } from './panel-dialog'
 import { resetPlayback, setPlayback, usePlayback } from './playback'
 import {
+  ConfirmButton,
   SettingCheck,
   SettingGroup,
   SettingPage,
@@ -75,7 +72,6 @@ export function StudioSettings() {
   } = useStudio()
   const [clearing, setClearing] = useState(false)
   const [resetting, setResetting] = useState(false)
-  const [confirmingReset, setConfirmingReset] = useState(false)
   const playback = usePlayback()
   const savePlayback = (value: Parameters<typeof setPlayback>[0]) => {
     if (!setPlayback(value))
@@ -217,6 +213,7 @@ export function StudioSettings() {
                   />
                   <CliSettings />
                   <SttSettings />
+                  <CacheSettings />
                   <SettingRow
                     title={t('运行日志')}
                     hint={t('反馈问题时可以附上')}
@@ -235,43 +232,16 @@ export function StudioSettings() {
                     </Button>
                   </SettingRow>
                   <SettingRow title={t('恢复默认设置')}>
-                    <Popover
-                      open={confirmingReset}
-                      onOpenChange={setConfirmingReset}
-                    >
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant='outline'
-                          disabled={blocked || clearing || resetting}
-                        >
-                          <RotateCcw />
-                          {t('恢复')}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align='end' className='space-y-3'>
-                        <p>
-                          {t(
-                            '语言、外观和开关会重置，登录态和采集记录不受影响',
-                          )}
-                        </p>
-                        <div className='flex justify-end gap-2'>
-                          <Button
-                            variant='ghost'
-                            onClick={() => setConfirmingReset(false)}
-                          >
-                            {t('取消')}
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              setConfirmingReset(false)
-                              void reset()
-                            }}
-                          >
-                            {t('恢复')}
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <ConfirmButton
+                      icon={<RotateCcw />}
+                      label={t('恢复')}
+                      confirm={t('恢复')}
+                      message={t(
+                        '语言、外观和开关会重置，登录态和采集记录不受影响',
+                      )}
+                      disabled={blocked || clearing || resetting}
+                      onConfirm={() => void reset()}
+                    />
                   </SettingRow>
                 </SettingGroup>
               </div>

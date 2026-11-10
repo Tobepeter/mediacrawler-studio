@@ -308,6 +308,8 @@ export interface StudioBridge {
   focusFeed?(platform: Platform): Promise<void>
   keepFeedFresh?(platform: Platform): Promise<void>
   cancelDetail?(platform: Platform, id: string): Promise<void>
+  cacheSize?(): Promise<number>
+  clearCache?(): Promise<void>
   clearSessions(): Promise<{ localOnly: boolean }>
   logout(platform: Platform): Promise<{ localOnly: boolean }>
   downloadMedia(

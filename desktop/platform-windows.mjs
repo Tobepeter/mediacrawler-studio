@@ -31,6 +31,14 @@ export class PlatformWindows {
     return session.fromPartition(`persist:studio-${platform}`)
   }
 
+  // 应用界面和各平台页面的网络缓存，不含 Cookie 等登录数据
+  cacheSessions() {
+    return [
+      session.defaultSession,
+      ...Object.keys(platforms).map((platform) => this.getSession(platform)),
+    ]
+  }
+
   async accounts() {
     const entries = await Promise.all(
       Object.entries(platforms).map(async ([id, config]) => {
