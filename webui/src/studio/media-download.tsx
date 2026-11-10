@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Images, Film, Loader2 } from 'lucide-react'
+import { Captions, Download, Images, Film, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,7 @@ import {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import { videoQualities } from './media-options'
+import { useHasTranscript } from './transcript'
 import { useDetailMedia } from './use-detail-media'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
@@ -40,8 +41,27 @@ export function MediaDownload({ item }: { item: ContentItem }) {
   const coverOnly = video && item.images.length === 1
   const canDownloadVideo =
     video || !['available', 'not_provided'].includes(item.media?.status || '')
+  const hasTranscript = useHasTranscript(item)
   const setFailure = (downloadFailure: string) =>
     useStudio.getState().patch({ downloadFailure })
+  // 字幕已经在本地，不占用平台，保存位置跟随“下载前询问”
+  const saveTranscript = async (format: 'srt' | 'txt') => {
+    try {
+      const result = await window.studio!.saveTranscript!(
+        item.platform,
+        item.id,
+        format,
+        useStudio.getState().askBeforeDownload,
+      )
+      if (result.saved)
+        toast.success(t('字幕已保存'), {
+          id: 'media-download',
+          description: result.name,
+        })
+    } catch {
+      toast.error(t('字幕保存失败，请重试'), { id: 'media-download' })
+    }
+  }
   const download = async (kind: 'images' | 'video', quality = 'best') => {
     if (!window.studio || busy || downloading) return
     setDownloading(true)
@@ -159,6 +179,28 @@ export function MediaDownload({ item }: { item: ContentItem }) {
                   {t('下载视频')}
                 </DropdownMenuItem>
               ))}
+            {hasTranscript && !!window.studio?.saveTranscript && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Captions />
+                  {t('下载字幕')}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      onSelect={() => void saveTranscript('srt')}
+                    >
+                      {t('SRT（带时间轴）')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => void saveTranscript('txt')}
+                    >
+                      {t('TXT（纯文字）')}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

@@ -68,6 +68,14 @@ function clock(seconds: number) {
     : `${pad(minutes)}:${pad(total % 60)}`
 }
 
+// 这条视频现在有没有可用的字幕，下载菜单用
+export function useHasTranscript(item: ContentItem) {
+  const cached = useCachedTranscript(item)
+  return (
+    item.contentType === 'video' && (!!cached.data || !!platformSubtitle(item))
+  )
+}
+
 // 有字幕或能提取时才有这个 Tab；stt 不可用且没有现成字幕时不显示入口
 export function useTranscriptTab(item: ContentItem) {
   const status = useSttStatus()

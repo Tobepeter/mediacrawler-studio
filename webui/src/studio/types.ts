@@ -279,6 +279,12 @@ export interface StudioBridge {
   ): Promise<{ urls: string[]; code: string }>
   cancelVideo(requestId: string): Promise<void>
   sttStatus?(): Promise<SttStatus>
+  saveTranscript?(
+    platform: Platform,
+    id: string,
+    format: 'srt' | 'txt',
+    ask?: boolean,
+  ): Promise<{ saved: boolean; name?: string }>
   cachedTranscript?(
     platform: Platform,
     id: string,

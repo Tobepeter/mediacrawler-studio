@@ -377,6 +377,24 @@ export class StudioService {
     )
   }
 
+  // 保存字幕时用：生成过的优先，否则用平台字幕，中文轨优先
+  transcriptExport(platform, id) {
+    const item = this.findItem(platform, id)
+    const tracks = (item?.subtitles?.items || []).filter(
+      (track) => track.segments?.length,
+    )
+    const track =
+      tracks.find((value) => /^(ai-)?zh/i.test(value.language || '')) ||
+      tracks[0]
+    const transcript =
+      this.cachedTranscript(platform, id) ||
+      (track && {
+        segments: track.segments,
+        text: track.segments.map((row) => row.text).join('\n'),
+      })
+    return { transcript: transcript || null, title: item?.title }
+  }
+
   cachedTranscript(platform, id) {
     if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
       throw new Error('不支持的操作')

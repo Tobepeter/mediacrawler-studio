@@ -22,6 +22,11 @@ import { appIcon } from './app-icon.mjs'
 import { installPlaybackHeaders } from './playback-headers.mjs'
 import { HealthCheck } from './health-check.mjs'
 import { resolveCreatorLink } from './share-links.mjs'
+import {
+  availablePath,
+  transcriptContent,
+  transcriptName,
+} from './transcript-file.mjs'
 import { CliInstall } from './cli-install.mjs'
 import { acquireInstance } from './single-instance.mjs'
 
@@ -178,6 +183,24 @@ app
     handle('keep-feed-fresh', (platform) => service.keepFeedFresh(platform))
     handle('stt-status', () => service.sttStatus())
     handle('transcribe', (platform, id) => service.transcribe(platform, id))
+    handle('save-transcript', async (platform, id, format, ask = false) => {
+      if (!['srt', 'txt'].includes(format)) throw new Error('不支持的格式')
+      const { transcript, title } = service.transcriptExport(platform, id)
+      if (!transcript) throw new Error('这条视频还没有字幕')
+      let target = availablePath(
+        path.join(app.getPath('downloads'), transcriptName(title, format)),
+      )
+      if (ask === true) {
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: target,
+          filters: [{ name: format.toUpperCase(), extensions: [format] }],
+        })
+        if (result.canceled) return { saved: false }
+        target = result.filePath
+      }
+      await writeFile(target, transcriptContent(transcript, format), 'utf8')
+      return { saved: true, name: path.basename(target) }
+    })
     handle('cached-transcript', (platform, id) =>
       service.cachedTranscript(platform, id),
     )
