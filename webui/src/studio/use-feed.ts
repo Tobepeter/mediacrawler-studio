@@ -6,6 +6,7 @@ import {
 import { useEffect, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { t } from '@/i18n/studio'
+import { preloadCovers } from './cover-preload'
 import { feedPlatforms } from './creator-options'
 import { mergePages } from './merge-pages'
 import { queryClient } from './query-client'
@@ -84,8 +85,13 @@ export const useFeedRefreshing = (platform: Platform) =>
     () => refreshing.has(platform),
   )
 
+const swaps = new Map<Platform, number>()
+export const justSwapped = (platform: Platform) =>
+  Date.now() - (swaps.get(platform) || 0) < 1000
+
 // 新内容回来才整页替换，旧列表一直留着；手动和静默刷新共用，同平台只跑一个
-function replaceFeed(platform: Platform) {
+// 静默刷新要等封面就绪，等待期间用户动了就放弃，不能把正在看的内容换掉
+function replaceFeed(platform: Platform, keep?: () => boolean) {
   const running = refreshing.get(platform)
   if (running) return running
   const task = (async () => {
@@ -97,6 +103,16 @@ function replaceFeed(platform: Platform) {
       new AbortController().signal,
     )
     if (!page.items.length) return false
+    if (keep) {
+      await preloadCovers(
+        page.items
+          .slice(0, COVERS_BEFORE_SWAP)
+          .flatMap((item) => item.images[0] || []),
+        COVER_WAIT_MS,
+      )
+      if (!keep()) return false
+      swaps.set(platform, Date.now())
+    }
     queryClient.setQueryData<InfiniteData<FeedPage>>(queryKey, {
       pages: [page],
       pageParams: [undefined],
@@ -136,6 +152,8 @@ export function useFeedRefresh(platform: Platform) {
 }
 
 const FEED_STALE_MS = 30 * 60 * 1000
+const COVERS_BEFORE_SWAP = 10
+const COVER_WAIT_MS = 3000
 const ACTIVE_WITHIN_MS = 5 * 60 * 1000
 let lastActivity = Date.now()
 for (const event of ['pointerdown', 'keydown', 'wheel'])
@@ -148,22 +166,37 @@ const inUse = () =>
   document.hasFocus() &&
   Date.now() - lastActivity < ACTIVE_WITHIN_MS
 
+// 还停在这个平台的推荐顶部，没有打开详情、搜索或开始采集
+function undisturbed(platform: Platform) {
+  const state = useStudio.getState()
+  return (
+    state.platform === platform &&
+    !state.pages[platform] &&
+    !state.selected &&
+    !state.creatorSearchOpen &&
+    !platformBlocked(state, platform) &&
+    (mainScroller()?.scrollTop || 0) === 0
+  )
+}
+
 // 回到页面时列表已过期，且用户没在往下读，才静默换成新内容
 function renewIfStale(platform: Platform) {
-  const state = useStudio.getState()
   const updatedAt = queryClient.getQueryState(feedKey(platform))?.dataUpdatedAt
   if (
     !updatedAt ||
     Date.now() - updatedAt < FEED_STALE_MS ||
-    (mainScroller()?.scrollTop || 0) > 0 ||
-    !!state.selected ||
-    state.creatorSearchOpen ||
-    platformBlocked(state, platform)
+    !undisturbed(platform)
   )
     return
-  void retrySilently(() => replaceFeed(platform), {
-    active: () => useStudio.getState().platform === platform,
-  })
+  const since = Date.now()
+  void retrySilently(
+    () =>
+      replaceFeed(
+        platform,
+        () => lastActivity <= since && undisturbed(platform),
+      ),
+    { active: () => useStudio.getState().platform === platform },
+  )
 }
 
 // 只在用户真的在用当前平台时维护缓存，窗口闲置不发请求

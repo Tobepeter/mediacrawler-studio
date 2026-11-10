@@ -11,7 +11,12 @@ import { ScrollSentinel } from './scroll-sentinel'
 import { useStudio } from './store'
 import { ThrottledError, useRetryWait } from './throttle'
 import type { Platform } from './types'
-import { useFeed, useFeedFreshness, useFeedRefreshing } from './use-feed'
+import {
+  justSwapped,
+  useFeed,
+  useFeedFreshness,
+  useFeedRefreshing,
+} from './use-feed'
 
 const gridClass =
   'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
@@ -35,6 +40,8 @@ export function FeedList({ platform }: { platform: Platform }) {
     [fetchNextPage],
   )
   const items = feed.data?.items || []
+  // 静默换内容时直接显示，不重播入场动画
+  const instant = justSwapped(platform)
   useFeedFreshness(platform, current)
   const refreshing = useFeedRefreshing(platform)
   // 被限流时等倒计时结束，用户再滚动或调整窗口才继续；次数用完只留按钮
@@ -84,7 +91,11 @@ export function FeedList({ platform }: { platform: Platform }) {
     <div className='pb-2 pt-1'>
       <div className={gridClass}>
         {items.map((item, index) => (
-          <Reveal key={item.id} delay={Math.min(index, 4) * 40}>
+          <Reveal
+            key={item.id}
+            delay={Math.min(index, 4) * 40}
+            instant={instant}
+          >
             <ResultCard item={item} hidePlatform />
           </Reveal>
         ))}

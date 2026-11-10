@@ -2,8 +2,10 @@ import { useState, type PropsWithChildren } from 'react'
 import { cn } from '@/lib/utils'
 
 // 入场完成后移除动画，保留挂载的 Tab 再次显示时不会重播
-export function Reveal(props: PropsWithChildren<{ delay?: number }>) {
-  const [entered, setEntered] = useState(false)
+export function Reveal(
+  props: PropsWithChildren<{ delay?: number; instant?: boolean }>,
+) {
+  const [entered, setEntered] = useState(!!props.instant)
   return (
     <div
       className={cn(

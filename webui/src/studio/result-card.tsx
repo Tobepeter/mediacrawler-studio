@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { isPreloaded } from './cover-preload'
 import { openSource } from './content-detail'
 import { useCoverBackfill } from './cover-backfill'
 import { AuthorName } from './creator-ui'
@@ -114,7 +115,7 @@ export function ResultCard(props: {
 
 // 封面占位尺寸固定；网络图片与缓存图片均按加载完成淡入
 function ResultCover({ src }: { src: string }) {
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(() => isPreloaded(src))
   return (
     <img
       ref={(image) => {
