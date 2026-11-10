@@ -2,15 +2,16 @@
 import copy
 
 from desktop.content.media import enrich
+from desktop.pacing import log_only, reporter, visit
 
 
-async def refreshed(record, page, runner=None, quality='best'):
+async def refreshed(record, page, runner=None, quality='best', background=False, emit=None):
     if runner is None:
         from desktop.crawler import DesktopCrawler
         runner = DesktopCrawler({
             'platform': record['platform'], 'mode': 'link', 'query': record['url'],
-            'limit': 1, 'action': 'connect', 'reusePage': True,
-        }, page, lambda *args, **kwargs: None)
+            'limit': 1, 'action': 'connect', 'reusePage': True, 'background': background,
+        }, page, log_only(emit))
         await runner.setup()
         await runner.client.update_cookies(runner.context)
     fresh = copy.deepcopy(record)
@@ -18,13 +19,13 @@ async def refreshed(record, page, runner=None, quality='best'):
     return fresh
 
 
-async def load_feed_detail(record, page, background=False):
+async def load_feed_detail(record, page, background=False, emit=None):
     """推荐流卡片只有摘要，走单条链接的完整流程拿正文、图片和媒体，保持卡片已有的 ID"""
     from desktop.crawler import DesktopCrawler
     runner = DesktopCrawler({
         'platform': record['platform'], 'mode': 'link', 'query': record['url'],
         'limit': 1, 'action': 'collect', 'reusePage': True, 'background': background,
-    }, page, lambda *args, **kwargs: None)
+    }, page, log_only(emit))
     await runner.setup()
     await runner.client.update_cookies(runner.context)
     await runner.detail()
@@ -38,8 +39,10 @@ async def load_feed_detail(record, page, background=False):
     return {'item': item, 'code': 'failed' if full['media']['status'] == 'failed' else ''}
 
 
-async def load_detail(record, page, background=False):
-    if record.get('feed'):
-        return await load_feed_detail(record, page, background)
-    fresh = await refreshed(record, page)
-    return {'item': fresh, 'code': 'failed' if fresh['media']['status'] == 'failed' else ''}
+async def load_detail(record, page, background=False, emit=None):
+    # 打开详情是一次动作，内部的详情、播放地址等请求不互相等
+    async with visit(record['platform'], 'detail', reporter(emit), background=background):
+        if record.get('feed'):
+            return await load_feed_detail(record, page, background, emit)
+        fresh = await refreshed(record, page, background=background, emit=emit)
+        return {'item': fresh, 'code': 'failed' if fresh['media']['status'] == 'failed' else ''}

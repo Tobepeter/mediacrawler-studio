@@ -5,7 +5,7 @@ import pytest
 
 from desktop.bili_paging import collect_creator, collect_search, parse_reference, search_creators
 from desktop.paging import CreatorError, decode_cursor, encode_cursor
-from desktop.pacing import RULES, bili_blocked, paced
+from desktop.pacing import Route, bili_blocked, paced
 from media_platform.bilibili.exception import DataFetchError
 
 
@@ -174,13 +174,12 @@ def test_block_detection(message, blocked):
 
 async def test_block_starts_shared_cooldown(tmp_path, monkeypatch):
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
-    rule = RULES[('bili', 'get_creator_videos')]
-    call = paced(AsyncMock(side_effect=DataFetchError('请求被拦截')), rule)
+    call = paced(AsyncMock(side_effect=DataFetchError('请求被拦截')), 'bili', Route('creator_page'))
     with pytest.raises(CreatorError) as error:
         await call('123', 1)
     assert error.value.code == 'SEARCH_VERIFICATION_REQUIRED'
     with pytest.raises(CreatorError) as error:
-        await paced(AsyncMock(), RULES[('bili', 'search_video_by_keyword')])('词')
+        await paced(AsyncMock(), 'bili', Route('search'))('词')
     assert error.value.code == 'RATE_COOLDOWN'
 
 

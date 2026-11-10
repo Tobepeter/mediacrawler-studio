@@ -1,5 +1,5 @@
 """按需刷新视频地址，复用原生平台提取器，不保存媒体凭据"""
-from desktop.pacing import wait_turn
+from desktop.pacing import log_only, reporter, visit, wait_turn
 import asyncio
 import json
 from urllib.parse import parse_qs, urlparse
@@ -10,7 +10,7 @@ from desktop.crawler import DesktopCrawler
 
 
 class MediaResolver:
-    def __init__(self, record, page, runner=None):
+    def __init__(self, record, page, runner=None, emit=None):
         self.record, self.page = record, page
         self.platform = record['platform']
         self.identity = record['id'].rsplit(':', 1)[-1]
@@ -18,7 +18,7 @@ class MediaResolver:
         self.runner = runner or DesktopCrawler({
             'platform': self.platform, 'mode': 'link', 'query': record['url'],
             'limit': 1, 'action': 'connect', 'reusePage': True,
-        }, page, lambda *args, **kwargs: None)
+        }, page, log_only(emit))
 
     async def videos(self):
         if not self.reuse:
@@ -100,24 +100,25 @@ class MediaResolver:
                     yield item
 
 
-async def resolve_playback(record, page):
+async def resolve_playback(record, page, emit=None):
     """只交付当前作品的临时 HTTPS 地址，不落盘或转发 Cookie/请求头"""
     import httpx
     from desktop.media_download import public_request, secure_url
     if record['platform'] not in ('dy', 'xhs'):
         raise RuntimeError('unsupported')
-    async for item in MediaResolver(record, page).videos():
-        if item.audio_url:
-            continue
-        urls = []
-        for value in (item.url, *item.backup_urls):
-            url = secure_url(value)
-            if url in urls:
+    async with visit(record['platform'], 'detail', reporter(emit)):
+        async for item in MediaResolver(record, page, emit=emit).videos():
+            if item.audio_url:
                 continue
-            await public_request(httpx.Request('GET', url))
-            urls.append(url)
-            if len(urls) == 4:
-                break
-        if urls:
-            return {'urls': urls, 'code': ''}
+            urls = []
+            for value in (item.url, *item.backup_urls):
+                url = secure_url(value)
+                if url in urls:
+                    continue
+                await public_request(httpx.Request('GET', url))
+                urls.append(url)
+                if len(urls) == 4:
+                    break
+            if urls:
+                return {'urls': urls, 'code': ''}
     return {'urls': [], 'code': 'unsupported'}

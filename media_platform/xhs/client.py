@@ -161,7 +161,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             verify_uuid = response.headers["Verifyuuid"]
             msg = f"CAPTCHA appeared, request failed, Verifytype: {verify_type}, Verifyuuid: {verify_uuid}, Response: {response}"
             utils.logger.error(msg)
-            raise Exception(msg)
+            # 验证要求不能重试，否则一个名额内会连发三次
+            raise PlatformAccessError(msg)
 
         response_data: Optional[Dict] = None
         try:

@@ -8,7 +8,8 @@ from desktop.paging import CreatorError
 def rule(tmp_path, monkeypatch):
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
     monkeypatch.setattr(pacing.asyncio, 'sleep', _no_sleep)
-    return pacing.Rule(key='t', page_gap=(0, 0), cooldown_seconds=60, name='测试', is_blocked=lambda error: isinstance(error, PermissionError))
+    monkeypatch.setitem(pacing.PLATFORMS, 't', pacing.Platform('测试', {pacing.OTHER: pacing.Group(gap=(0, 0))}, cooldown=60, is_blocked=lambda error: isinstance(error, PermissionError)))
+    return 't'
 
 
 async def _no_sleep(_):
@@ -26,7 +27,7 @@ async def search(keyword):
 
 async def test_success_records_method_and_outcome(rule):
     events, report = recorder()
-    await pacing.paced(search, rule, report)('a')
+    await pacing.paced(search, rule, None, report)('a')
     record = next(detail for event, detail in events if event == 'platform-request')
     assert record['method'] == 'search' and record['outcome'] == 'ok' and 'milliseconds' in record
 
@@ -38,7 +39,7 @@ async def test_verification_names_the_triggering_method(rule):
         raise PermissionError()
 
     with pytest.raises(CreatorError):
-        await pacing.paced(blocked, rule, report)()
+        await pacing.paced(blocked, rule, None, report)()
     assert ('platform-request', 'verification') in [(event, detail.get('outcome')) for event, detail in events]
     assert next(detail for event, detail in events if event == 'pacing-cooldown')['method'] == 'blocked'
 
@@ -50,28 +51,28 @@ async def test_error_records_type_only(rule):
         raise ValueError('token=secret')
 
     with pytest.raises(ValueError):
-        await pacing.paced(broken, rule, report)()
+        await pacing.paced(broken, rule, None, report)()
     record = next(detail for event, detail in events if event == 'platform-request')
     assert record['outcome'] == 'error' and record['error'] == 'ValueError' and 'secret' not in str(record)
 
 
 async def test_locally_refused_request_is_recorded(rule):
     events, report = recorder()
-    pacing.start_cooldown(pacing.state_path(rule), rule)
+    pacing.start_cooldown(rule)
     with pytest.raises(CreatorError) as error:
-        await pacing.paced(search, rule, report)('a')
+        await pacing.paced(search, rule, None, report)('a')
     assert error.value.code == 'RATE_COOLDOWN'
     assert [detail['outcome'] for event, detail in events if event == 'platform-request'] == ['RATE_COOLDOWN']
 
 
 async def test_nested_calls_log_once(rule):
     events, report = recorder()
-    inner = pacing.paced(search, rule, report)
+    inner = pacing.paced(search, rule, None, report)
 
     async def outer():
         return await inner('a')
 
-    await pacing.paced(outer, rule, report)()
+    await pacing.paced(outer, rule, None, report)()
     assert [detail['method'] for event, detail in events if event == 'platform-request'] == ['outer']
 
 

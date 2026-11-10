@@ -61,6 +61,13 @@ export class DownloadJob {
               kind: request.kind,
               ...event.detail,
             })
+          if (event.type === 'log')
+            this.logger?.write(
+              event.level === 'warn' ? 'warn' : 'info',
+              'crawler',
+              event.event,
+              { platform: request.record.platform, ...event.detail },
+            )
           if (event.type === 'download-progress') saved = event.saved
           if (event.type === 'download-result') result = event
           if (event.type === 'download-error') {

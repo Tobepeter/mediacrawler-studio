@@ -1,5 +1,4 @@
 """有界评论样本，复用平台 client 与已有脱敏存储转换"""
-import asyncio
 from urllib.parse import urlparse, parse_qs
 
 
@@ -92,7 +91,6 @@ class CommentCollector:
             if not rows or next_cursor in (None, cursor):
                 raise RuntimeError('评论未取全')
             cursor = next_cursor
-            await asyncio.sleep(1)
         else:
             raise RuntimeError('评论未取全')
         if not self.replies:
@@ -104,7 +102,6 @@ class CommentCollector:
             cursor = None
             parent = self.identity(root)
             for _ in range(5):
-                await asyncio.sleep(1)
                 rows, more, next_cursor = await self.page(content_id, token, cursor, parent)
                 for raw in rows:
                     identity = self.identity(raw)

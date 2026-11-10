@@ -4,6 +4,7 @@ import ipaddress
 import os
 import socket
 import tempfile
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -11,6 +12,7 @@ import httpx
 from media_downloader import MediaDownloader, MediaItem, MediaType
 from media_downloader.types import MediaFatalError
 from desktop.links import HOSTS, media_referer
+from desktop.pacing import reporter, visit
 
 
 async def public_request(request):
@@ -175,12 +177,15 @@ async def download_media(request, emit, page=None):
                         for item in choose_items(record, request.get('quality', 'best')):
                             yield item
                     else:
-                        async for item in MediaResolver(record, page, request.get('runner')).videos():
+                        async for item in MediaResolver(record, page, request.get('runner'), emit).videos():
                             yield item
-                async for item in candidates():
-                    if await transfer(item):
-                        errors.clear()
-                        break
+                # 只有要解析地址时才算一次打开详情
+                resolving = not request.get('items') and not (record.get('media') or {}).get('variants')
+                async with visit(record['platform'], 'detail', reporter(emit)) if resolving else nullcontext():
+                    async for item in candidates():
+                        if await transfer(item):
+                            errors.clear()
+                            break
     result = {'saved': saved, 'total': len(record.get('images') or []) if kind == 'images' else 1,
             'code': errors[-1] if errors else '' if saved else 'unsupported'}
 

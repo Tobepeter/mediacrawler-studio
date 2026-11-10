@@ -5,7 +5,7 @@ from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
-from desktop.pacing import BACKGROUND_WAIT_SECONDS, configure_cli, pace_client, throttle_detail
+from desktop.pacing import configure_cli, pace_client, reporter, throttle_detail
 from desktop.paging import PAGED_SEARCH_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
@@ -39,6 +39,8 @@ class DesktopCrawler:
         config.ENABLE_IP_PROXY = False
         config.ENABLE_WEIBO_FULL_TEXT = True
         config.MAX_CONCURRENCY_NUM = 1
+        # 上游成功后的固定等待由 desktop.pacing 接管
+        config.CRAWLER_MAX_SLEEP_SEC = 0
         config.CRAWLER_TYPE = {"link": "detail", "creator": "creator"}.get(request["mode"], "search")
         config.SAVE_DATA_OPTION = "studio"
         config.START_PAGE = 1
@@ -65,10 +67,9 @@ class DesktopCrawler:
         self.emit('timing', stage='page-ready', milliseconds=round((perf_counter() - started) * 1000), reused=bool(reusable))
         self.client = await getattr(self.crawler, create)(None)
         setattr(self.crawler, attr, self.client)
-        limit = BACKGROUND_WAIT_SECONDS if self.request.get("background") else self.request.get("waitLimit")
         if "max_wait" in self.request:
             configure_cli(self.request["max_wait"], bool(self.request.get("no_throttle")))
-        pace_client(self.client, self.platform, lambda event, **detail: self.emit("log", level="info", event=event, detail=detail), limit)
+        pace_client(self.client, self.platform, reporter(self.emit), self.request.get("waitLimit"), bool(self.request.get("background")))
         if self.platform == 'zhihu':
             track_raw(self)
 
@@ -139,8 +140,8 @@ class DesktopCrawler:
         # 先确认登录并收起弹层，头像查询不阻塞登录完成
         confirmed = dict(self.account.profile)
         self.emit("account", profile=confirmed)
-        # 页面已返回资料则直接复用；额外查询最多等待 5 秒，失败仍视为已登录
-        if not all(self.account.profile.get(key) for key in ("nickname", "avatar")):
+        # 页面已返回资料则直接复用；额外查询最多等待 5 秒，失败仍视为已登录；续采时资料已经有了
+        if not self.request.get("cursor") and not all(self.account.profile.get(key) for key in ("nickname", "avatar")):
             try:
                 async with asyncio.timeout(5):
                     if self.platform == "bili":
@@ -215,9 +216,7 @@ class DesktopCrawler:
             self.emit('state', status='running', message='正在获取评论')
             collector = CommentCollector(self.platform, self.client, self.store, self.request.get('replies', False))
             failed = False
-            for index, item in enumerate(self.store.items.values()):
-                if index:
-                    await asyncio.sleep(1)
+            for item in self.store.items.values():
                 self.store.comment_state(item, 'running')
                 try:
                     async with asyncio.timeout(60):
@@ -258,11 +257,21 @@ class DesktopCrawler:
             )
             if video:
                 await self.save_bilibili(video)
+                self.bili_details[f"bili:{video.get('View', {}).get('aid')}"] = video
         elif self.platform == "dy":
             # 分享短链无法在输入时区分作品和主页，这里给出明确指引
             if urlparse(query).hostname == "v.douyin.com" and "/user/" in await self.client.resolve_short_url(query):
                 raise RuntimeError("这是博主主页的分享链接，请粘贴主页完整链接或使用找博主")
             config.DY_SPECIFIED_ID_LIST = [query]
+            fetch = self.crawler.get_aweme_detail
+
+            async def remember(aweme_id, semaphore):
+                # 上游只入库不返回原始数据，留一份给媒体补全，不重复请求详情
+                raw = await fetch(aweme_id, semaphore)
+                if raw:
+                    self.dy_details[f"dy:{aweme_id}"] = raw
+                return raw
+            self.crawler.get_aweme_detail = remember
             await self.crawler.get_specified_awemes()
         elif self.platform == "xhs":
             from media_platform.xhs.help import parse_note_info_from_note_url

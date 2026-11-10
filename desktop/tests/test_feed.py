@@ -7,7 +7,7 @@ import pytest
 from desktop import bili_paging, dy_paging, xhs_paging
 from desktop.creators import load_feed
 from desktop.paging import CreatorError, decode_cursor
-from desktop.pacing import RULES
+from desktop.pacing import PLATFORMS
 from desktop.result_store import ResultStore
 
 
@@ -77,8 +77,8 @@ async def test_unsupported_platform_rejected():
 
 @pytest.mark.parametrize('platform', ['bili', 'dy', 'xhs', 'zhihu'])
 def test_feed_has_its_own_slow_rule(platform):
-    rule = RULES[(platform, 'get_home_feed')]
-    assert rule.window_limit and rule.page_gap[0] >= 3
+    groups = PLATFORMS[platform].groups
+    assert groups['feed'].window and groups['feed_page'].gap[0] >= 3
 
 
 async def test_feed_detail_keeps_card_author(monkeypatch):

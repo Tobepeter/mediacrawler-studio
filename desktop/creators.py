@@ -1,6 +1,7 @@
 """按平台分发博主搜索、主页作品和关键词分页，桌面与 CLI 共用；各平台实现在 *_paging.py"""
 from importlib import import_module
 
+from desktop.pacing import reporter, visit
 from desktop.paging import CREATOR_PLATFORMS, CREATOR_SEARCH_PLATFORMS, FEED_PLATFORMS, PAGED_SEARCH_PLATFORMS, CreatorError
 
 
@@ -19,7 +20,13 @@ async def search_creators(runner, keyword, limit=10, cursor=None, **options):
 
 
 async def collect_creator(runner, reference, cursor=None):
-    await provider(runner.platform, CREATOR_PLATFORMS, '该平台暂不支持博主采集').collect_creator(runner, reference, cursor)
+    module = provider(runner.platform, CREATOR_PLATFORMS, '该平台暂不支持博主采集')
+    if cursor:
+        await module.collect_creator(runner, reference, cursor)
+        return
+    # 打开博主页是一次动作：资料和第一页作品和网页一样不互相等
+    async with visit(runner.platform, 'creator', reporter(runner.emit), runner.request.get('waitLimit'), requests=2):
+        await module.collect_creator(runner, reference, cursor)
 
 
 async def collect_search(runner, query, cursor=None, options=None):

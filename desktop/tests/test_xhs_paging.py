@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from desktop.paging import CreatorError, decode_cursor, encode_cursor
-from desktop.pacing import PLATFORM_RULES, RULES, paced
+from desktop.pacing import Route, paced
 from desktop.xhs_paging import collect_creator, collect_search
 
 PROFILE = 'https://www.xiaohongshu.com/user/profile/abc?xsec_token=T1&xsec_source=pc_note'
@@ -128,15 +128,15 @@ async def test_creator_stops_when_platform_cursor_repeats():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('rule', [RULES[('xhs', 'get_note_by_keyword')], RULES[('xhs', 'get_notes_by_creator')], PLATFORM_RULES['xhs']])
-async def test_xhs_block_starts_shared_cooldown(tmp_path, monkeypatch, rule):
+@pytest.mark.parametrize('route', [Route('search'), Route('creator_page'), None])
+async def test_xhs_block_starts_shared_cooldown(tmp_path, monkeypatch, route):
     from media_platform.xhs.exception import IPBlockError
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
-    call = paced(AsyncMock(side_effect=IPBlockError('blocked')), rule)
+    call = paced(AsyncMock(side_effect=IPBlockError('blocked')), 'xhs', route)
     with pytest.raises(CreatorError) as error:
         await call('x')
     assert error.value.code == 'SEARCH_VERIFICATION_REQUIRED' and '小红书' in str(error.value)
-    follow = paced(AsyncMock(return_value={}), RULES[('xhs', 'get_note_by_keyword')])
+    follow = paced(AsyncMock(return_value={}), 'xhs', Route('search'))
     with pytest.raises(CreatorError) as error:
         await follow('x')
     assert error.value.code == 'RATE_COOLDOWN'
@@ -147,7 +147,7 @@ async def test_captcha_inside_retry_error_counts_as_block(tmp_path, monkeypatch)
     from tenacity import RetryError
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
     attempt = SimpleNamespace(exception=lambda: Exception('CAPTCHA appeared, request failed'))
-    call = paced(AsyncMock(side_effect=RetryError(attempt)), PLATFORM_RULES['xhs'])
+    call = paced(AsyncMock(side_effect=RetryError(attempt)), 'xhs')
     with pytest.raises(CreatorError):
         await call('x')
 
@@ -155,6 +155,6 @@ async def test_captcha_inside_retry_error_counts_as_block(tmp_path, monkeypatch)
 @pytest.mark.asyncio
 async def test_other_errors_pass_through(tmp_path, monkeypatch):
     monkeypatch.setenv('MEDIACRAWLER_DATA_DIR', str(tmp_path))
-    call = paced(AsyncMock(side_effect=ValueError('bad')), PLATFORM_RULES['xhs'])
+    call = paced(AsyncMock(side_effect=ValueError('bad')), 'xhs')
     with pytest.raises(ValueError):
         await call('x')
