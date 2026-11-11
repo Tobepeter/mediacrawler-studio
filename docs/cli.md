@@ -139,6 +139,17 @@ mediacrawler ocr --input results.json --auto
 
 `--auto` 只处理正文不到 100 字、至少两张图的图文帖，跳过多少条输出到 stderr。做调研时先 `search` 存下结果，再对它跑 `ocr --input --auto`，不用逐条判断。图片走 CDN 下载，不占平台接口额度；`--source` 会先打开作品页，算一次详情。
 
+## Agent 技能
+
+`docs/skill.md` 是配套的技能文档（SKILL.md 格式），讲怎么用这套命令做多平台专题调研：额度怎么算、采集和补文字补图的流程、成稿的写法要求。只在这里维护一份，打包时作为数据文件带进 CLI
+
+```bash
+mediacrawler skill                                            # 输出到 stdout
+mediacrawler skill --output ~/.claude/skills/mediacrawler/SKILL.md
+```
+
+改了命令行为时同步改这份文档
+
 ## 数据目录与并行
 
 默认 macOS `~/Library/Application Support/mediacrawler`，Linux `~/.local/share/mediacrawler`（遵循 XDG），Windows `%LOCALAPPDATA%/mediacrawler`

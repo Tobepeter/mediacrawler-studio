@@ -294,3 +294,23 @@ def test_load_records_accepts_search_output(tmp_path):
     for path in (jsonl, wrapped):
         records, platform = load_records(str(path), None)
         assert [r['id'] for r in records] == ['xhs:1'] and platform == 'xhs'
+
+
+def test_skill_prints_and_writes_the_bundled_doc(tmp_path):
+    from typer.testing import CliRunner
+    from mediacrawler_cli.__main__ import app, skill_path
+    source = skill_path().read_text(encoding='utf-8')
+    assert source.startswith('---\nname: mediacrawler\n')
+    printed = CliRunner().invoke(app, ['skill'])
+    assert printed.exit_code == 0 and printed.stdout == source
+    target = tmp_path / 'skills' / 'mediacrawler' / 'SKILL.md'
+    written = CliRunner().invoke(app, ['skill', '--output', str(target)])
+    assert written.exit_code == 0 and target.read_text(encoding='utf-8') == source
+
+
+def test_skill_reports_missing_doc(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from mediacrawler_cli import __main__ as cli
+    monkeypatch.setattr(cli, 'skill_path', lambda: tmp_path / 'none.md')
+    result = CliRunner().invoke(cli.app, ['skill'])
+    assert result.exit_code == 1 and 'SKILL_MISSING' in result.output

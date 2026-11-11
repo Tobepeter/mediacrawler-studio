@@ -30,6 +30,34 @@ def rate_status(platform: Optional[str] = typer.Option(None, help='不传时列�
         typer.echo(json.dumps(quota(name), ensure_ascii=False))
 
 
+def skill_path():
+    """技能文档只在 docs/ 维护一份，打包时作为数据文件带进去，源码和打包版都从资源根目录读"""
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    return root / 'docs' / 'skill.md'
+
+
+@app.command('skill')
+def skill_command(output: Optional[str] = typer.Option(None, '--output', help='写到这个文件，比如 ~/.claude/skills/mediacrawler/SKILL.md；不传就输出到 stdout')):
+    """输出配套的 Agent 技能文档（SKILL.md 格式），讲怎么用这套命令做多平台专题调研
+
+    skill > SKILL.md
+
+    skill --output ~/.claude/skills/mediacrawler/SKILL.md
+    """
+    source = skill_path()
+    if not source.is_file():
+        typer.echo(json.dumps({'code': 'SKILL_MISSING', 'message': '找不到技能文档，请从源码仓库或打包版运行', 'retryable': False}, ensure_ascii=False), err=True)
+        raise typer.Exit(1)
+    text = source.read_text(encoding='utf-8')
+    if not output:
+        typer.echo(text, nl=False)
+        return
+    target = Path(output).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding='utf-8')
+    typer.echo(str(target), err=True)
+
+
 # 排队太久宁可立刻报错，调用方按 retry_after 决定等不等，比闷头卡住好
 DEFAULT_MAX_WAIT = 3
 MAX_WAIT = typer.Option(DEFAULT_MAX_WAIT, '--max-wait', min=0, max=600,

@@ -24,6 +24,7 @@ def build(target, clean=False):
             '--add-data', f'{ROOT / "libs"}:libs',
             '--add-data', f'{ROOT / "media_platform/kuaishou/graphql"}:media_platform/kuaishou/graphql',
             '--add-data', f'{ROOT / "LICENSE"}:.',
+            '--add-data', f'{ROOT / "docs/skill.md"}:docs',
             '--add-data', f'{ROOT / "desktop/health-policy.json"}:desktop',
             '--add-data', f'{ROOT / "desktop/search-options.json"}:desktop',
             '--add-data', f'{ROOT / "desktop/platform-capabilities.json"}:desktop']
