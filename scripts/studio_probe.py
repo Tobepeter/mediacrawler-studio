@@ -1,6 +1,7 @@
 """开发版运行时探针：连上正在运行的开发版桌面端，只通过 window.__STUDIO_DEBUG__ 读状态、驱动动作，结果输出 JSON
 
 需要先 npm run dev。常用：
+  npm run probe -- reload
   npm run probe -- snapshot
   npm run probe -- open https://www.douyin.com/video/...
   npm run probe -- image-text <图文链接>
@@ -75,6 +76,11 @@ def save(out, name, data):
 async def run(options):
     async with async_playwright() as playwright:
         ui = await connect(playwright)
+        if options.command == 'reload':
+            # 窗口在后台时热更新常常没生效，改了前端以后先刷新再验收
+            await ui.reload(wait_until='load')
+            await ui.wait_for_function('() => window.__STUDIO_DEBUG__?.ready()', timeout=60000)
+            return {'reloaded': True}
         if options.command == 'snapshot':
             return await debug(ui, 'd.snapshot()')
         if options.command == 'profiles':
@@ -123,6 +129,7 @@ async def run(options):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
+    commands.add_parser('reload', help='刷新页面，前端改动没生效时用')
     commands.add_parser('snapshot', help='平台、账号、任务和结果数量')
     commands.add_parser('profiles', help='各平台账号的昵称和头像')
     evaluate = commands.add_parser('eval', help='执行一段表达式，用 d 指代调试入口')

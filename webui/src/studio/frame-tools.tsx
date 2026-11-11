@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ImageDown, Loader2, ScanText } from 'lucide-react'
 import { toast } from 'sonner'
 import { CopyButton } from '@/components/common/copy-button'
-import { IconButton } from '@/components/common/icon-button'
+import { Button } from '@/components/ui/button'
 import {
   Popover,
   PopoverContent,
@@ -23,6 +23,19 @@ const nextFrame = () =>
 
 // 平台视频跨域，页面读不到像素，由主进程截取播放器区域；截之前收起控件和工具条，
 // 只截画面本身，按视频比例去掉 object-contain 留下的黑边
+// 视频按 object-contain 显示，算出画面本身在元素里的位置，去掉两侧或上下的空白
+function contentBox(element: HTMLVideoElement) {
+  const box = element.getBoundingClientRect()
+  const ratio = element.videoWidth / element.videoHeight
+  let width = box.width
+  let height = box.height
+  if (ratio > 0 && width / height > ratio) width = height * ratio
+  else if (ratio > 0) height = width / ratio
+  const left = (box.width - width) / 2
+  const top = (box.height - height) / 2
+  return { box, left, top, width, height }
+}
+
 export function useFrameCapture(video: RefObject<HTMLVideoElement | null>) {
   const [capturing, setCapturing] = useState(false)
   const capture = async () => {
@@ -31,15 +44,10 @@ export function useFrameCapture(video: RefObject<HTMLVideoElement | null>) {
     setCapturing(true)
     try {
       await nextFrame()
-      const box = element.getBoundingClientRect()
-      const ratio = element.videoWidth / element.videoHeight
-      let width = box.width
-      let height = box.height
-      if (ratio > 0 && width / height > ratio) width = height * ratio
-      else if (ratio > 0) height = width / ratio
+      const { box, left, top, width, height } = contentBox(element)
       return await window.studio.captureFrame({
-        x: box.left + (box.width - width) / 2,
-        y: box.top + (box.height - height) / 2,
+        x: box.left + left,
+        y: box.top + top,
         width,
         height,
       })
@@ -75,6 +83,20 @@ export function FrameTools(props: {
   const [saving, setSaving] = useState(false)
   const [open, setOpen] = useState(false)
   const [result, setResult] = useState<Recognition>({ status: 'idle' })
+  // 竖屏视频居中时，播放区的角落离画面很远，工具条要贴着画面本身的右上角
+  const [place, setPlace] = useState({ top: 8, right: 8 })
+  useEffect(() => {
+    const element = video.current
+    if (!element) return
+    const update = () => {
+      const { box, left, top, width } = contentBox(element)
+      setPlace({ top: top + 8, right: box.width - left - width + 8 })
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [video])
 
   const save = async () => {
     if (saving || !window.studio?.saveFrame) return
@@ -139,12 +161,14 @@ export function FrameTools(props: {
 
   return (
     <div
-      className={`absolute right-2 top-2 flex gap-1 ${hidden ? 'invisible' : ''}`}
+      className={`absolute flex gap-1.5 ${hidden ? 'invisible' : ''}`}
+      style={place}
     >
-      <IconButton
+      {/* 带文字更好找；保存中只换图标，宽度不变 */}
+      <Button
         variant='secondary'
-        className='size-8 bg-background/85 backdrop-blur'
-        label={t('保存当前画面')}
+        size='sm'
+        className='bg-background/85 shadow-sm backdrop-blur'
         disabled={saving}
         aria-busy={saving}
         onClick={() => void save()}
@@ -154,7 +178,8 @@ export function FrameTools(props: {
         ) : (
           <ImageDown />
         )}
-      </IconButton>
+        {t('保存画面')}
+      </Button>
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -163,13 +188,14 @@ export function FrameTools(props: {
         }}
       >
         <PopoverTrigger asChild>
-          <IconButton
+          <Button
             variant='secondary'
-            className='size-8 bg-background/85 backdrop-blur'
-            label={t('识别画面文字')}
+            size='sm'
+            className='bg-background/85 shadow-sm backdrop-blur'
           >
             <ScanText />
-          </IconButton>
+            {t('识别文字')}
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align='end'
