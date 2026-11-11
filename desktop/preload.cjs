@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('studio', {
   loadComments: (platform, id, options) =>
     ipcRenderer.invoke('studio:load-comments', platform, id, options),
   sttStatus: () => ipcRenderer.invoke('studio:stt-status'),
+  sttOpen: (kind, target) =>
+    ipcRenderer.invoke('studio:stt-open', kind, target),
   saveTranscript: (platform, id, format, ask) =>
     ipcRenderer.invoke('studio:save-transcript', platform, id, format, ask),
   cachedTranscript: (platform, id) =>

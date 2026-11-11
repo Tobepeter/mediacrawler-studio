@@ -19,7 +19,7 @@ description: 用 mediacrawler CLI 从抖音、B 站、小红书等平台采集�
 ```bash
 mediacrawler auth status --platform dy      # 三个主力平台 dy、bili、xhs 都查一遍
 mediacrawler rate status                    # 各平台 10 分钟额度还剩多少，只读不发请求
-mediacrawler transcribe --check             # 视频转文字要本机 stt 服务
+mediacrawler transcribe --check             # 视频转文字要 stt；state 不是 ready/installed 时按 missing 提示补模型
 mediacrawler ocr --check                    # 图片转文字
 ```
 

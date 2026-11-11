@@ -11,8 +11,8 @@ import { downloadName } from './download-name.mjs'
 import { FileCache } from './file-cache.mjs'
 import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
-import { homedir } from 'node:os'
 import { mergeProfile } from './account-profile.mjs'
+import { sttStatus } from './stt-status.mjs'
 import {
   creatorLimit,
   creatorSearchPlatforms,
@@ -45,7 +45,6 @@ function creatorInfo(value, platform) {
 const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
 const feedWaitLimit = 12
-const sttUrl = 'http://127.0.0.1:29556'
 const commentPlatforms = ['bili', 'dy', 'xhs']
 
 export class StudioService {
@@ -353,23 +352,16 @@ export class StudioService {
     }
   }
 
-  // 只依赖 stt 的本机 HTTP 服务；后台空闲会退出，有命令就算能用，提取时再叫醒
+  // 包里的 stt 优先，没有再找本机装的；后台没起时跑一次静态检查，缺模型就列出来
   async sttStatus() {
-    try {
-      const response = await fetch(`${sttUrl}/v1/status`, {
-        signal: AbortSignal.timeout(2000),
-      })
-      const data = await response.json()
-      if (data?.service === 'stt') return { state: 'ready', busy: !!data.busy }
-    } catch {
-      /* 连不上按未运行处理 */
-    }
-    // 和 Python 侧一致：先看 PATH，再看 Electron 环境里通常没有的 ~/.local/bin
-    const installed = [
-      ...(process.env.PATH || '').split(path.delimiter).filter(Boolean),
-      path.join(homedir(), '.local/bin'),
-    ].some((dir) => existsSync(path.join(dir, 'stt')))
-    return { state: installed ? 'installed' : 'missing', busy: false }
+    this.lastStt = await sttStatus({ bundled: this.bundledStt })
+    return this.lastStt
+  }
+
+  // 只打开最近一次检查列出的目录，渲染进程不能指定任意路径
+  sttFolder(target) {
+    const row = this.lastStt?.missing?.find((item) => item.path === target)
+    return row?.path || null
   }
 
   async cacheSize() {

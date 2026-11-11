@@ -5,15 +5,27 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Captions, Loader2, RefreshCw } from 'lucide-react'
+import {
+  Captions,
+  ExternalLink,
+  FolderOpen,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/common/copy-button'
 import { IconButton } from '@/components/common/icon-button'
+import { formatBytes } from '@/lib/utils'
 import { EstimateCountdown } from './estimate-countdown'
 import { SettingRow } from './settings-row'
 import { recordTranscribe, transcribeEstimate } from './transcribe-estimate'
-import type { ContentItem, ContentTranscript } from './types'
+import type {
+  ContentItem,
+  ContentTranscript,
+  SttMissing,
+  SttStatus,
+} from './types'
 
 const statusKey = ['studio', 'stt-status']
 
@@ -122,7 +134,13 @@ function useExtraction(item: ContentItem) {
         void client.invalidateQueries({ queryKey: statusKey })
         return
       }
-      if (result.code === 'stt_unavailable') {
+      if (result.code === 'stt_incomplete') {
+        toast.error(t('语音转写缺少模型'), {
+          id: 'transcribe',
+          description: t('字幕页里列出了缺什么、放到哪'),
+        })
+        void client.invalidateQueries({ queryKey: statusKey })
+      } else if (result.code === 'stt_unavailable') {
         toast.error(t('字幕提取不可用'), {
           id: 'transcribe',
           description: t('需要本机运行 stt 语音转写服务'),
@@ -183,8 +201,9 @@ function useExtraction(item: ContentItem) {
   const canRegenerate =
     transcript?.source === 'stt' &&
     !!status.data &&
-    status.data.state !== 'missing'
+    !['missing', 'incomplete'].includes(status.data.state)
   return {
+    status: status.data,
     transcript,
     loading: cached.isLoading,
     running,
@@ -232,9 +251,19 @@ export function TranscriptActions({ item }: { item: ContentItem }) {
 
 export function TranscriptPanel({ item }: { item: ContentItem }) {
   const { t } = useTranslation('studio')
-  const { transcript, loading, running, start, progressText } =
+  const { status, transcript, loading, running, start, progressText } =
     useExtraction(item)
   if (loading) return null
+  if (!transcript && status?.state === 'incomplete')
+    return (
+      <div className='space-y-3 py-2'>
+        <p className='text-body text-muted-foreground'>
+          {incompleteText(t, status)}
+        </p>
+        <SttMissingList rows={status.missing || []} />
+        <RecheckButton />
+      </div>
+    )
   if (!transcript)
     return (
       <div className='flex flex-col items-center gap-3 py-12'>
@@ -278,36 +307,147 @@ export function TranscriptPanel({ item }: { item: ContentItem }) {
   )
 }
 
+type Translate = ReturnType<typeof useTranslation<'studio'>>['t']
+
+function incompleteText(t: Translate, status: SttStatus) {
+  return status.downloadBytes
+    ? t('缺少模型，共约 {{size}}，下载后放到对应目录再重新检查', {
+        size: formatBytes(status.downloadBytes),
+      })
+    : t('缺少运行条件，按下面的提示处理后再重新检查')
+}
+
+function sttHint(t: Translate, status?: SttStatus) {
+  if (!status) return t('正在检查 stt 服务')
+  const origin =
+    status.source === 'bundled'
+      ? t('内置 stt {{version}}', { version: status.version || '' }).trim()
+      : t('本机 stt')
+  if (status.state === 'ready') return `${origin} · ${t('服务运行中')}`
+  if (status.state === 'installed')
+    return `${origin} · ${t('提取字幕时自动启动')}`
+  if (status.state === 'incomplete') return incompleteText(t, status)
+  return t('未检测到 stt，视频详情不显示提取字幕')
+}
+
+function RecheckButton() {
+  const { t } = useTranslation('studio')
+  const status = useSttStatus()
+  return (
+    <Button
+      variant='outline'
+      disabled={status.isFetching}
+      onClick={() => void status.refetch()}
+    >
+      {status.isFetching ? (
+        <Loader2 className='animate-spin motion-reduce:animate-none' />
+      ) : (
+        <RefreshCw />
+      )}
+      {t('重新检查')}
+    </Button>
+  )
+}
+
+const hubNames = { modelscope: '魔搭', huggingface: 'Hugging Face' }
+
+// 不替用户下载：给出下载页、放置目录和命令，放好后重新检查
+function SttMissingList({ rows }: { rows: SttMissing[] }) {
+  const { t } = useTranslation('studio')
+  const open = (kind: 'page' | 'folder', target: string) =>
+    void window.studio
+      ?.sttOpen?.(kind, target)
+      .catch(() =>
+        toast.error(t(kind === 'page' ? '打开下载页失败' : '打开目录失败')),
+      )
+  return (
+    <ul className='space-y-2'>
+      {rows.map((row) => (
+        <li key={row.id} className='space-y-1.5 rounded-md border p-3'>
+          <div className='flex flex-wrap items-baseline justify-between gap-x-3'>
+            <span className='font-medium'>{row.name}</span>
+            {!!row.sizeBytes && (
+              <span className='text-caption tabular-nums text-muted-foreground'>
+                {formatBytes(row.sizeBytes)}
+              </span>
+            )}
+          </div>
+          {row.kind !== 'model' && row.message && (
+            <p className='text-caption text-muted-foreground'>{row.message}</p>
+          )}
+          {!!row.files.length && (
+            <p className='break-words text-caption text-muted-foreground'>
+              {t('需要的文件')}：{row.files.join('、')}
+            </p>
+          )}
+          {row.path && (
+            <div className='flex min-w-0 items-center gap-1'>
+              <code
+                className='min-w-0 flex-1 truncate text-caption text-muted-foreground'
+                title={row.path}
+              >
+                {row.path}
+              </code>
+              <CopyButton
+                text={row.path}
+                label={t('复制目录')}
+                className='size-7 shrink-0'
+              />
+            </div>
+          )}
+          <div className='flex flex-wrap gap-2 pt-1'>
+            {row.pages.map((page) => (
+              <Button
+                key={page.hub}
+                variant='outline'
+                size='sm'
+                onClick={() => open('page', page.url)}
+              >
+                <ExternalLink />
+                {t(hubNames[page.hub])}
+              </Button>
+            ))}
+            {row.path && (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => open('folder', row.path!)}
+              >
+                <FolderOpen />
+                {t('打开目录')}
+              </Button>
+            )}
+            {row.hint && (
+              <span className='inline-flex items-center gap-1 text-caption text-muted-foreground'>
+                {t('命令行下载')}
+                <CopyButton
+                  text={row.hint}
+                  label={t('复制下载命令')}
+                  className='size-7'
+                />
+              </span>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function SttSettings() {
   const { t } = useTranslation('studio')
   const status = useSttStatus()
   if (!window.studio?.sttStatus) return null
-  const state = status.data?.state
   return (
-    <SettingRow
-      title={t('语音转写')}
-      hint={
-        state === 'ready'
-          ? t('stt 服务已连接，可以在视频详情里提取字幕')
-          : state === 'installed'
-            ? t('检测到 stt，提取字幕时会自动启动服务')
-            : state === 'missing'
-              ? t('未检测到本机 stt 服务，视频详情不显示提取字幕')
-              : t('正在检查 stt 服务')
-      }
-    >
-      <Button
-        variant='outline'
-        disabled={status.isFetching}
-        onClick={() => void status.refetch()}
-      >
-        {status.isFetching ? (
-          <Loader2 className='animate-spin motion-reduce:animate-none' />
-        ) : (
-          <RefreshCw />
-        )}
-        {t('重新检查')}
-      </Button>
-    </SettingRow>
+    <div>
+      <SettingRow title={t('语音转写')} hint={sttHint(t, status.data)}>
+        <RecheckButton />
+      </SettingRow>
+      {status.data?.state === 'incomplete' && (
+        <div className='px-4 pb-3'>
+          <SttMissingList rows={status.data.missing || []} />
+        </div>
+      )}
+    </div>
   )
 }

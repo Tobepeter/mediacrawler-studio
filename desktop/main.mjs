@@ -26,6 +26,7 @@ import { availablePath, transcriptContent } from './transcript-file.mjs'
 import { downloadName } from './download-name.mjs'
 import { CliInstall } from './cli-install.mjs'
 import { acquireInstance } from './single-instance.mjs'
+import { bundledStt } from './stt-status.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 app.setName('MediaCrawler Studio')
@@ -97,6 +98,11 @@ app
       logger,
       windows,
       dataDir: app.getPath('userData'),
+      bundledStt: bundledStt({
+        packaged: app.isPackaged,
+        resources: process.resourcesPath,
+        root,
+      }),
       endpoint: `http://127.0.0.1:${port}`,
       onState: (state) => {
         if (mainWindow && !mainWindow.isDestroyed())
@@ -182,6 +188,21 @@ app
       service.loadComments(platform, id, options),
     )
     handle('stt-status', () => service.sttStatus())
+    // 只认模型站的地址；目录要先建好，用户下载后直接放进去
+    handle('stt-open', async (kind, target) => {
+      if (kind === 'page') {
+        if (
+          !/^https:\/\/(modelscope\.cn\/models|huggingface\.co)\//.test(target)
+        )
+          throw new Error('不支持的下载页')
+        return shell.openExternal(target)
+      }
+      const folder = service.sttFolder(target)
+      if (!folder) throw new Error('目录不在检查结果里')
+      await mkdir(folder, { recursive: true })
+      const error = await shell.openPath(folder)
+      if (error) throw new Error('无法打开目录')
+    })
     handle('transcribe', (platform, id) => service.transcribe(platform, id))
     handle('save-transcript', async (platform, id, format, ask = false) => {
       if (!['srt', 'txt'].includes(format)) throw new Error('不支持的格式')

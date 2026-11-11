@@ -2,15 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Eraser } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatBytes } from '@/lib/utils'
 import { ConfirmButton, SettingRow } from './settings-row'
 
 const sizeKey = ['studio', 'cache-size']
-
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
-  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
-  return `${Math.ceil(bytes / 1024)} KB`
-}
 
 export function CacheSettings() {
   const { t } = useTranslation('studio')

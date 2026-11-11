@@ -1,8 +1,14 @@
 import { platformOfUrl } from './creator-options'
 import { frameDebug } from './frame-tools'
 import { markDebugDriven } from './playback'
+import { queryClient } from './query-client'
 import { activeStatuses, useStudio } from './store'
-import type { CollectRequest, CreatorSummary, Platform } from './types'
+import type {
+  CollectRequest,
+  CreatorSummary,
+  Platform,
+  SttStatus,
+} from './types'
 import type { StudioStore } from './store'
 
 // 仅开发环境由 main.tsx 动态加载，生产包不含此模块
@@ -41,7 +47,7 @@ const frameStatus = () => {
 }
 
 // 改了这里要刷新页面：入口在页面启动时装上，热更新不会替换；探针按版本号判断
-const VERSION = 3
+const VERSION = 4
 
 const waitTask = async (platform = state().platform, timeoutMs = 300000) => {
   const deadline = Date.now() + timeoutMs
@@ -206,6 +212,19 @@ const debug = {
       options: { cursor?: string | number; parent?: string } = {},
       platform = state().platform,
     ) => window.studio?.loadComments?.(platform, id, options),
+  },
+  // 语音转写状态：check 走真实检查；preview 只改界面看到的状态，用来看缺模型时的样子，refresh 恢复
+  stt: {
+    check: () =>
+      queryClient.fetchQuery({
+        queryKey: ['studio', 'stt-status'],
+        queryFn: () => window.studio!.sttStatus!(),
+        staleTime: 0,
+      }),
+    preview: (status: SttStatus) =>
+      queryClient.setQueryData(['studio', 'stt-status'], status),
+    refresh: () =>
+      queryClient.invalidateQueries({ queryKey: ['studio', 'stt-status'] }),
   },
   // 图文帖的图中文字，走和界面同一个 IPC
   imageText: {

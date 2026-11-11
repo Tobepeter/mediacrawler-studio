@@ -25,7 +25,8 @@
     "build:desktop": "node scripts/build-desktop.mjs",
     "build:all": "npm run build:desktop:strict",
     "build:runtime": "uv run --locked --group build python scripts/build_python.py desktop",
-    "build:desktop:strict": "node scripts/build-desktop.mjs --strict"
+    "build:desktop:strict": "node scripts/build-desktop.mjs --strict",
+    "vendor:stt": "node scripts/vendor-stt.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

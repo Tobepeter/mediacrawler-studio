@@ -17,7 +17,7 @@ DONE = {'text': ' 你好 ', 'model': 'qwen', 'segments': [{'start': 0, 'end': 1.
 
 @pytest.fixture
 def stt(monkeypatch):
-    server = SimpleNamespace(status=(200, READY), reply=(200, DONE), posted=[], offline=False)
+    server = SimpleNamespace(status=(200, READY), reply=(200, DONE), posted=[], offline=False, command=None, report=None)
 
     def handle(request):
         if server.offline:
@@ -29,12 +29,16 @@ def stt(monkeypatch):
             code, body = server.reply
         return httpx.Response(code, json=body)
     monkeypatch.setattr(transcribe, 'client', lambda timeout: httpx.AsyncClient(base_url=transcribe.BASE_URL, transport=httpx.MockTransport(handle)))
-    monkeypatch.setattr(transcribe, 'command', lambda: None)
+    monkeypatch.setattr(transcribe, 'locate', lambda: (server.command, 'system' if server.command else None))
+
+    async def diagnose(path):
+        return server.report
+    monkeypatch.setattr(transcribe, 'diagnose', diagnose)
     return server
 
 
 async def test_check_reports_ready(stt):
-    assert await transcribe.check() == {'state': 'ready', 'busy': False}
+    assert await transcribe.check() == {'state': 'ready', 'busy': False, 'source': None, 'path': None}
 
 
 async def test_check_without_service_or_command_is_missing(stt):
@@ -44,8 +48,79 @@ async def test_check_without_service_or_command_is_missing(stt):
 
 async def test_check_with_command_is_installed(stt, monkeypatch):
     stt.offline = True
-    monkeypatch.setattr(transcribe, 'command', lambda: '/bin/stt')
+    stt.command = '/bin/stt'
     assert (await transcribe.check())['state'] == 'installed'
+
+
+async def test_check_lists_what_is_missing(stt):
+    stt.offline = True
+    stt.command = '/bin/stt'
+    stt.report = {'ok': False, 'missing': [{'name': 'Qwen', 'sizeBytes': 10}], 'downloadBytes': 10}
+    state = await transcribe.check()
+    assert state['state'] == 'incomplete' and state['downloadBytes'] == 10 and state['missing'][0]['name'] == 'Qwen'
+
+
+async def test_wake_failure_names_missing_model(stt, monkeypatch):
+    stt.offline = True
+    stt.command = '/bin/stt'
+    stt.report = {'ok': False, 'missing': [{'name': 'Qwen'}, {'name': 'VAD'}], 'downloadBytes': 0}
+
+    async def spawn(*args, **kwargs):
+        return SimpleNamespace(wait=AsyncMock(return_value=1))
+    monkeypatch.setattr(transcribe.asyncio, 'create_subprocess_exec', spawn)
+    with pytest.raises(SttError) as caught:
+        await transcribe.ensure_service()
+    assert caught.value.code == 'stt_incomplete' and 'Qwen、VAD' in str(caught.value)
+
+
+# stt check（schema_version 2）缺模型时的真实结构，裁掉了无关字段
+REPORT = {
+    'ok': False, 'default_model': 'qwen',
+    'missing': [
+        {'id': 'model.qwen', 'kind': 'model', 'required_for_default': True, 'hint': 'uvx modelscope download ...', 'model': 'qwen',
+         'size_bytes': 1010698116, 'expected_path': '/cache/ms/models/mlx-community/Qwen3-ASR-0___6B-8bit', 'files': ['model.safetensors']},
+        {'id': 'model.nano', 'kind': 'model', 'required_for_default': False, 'size_bytes': 1},
+    ],
+    'checks': [{'id': 'model.qwen', 'message': '缺 1 个模型文件', 'model': {
+        'name': 'Qwen3-ASR 0.6B 8bit（MLX）', 'missing_bytes': 1006229426, 'missing_files': ['model.safetensors'],
+        'sources': [{'hub': 'modelscope', 'repo_id': 'mlx-community/Qwen3-ASR-0.6B-8bit'}, {'hub': 'huggingface', 'repo_id': 'mlx-community/Qwen3-ASR-0.6B-8bit'}, {'hub': 'other'}]}}],
+}
+
+
+def test_missing_rows_keep_only_what_the_default_model_needs():
+    [row] = transcribe.missing_of(REPORT)
+    assert row['name'] == 'Qwen3-ASR 0.6B 8bit（MLX）' and row['sizeBytes'] == 1006229426
+    assert row['path'].endswith('Qwen3-ASR-0___6B-8bit') and row['files'] == ['model.safetensors']
+    assert [page['hub'] for page in row['pages']] == ['modelscope', 'huggingface']
+    assert row['pages'][0]['url'] == 'https://modelscope.cn/models/mlx-community/Qwen3-ASR-0.6B-8bit/files'
+
+
+async def test_diagnose_reads_check_json_even_when_it_exits_nonzero(tmp_path):
+    script = tmp_path / 'stt'
+    script.write_text('#!/bin/sh\necho \'' + json.dumps(REPORT, ensure_ascii=False) + '\'\nexit 1\n')
+    script.chmod(0o755)
+    report = await transcribe.diagnose(str(script))
+    assert report['ok'] is False and report['downloadBytes'] == 1006229426
+
+
+async def test_diagnose_gives_up_on_broken_output(tmp_path):
+    script = tmp_path / 'stt'
+    script.write_text('#!/bin/sh\necho oops\n')
+    script.chmod(0o755)
+    assert await transcribe.diagnose(str(script)) is None
+
+
+def test_bundled_stt_sits_next_to_the_frozen_runtime(tmp_path, monkeypatch):
+    runtime = tmp_path / 'resources' / 'studio-python'
+    runtime.mkdir(parents=True)
+    target = tmp_path / 'resources' / 'stt' / 'stt'
+    target.parent.mkdir()
+    target.write_text('')
+    target.chmod(0o755)
+    monkeypatch.setattr(transcribe.sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(transcribe.sys, 'executable', str(runtime / 'studio-python'))
+    assert transcribe.bundled() == str(target)
+    assert transcribe.locate() == (str(target), 'bundled')
 
 
 async def test_another_service_on_the_port_does_not_count(stt):
@@ -62,7 +137,7 @@ async def test_missing_service_is_reported(stt):
 
 async def test_sleeping_service_is_woken(stt, monkeypatch):
     stt.offline = True
-    monkeypatch.setattr(transcribe, 'command', lambda: '/bin/stt')
+    stt.command = '/bin/stt'
 
     async def spawn(*args, **kwargs):
         assert args == ('/bin/stt', 'warmup')

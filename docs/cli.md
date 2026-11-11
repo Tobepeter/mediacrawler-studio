@@ -113,7 +113,9 @@ mediacrawler comments --source '作品链接' --parent 主评论ID
 
 ## 视频转文字
 
-依赖本机 `stt` 语音转写服务的 HTTP 接口（`127.0.0.1:29556`），本工具不安装也不管理 `stt`。没有服务时返回 `stt_unavailable`；后台空闲退出时，有 `stt` 命令就自动叫醒。
+调用 `stt` 语音转写服务的 HTTP 接口（`127.0.0.1:29556`）。`stt` 按这个顺序找：安装版资源目录里自带的（`Resources/stt`）、源码运行时的 `build/vendor/stt`、PATH 和 `~/.local/bin` 里的 `stt` 命令；后台空闲退出时自动叫醒。模型不随包，从 Hugging Face 或魔搭的缓存读，本工具不下载。
+
+`--check` 输出 `state`：`ready` 服务已连上，`installed` 条件齐全、用时启动，`incomplete` 缺模型或依赖（`missing` 列出每项的名称、大小、应放的目录 `path`、需要的文件、下载页和命令行下载命令 `hint`，`downloadBytes` 是合计大小），`missing` 没有 `stt`；前两种退出码 0。另有 `source`（`bundled` 或 `system`）和 `path`。转写时缺模型返回 `stt_incomplete`，没有 `stt` 返回 `stt_unavailable`。
 
 ```bash
 mediacrawler transcribe --check

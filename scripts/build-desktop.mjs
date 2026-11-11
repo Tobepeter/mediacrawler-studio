@@ -12,6 +12,7 @@ import { constants } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { readSttManifest, sttManifestProblem } from './vendor-stt.mjs'
 
 export function buildSteps({ strict = false, withoutCli = false } = {}) {
   if (strict && withoutCli) throw new Error('严格模式不能排除 CLI')
@@ -47,7 +48,33 @@ export async function selectResources(
     throw new Error('桌面 Python 运行时缺失，请先运行 npm run build:runtime')
   const hasCli = !withoutCli && (await bundleExists(cli, 'mediacrawler'))
   if (strict && !hasCli) throw new Error('严格模式要求完整的 CLI 构建产物')
-  return { resources: [runtime, ...(hasCli ? [cli] : [])], hasCli }
+  // 语音转写可选：npm run vendor:stt 放进来的才带，接口版本不符就不带
+  const sttDir = path.join(root, 'build/vendor/stt')
+  let stt = null
+  if (await bundleExists(sttDir, 'stt')) {
+    const manifest = await readSttManifest(sttDir)
+    const problem = sttManifestProblem(manifest)
+    if (problem) throw new Error(`build/vendor/stt 不能用：${problem}`)
+    stt = manifest.version
+  }
+  return {
+    resources: [runtime, ...(hasCli ? [cli] : []), ...(stt ? [sttDir] : [])],
+    hasCli,
+    stt,
+  }
+}
+
+// packager 自带的复制会把相对符号链接改成指向构建目录的绝对路径，换台机器就断；这里原样再复制一遍
+async function copyResources(appPath, name, resources) {
+  const target =
+    process.platform === 'darwin'
+      ? path.join(appPath, `${name}.app`, 'Contents/Resources')
+      : path.join(appPath, 'resources')
+  for (const resource of resources) {
+    const destination = path.join(target, path.basename(resource))
+    await rm(destination, { recursive: true, force: true })
+    await cp(resource, destination, { recursive: true, verbatimSymlinks: true })
+  }
 }
 
 async function buildDesktop(options) {
@@ -63,8 +90,10 @@ async function buildDesktop(options) {
         cause: result.error,
       })
   }
-  const { resources, hasCli } = await selectResources(root, options)
-  console.log(`桌面 Python：已包含；独立 CLI：${hasCli ? '已包含' : '未包含'}`)
+  const { resources, hasCli, stt } = await selectResources(root, options)
+  console.log(
+    `桌面 Python：已包含；独立 CLI：${hasCli ? '已包含' : '未包含'}；语音转写：${stt ? `stt ${stt}` : '未包含'}`,
+  )
   const stage = path.join(root, 'build/desktop-app')
   await rm(stage, { recursive: true, force: true })
   await mkdir(stage, { recursive: true })
@@ -88,18 +117,19 @@ async function buildDesktop(options) {
       'utf8',
     ),
   )
-  await packager({
+  const name = 'MediaCrawler Studio'
+  const apps = await packager({
     dir: stage,
     out: path.join(root, 'dist/desktop'),
-    name: 'MediaCrawler Studio',
+    name,
     appBundleId: 'studio.mediacrawler.app',
     electronVersion: electron.version,
     icon: path.join(root, 'desktop/assets/icon'),
-    extraResource: resources,
     asar: true,
     overwrite: true,
     prune: false,
   })
+  for (const app of apps) await copyResources(app, name, resources)
 }
 
 if (

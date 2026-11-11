@@ -23,10 +23,11 @@ import urllib.request
 
 from playwright.async_api import async_playwright
 
-DATA = os.path.expanduser('~/Library/Application Support/mediacrawler-studio')
+# 和主进程一样认 STUDIO_USER_DATA，验收时可以另开一个用临时数据目录的开发窗口
+DATA = os.environ.get('STUDIO_USER_DATA') or os.path.expanduser('~/Library/Application Support/mediacrawler-studio')
 UI = '127.0.0.1:5173'
 # 和 webui/src/studio/debug.ts 的 VERSION 对应；入口在页面启动时装上，版本旧了就刷新页面
-VERSION = 3
+VERSION = 4
 
 
 def devtools_port(timeout=120):

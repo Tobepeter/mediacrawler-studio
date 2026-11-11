@@ -1,8 +1,14 @@
-"""视频转文字：只依赖本机 stt 的 HTTP 服务，stt 和模型都不随项目分发，桌面与 CLI 共用"""
+"""视频转文字：调用 stt 的本机 HTTP 服务，桌面与 CLI 共用
+
+stt 由 ai-voice 构建成独立包，安装版放在资源目录里；模型不打包，从 Hugging Face 或魔搭的缓存读
+"""
 import asyncio
+import json
 import math
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,10 +30,65 @@ class SttError(RuntimeError):
         self.code, self.retry_after = code, retry_after
 
 
-def command():
-    """stt 的后台空闲会自动退出，有命令时可以叫醒；Electron 启动的进程 PATH 里通常没有 ~/.local/bin"""
+def bundled():
+    """安装版里和运行时同在资源目录（resources/stt/stt），源码运行时在 build/vendor/stt/stt"""
+    base = Path(sys.executable).resolve().parent.parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1] / 'build' / 'vendor'
+    path = base / 'stt' / 'stt'
+    return str(path) if path.is_file() and os.access(path, os.X_OK) else None
+
+
+def locate():
+    """包里的优先，没有再找本机装的；Electron 启动的进程 PATH 里通常没有 ~/.local/bin"""
+    if path := bundled():
+        return path, 'bundled'
     fallback = Path.home() / '.local' / 'bin' / 'stt'
-    return shutil.which('stt') or (str(fallback) if fallback.exists() else None)
+    path = shutil.which('stt') or (str(fallback) if fallback.exists() else None)
+    return (path, 'system') if path else (None, None)
+
+
+def command():
+    return locate()[0]
+
+
+def missing_of(report):
+    """把 stt check 的结果收成界面要的样子：缺什么、多大、放到哪"""
+    checks = {item.get('id'): item for item in report.get('checks') or [] if isinstance(item, dict)}
+    rows = []
+    for item in report.get('missing') or []:
+        if not isinstance(item, dict) or item.get('required_for_default') is False:
+            continue
+        detail = checks.get(item.get('id')) or {}
+        model = detail.get('model') if isinstance(detail.get('model'), dict) else {}
+        rows.append({
+            'id': item.get('id'), 'kind': item.get('kind'), 'name': model.get('name') or item.get('model') or item.get('id'),
+            'message': detail.get('message') or '', 'sizeBytes': model.get('missing_bytes') or item.get('size_bytes'),
+            'path': item.get('expected_path') or detail.get('path'), 'files': model.get('missing_files') or item.get('files') or [],
+            'hint': item.get('hint') or detail.get('hint') or '',
+            'pages': [page for page in (model_page(source) for source in model.get('sources') or []) if page],
+        })
+    return rows
+
+
+def model_page(source):
+    repo = source.get('repo_id') if isinstance(source, dict) else None
+    if not repo:
+        return None
+    url = {'modelscope': f'https://modelscope.cn/models/{repo}/files', 'huggingface': f'https://huggingface.co/{repo}/tree/main'}.get(source.get('hub'))
+    return {'hub': source['hub'], 'url': url} if url else None
+
+
+async def diagnose(path):
+    """跑 stt check（静态检查，不加载模型、不下载）；跑不起来返回 None，交给提取时再报错"""
+    try:
+        process = await asyncio.create_subprocess_exec(path, 'check', '--json', stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        output, _ = await asyncio.wait_for(process.communicate(), 20)
+        report = json.loads(output)
+    except (OSError, TimeoutError, ValueError):
+        return None
+    if not isinstance(report, dict) or 'ok' not in report:
+        return None
+    rows = missing_of(report)
+    return {'ok': bool(report['ok']) or not rows, 'missing': rows, 'downloadBytes': sum(row['sizeBytes'] or 0 for row in rows)}
 
 
 def client(timeout):
@@ -45,11 +106,17 @@ async def status():
 
 
 async def check():
-    """ready 已连上，installed 有命令但后台没起，missing 不可用"""
+    """ready 已连上；installed 后台没起但条件齐了，提取时叫醒；incomplete 缺模型或依赖；missing 没有 stt"""
+    path, source = locate()
     data = await status()
     if data:
-        return {'state': 'ready', 'busy': bool(data.get('busy'))}
-    return {'state': 'installed' if command() else 'missing', 'busy': False}
+        return {'state': 'ready', 'busy': bool(data.get('busy')), 'source': source, 'path': path}
+    if not path:
+        return {'state': 'missing', 'busy': False, 'source': None, 'path': None}
+    report = await diagnose(path)
+    if report and not report['ok']:
+        return {'state': 'incomplete', 'busy': False, 'source': source, 'path': path, 'missing': report['missing'], 'downloadBytes': report['downloadBytes']}
+    return {'state': 'installed', 'busy': False, 'source': source, 'path': path}
 
 
 async def ensure_service():
@@ -65,6 +132,9 @@ async def ensure_service():
         process.kill()
         await process.wait()
     if not await status():
+        report = await diagnose(path)
+        if report and not report['ok']:
+            raise SttError('stt_incomplete', '语音转写缺少模型：' + '、'.join(row['name'] for row in report['missing']))
         raise SttError('stt_unavailable', 'stt 语音转写服务启动失败')
 
 

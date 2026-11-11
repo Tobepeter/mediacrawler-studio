@@ -290,7 +290,7 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
                        timeout: int = typer.Option(1800, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """把视频转成带时间戳的文字，有平台字幕时直接用字幕
 
-    需要本机运行 stt 语音转写服务（127.0.0.1:29556），本工具不安装 stt
+    需要 stt 语音转写服务（127.0.0.1:29556）：安装版自带，源码运行时用 build/vendor/stt 或本机的 stt 命令；模型不随包，--check 会列出缺什么
 
     transcribe --check
 
@@ -305,7 +305,7 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
     if check_only:
         state = asyncio.run(check())
         typer.echo(json.dumps(state, ensure_ascii=False))
-        raise typer.Exit(0 if state['state'] != 'missing' else 1)
+        raise typer.Exit(0 if state['state'] in ('ready', 'installed') else 1)
     if sum(bool(v) for v in (file, source, input)) != 1:
         raise typer.BadParameter('--file、--source、--input 必须且只能选一个')
     if file:

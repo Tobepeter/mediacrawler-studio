@@ -20,6 +20,13 @@ export function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+// 给人看的大小：GB 留一位小数，MB 和 KB 取整
+export function formatBytes(bytes: number) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
+  return `${Math.ceil(bytes / 1024)} KB`
+}
+
 export function formatDateTime(date: string | Date | number): string {
   const d =
     typeof date === 'string'

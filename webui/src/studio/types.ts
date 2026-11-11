@@ -81,9 +81,28 @@ export interface ContentImageText {
   createdAt: string
 }
 
+// 和 desktop/stt-status.mjs 的 missingOf 对应
+export interface SttMissing {
+  id: string
+  kind: 'model' | 'dependency' | 'ffmpeg' | 'platform' | string
+  name: string
+  message: string
+  sizeBytes: number | null
+  path: string | null
+  files: string[]
+  hint: string
+  pages: { hub: 'modelscope' | 'huggingface'; url: string }[]
+}
+
 export interface SttStatus {
-  state: 'ready' | 'installed' | 'missing'
+  // ready 服务已连上；installed 条件齐了、提取时启动；incomplete 缺模型或依赖；missing 没有 stt
+  state: 'ready' | 'installed' | 'incomplete' | 'missing'
   busy: boolean
+  source: 'bundled' | 'system' | null
+  path: string | null
+  version: string | null
+  missing?: SttMissing[]
+  downloadBytes?: number
 }
 
 export interface ContentItem {
@@ -302,6 +321,7 @@ export interface StudioBridge {
     options?: { cursor?: string | number; parent?: string },
   ): Promise<CommentPage>
   sttStatus?(): Promise<SttStatus>
+  sttOpen?(kind: 'page' | 'folder', target: string): Promise<void>
   saveTranscript?(
     platform: Platform,
     id: string,
