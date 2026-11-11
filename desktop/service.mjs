@@ -47,6 +47,9 @@ function creatorInfo(value, platform) {
 const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
 const feedWaitLimit = 12
+// 平台页面一个占 100 到 200MB，释放后下次用多等 1 到 2 秒；没登录的平台用完很快就放
+const pageIdleMs = 10 * 60 * 1000
+const loginPageIdleMs = 60 * 1000
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -1126,7 +1129,49 @@ export class StudioService {
       return this.cancel(platform)
   }
 
+  startPageRelease() {
+    clearInterval(this.pageReleaseTimer)
+    this.pageReleaseTimer = setInterval(
+      () => this.releaseIdlePages(),
+      60 * 1000,
+    )
+    this.pageReleaseTimer.unref?.()
+  }
+
+  // 平台上还有任何任务在用页面：采集、找博主、体检、下载、详情、评论、字幕、
+  // 图中文字、推荐流预取、登录检查和等扫码
+  pageBusy(platform) {
+    return (
+      this.operations.has(platform) ||
+      this.details.has(platform) ||
+      [...this.liveJobs].some((job) => job.platform === platform) ||
+      this.feed.runs.has(platform) ||
+      !!this.sessions?.jobs.has(platform) ||
+      this.windows.inUse(platform)
+    )
+  }
+
+  // 按最后一次真正用到页面的时间算空闲，不按用户离开界面的时间
+  releaseIdlePages(now = Date.now()) {
+    for (const { platform, usedAt } of this.windows.openPages()) {
+      if (this.pageBusy(platform)) {
+        this.windows.touch(platform, now)
+        continue
+      }
+      const idle =
+        this.state.accounts[platform] === 'connected'
+          ? pageIdleMs
+          : loginPageIdleMs
+      if (now - usedAt < idle || !this.windows.release(platform)) continue
+      this.logger?.write('info', 'page', 'released', {
+        platform,
+        idleMinutes: Math.round((now - usedAt) / 60000),
+      })
+    }
+  }
+
   async stopAll() {
+    clearInterval(this.pageReleaseTimer)
     await Promise.allSettled([...this.liveJobs].map((job) => job.cancel()))
     this.feed.close()
     await Promise.all(

@@ -485,6 +485,7 @@ app
       if (!mainWindow.isDestroyed()) mainWindow.show()
     })
     void service.sessions.start()
+    service.startPageRelease()
     let quitting = false
     app.on('before-quit', (event) => {
       if (quitting) return

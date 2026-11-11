@@ -1003,3 +1003,47 @@ test('体检中点停止会结束子进程，不因没有采集任务而报错',
     await cleanup()
   }
 })
+
+test('平台页面按最后一次使用计时释放，已登录 10 分钟、未登录 1 分钟，有任务时不放', async () => {
+  const { service, cleanup } = await createService('')
+  try {
+    const minute = 60 * 1000
+    const used = new Map([
+      ['bili', 0],
+      ['dy', 0],
+      ['ks', 0],
+      ['xhs', 0],
+    ])
+    const released = []
+    service.windows = {
+      ...service.windows,
+      openPages: () =>
+        [...used].map(([platform, usedAt]) => ({ platform, usedAt })),
+      inUse: (platform) => platform === 'xhs',
+      touch: (platform, now) => used.set(platform, now),
+      release: (platform) => {
+        released.push(platform)
+        used.delete(platform)
+        return true
+      },
+    }
+    service.state.accounts = {
+      bili: 'connected',
+      dy: 'connected',
+      xhs: 'connected',
+    }
+    service.details.set('dy', { cancel: async () => {} })
+    service.releaseIdlePages(2 * minute)
+    // 未登录的快手过了 1 分钟就放；B 站还没到 10 分钟；抖音有详情任务、小红书正在取码，都重新计时
+    assert.deepEqual(released, ['ks'])
+    assert.equal(used.get('dy'), 2 * minute)
+    service.details.delete('dy')
+    service.releaseIdlePages(10 * minute)
+    assert.deepEqual(released, ['ks', 'bili'])
+    service.releaseIdlePages(12 * minute + 1)
+    assert.deepEqual(released, ['ks', 'bili', 'dy'])
+    assert.ok(used.has('xhs'))
+  } finally {
+    await cleanup()
+  }
+})

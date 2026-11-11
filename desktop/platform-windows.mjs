@@ -12,6 +12,8 @@ export class PlatformWindows {
   qrCapture = null
   backgroundCaptures = new Map()
   preparing = new Map()
+  // 每个平台页面最后一次被用到的时间，空闲久了由 service 释放
+  used = new Map()
   onChange = () => {}
   onDismiss = () => {}
 
@@ -71,6 +73,7 @@ export class PlatformWindows {
   }
 
   async prepareNow(platform, signal) {
+    this.touch(platform)
     // 上次取码可能仍在释放 debugger，重试不能抢占同一调试会话
     if (this.qrCapture?.presentation.platform === platform)
       await this.qrCapture.promise.catch(() => {})
@@ -96,6 +99,38 @@ export class PlatformWindows {
     } finally {
       win.webContents.debugger.detach()
     }
+  }
+
+  touch(platform, now = Date.now()) {
+    this.used.set(platform, now)
+  }
+
+  // 开着的平台页面和它们最后被用到的时间
+  openPages() {
+    return [...this.windows.entries()]
+      .filter(([, win]) => !win.isDestroyed())
+      .map(([platform]) => ({ platform, usedAt: this.used.get(platform) ?? 0 }))
+  }
+
+  // 正在给用户看、正在取码或正在准备的页面不能关
+  inUse(platform) {
+    return (
+      this.presentation?.platform === platform ||
+      this.qrCapture?.presentation.platform === platform ||
+      this.backgroundCaptures.has(platform) ||
+      this.preparing.has(platform)
+    )
+  }
+
+  // 关掉页面省内存，登录态在分区里不受影响；下次用时 prepare 重新建页
+  release(platform) {
+    if (this.inUse(platform)) return false
+    const win = this.windows.get(platform)
+    if (!win) return false
+    win.destroy()
+    this.windows.delete(platform)
+    this.used.delete(platform)
+    return true
   }
 
   beginLogin(platform, mode = 'embedded') {
@@ -229,6 +264,7 @@ export class PlatformWindows {
       if (this.presentation?.platform === id) this.hide(id)
       this.windows.get(id)?.destroy()
       this.windows.delete(id)
+      this.used.delete(id)
     }
     const results = await Promise.allSettled(
       targets.map(async (platform) => {
