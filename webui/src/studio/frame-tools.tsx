@@ -12,17 +12,6 @@ import {
 import { useStudio } from './store'
 import type { ContentItem } from './types'
 
-// 等控件收起后再截；窗口在后台时浏览器不刷新画面，最多等 100 毫秒，避免一直卡住
-const nextFrame = () =>
-  Promise.race([
-    new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve)),
-    ),
-    new Promise((resolve) => setTimeout(resolve, 100)),
-  ])
-
-// 平台视频跨域，页面读不到像素，由主进程截取播放器区域；截之前收起控件和工具条，
-// 只截画面本身，按视频比例去掉 object-contain 留下的黑边
 // 视频按 object-contain 显示，算出画面本身在元素里的位置，去掉两侧或上下的空白
 function contentBox(element: HTMLVideoElement) {
   const box = element.getBoundingClientRect()
@@ -36,11 +25,77 @@ function contentBox(element: HTMLVideoElement) {
   return { box, left, top, width, height }
 }
 
+const waitFor = (target: HTMLVideoElement, event: string, timeoutMs: number) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    target.addEventListener(
+      event,
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true },
+    )
+    target.addEventListener(
+      'error',
+      () => {
+        clearTimeout(timer)
+        reject(new Error('error'))
+      },
+      { once: true },
+    )
+  })
+
+// 正在播放的视频不开跨域模式，免得某个域名没补上跨域头时播不了；取帧时另开一个
+// 隐藏的视频，跳到同一时间点画进画布，拿到原始分辨率，界面上什么都不用隐藏
+async function grabFrame(source: HTMLVideoElement) {
+  const probe = document.createElement('video')
+  probe.crossOrigin = 'anonymous'
+  probe.muted = true
+  probe.preload = 'auto'
+  try {
+    const loaded = waitFor(probe, 'loadeddata', 8000)
+    probe.src = source.currentSrc
+    await loaded
+    const seeked = waitFor(probe, 'seeked', 8000)
+    probe.currentTime = source.currentTime
+    await seeked
+    const canvas = document.createElement('canvas')
+    canvas.width = probe.videoWidth
+    canvas.height = probe.videoHeight
+    canvas.getContext('2d')!.drawImage(probe, 0, 0)
+    // 没补上跨域头时画布被污染，这里会抛错
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/png'),
+    )
+    if (!blob) throw new Error('empty')
+    return new Uint8Array(await blob.arrayBuffer())
+  } finally {
+    probe.removeAttribute('src')
+    probe.load()
+  }
+}
+
+// 退路：由主进程截播放器区域；截之前收起控件和工具条，会闪一下。
+// 等控件收起再截，窗口在后台时浏览器不刷新画面，最多等 100 毫秒，避免一直卡住
+const nextFrame = () =>
+  Promise.race([
+    new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    ),
+    new Promise((resolve) => setTimeout(resolve, 100)),
+  ])
+
 export function useFrameCapture(video: RefObject<HTMLVideoElement | null>) {
   const [capturing, setCapturing] = useState(false)
   const capture = async () => {
     const element = video.current
-    if (!element || !window.studio?.captureFrame) return null
+    if (!element) return null
+    try {
+      return await grabFrame(element)
+    } catch {
+      if (!window.studio?.captureFrame) return null
+    }
     setCapturing(true)
     try {
       await nextFrame()

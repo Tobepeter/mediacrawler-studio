@@ -13,10 +13,12 @@ test('仅调整主界面媒体请求，保留 Range 且不转发登录凭据', (
           assert.deepEqual(filter.urls, [
             'https://www.douyin.com/*',
             'https://*.douyinvod.com/*',
+            'https://*.douyinstatic.com/*',
             'https://*.xhscdn.com/*',
           ])
           listener = handler
         },
+        onHeadersReceived() {},
       },
     },
   }
@@ -61,4 +63,41 @@ test('仅调整主界面媒体请求，保留 Range 且不转发登录凭据', (
     (response) => (result = response.requestHeaders),
   )
   assert.deepEqual(result, requestHeaders)
+})
+
+test('只给本窗口的媒体响应补跨域头，暂停时才能把当前帧画进画布', () => {
+  let listener
+  installPlaybackHeaders({
+    id: 1,
+    getUserAgent: () => '',
+    session: {
+      webRequest: {
+        onBeforeSendHeaders() {},
+        onHeadersReceived(filter, handler) {
+          listener = handler
+        },
+      },
+    },
+  })
+  const url = 'https://v1.douyinvod.com/video.mp4'
+  const responseHeaders = {
+    'content-type': ['video/mp4'],
+    'access-control-allow-origin': ['https://www.douyin.com'],
+  }
+  let result
+  listener(
+    { url, webContentsId: 1, resourceType: 'media', responseHeaders },
+    (response) => (result = response),
+  )
+  assert.deepEqual(result.responseHeaders, {
+    'content-type': ['video/mp4'],
+    'Access-Control-Allow-Origin': ['*'],
+  })
+  for (const details of [
+    { url, webContentsId: 2, resourceType: 'media', responseHeaders },
+    { url, webContentsId: 1, resourceType: 'xhr', responseHeaders },
+  ]) {
+    listener(details, (response) => (result = response))
+    assert.deepEqual(result, {})
+  }
 })
