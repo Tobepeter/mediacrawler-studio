@@ -2,6 +2,8 @@
 from urllib.parse import urlparse, urljoin
 import httpx
 
+from desktop.pacing import wait_turn
+
 HOSTS = {
     "bili": ("bilibili.com", "b23.tv"),
     "dy": ("douyin.com", "iesdouyin.com"),
@@ -31,6 +33,8 @@ async def resolve_link(url, platform):
         for _ in range(8):
             if not allowed(url, platform):
                 raise RuntimeError("分享链接跳转到其他网站，请使用作品完整链接")
+            # 每一跳都是一次平台请求，和其他请求共用节奏
+            await wait_turn(platform)
             response = await client.get(url)
             if response.is_redirect and response.headers.get("location"):
                 url = urljoin(url, response.headers["location"])

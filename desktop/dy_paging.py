@@ -177,7 +177,8 @@ async def collect_search(runner, query, cursor=None, options=None):
 
     async def fetch(position):
         nonlocal search_id
-        response = await runner.client.search_info_by_keyword(query, offset=position, search_id=search_id, **(options or {}))
+        # 登录失效时返回 status_code 8 且没有 data，不检查会被当成搜到底
+        response = await checked(runner.client.search_info_by_keyword(query, offset=position, search_id=search_id, **(options or {})))
         rows = response.get('data') or []
         search_id = (response.get('extra') or {}).get('logid') or search_id
         return Page(rows, None if not rows or response.get('has_more') in (False, 0) else position + SEARCH_PAGE_SIZE)

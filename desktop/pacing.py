@@ -26,6 +26,7 @@ from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from filelock import FileLock, Timeout
+from tenacity import retry_if_not_exception_type
 from platformdirs import user_data_path
 
 from desktop.paging import CreatorError
@@ -139,6 +140,8 @@ PLATFORMS = {
             ('/aweme/v1/web/aweme/detail/', 'detail'),
             ('/aweme/v1/web/comment/', 'comment'),
         ),
+        # 短链解析自己发请求，不经过 request
+        transports=('request', 'resolve_short_url'),
         cooldown=1800, is_blocked_response=dy_verify_response,
     ),
     'xhs': Platform(
@@ -541,16 +544,33 @@ def exempted(original):
     return call
 
 
+def split_retry(client, method):
+    """上游有些方法自带 tenacity 重试，直接包住只会按一次排队，失败时几次真实请求连发；
+    拆出原函数先套节流，再把重试套在外面，每次重试都单独排队，节流拒绝本身不重试"""
+    raw = None if method in vars(client) else getattr(type(client), method, None)
+    retrying = getattr(raw, 'retry', None)
+    if retrying is None:
+        return getattr(client, method, None), None
+    inner = raw
+    while getattr(inner, 'retry', None) is not None:
+        inner = inner.__wrapped__
+    return inner.__get__(client), retrying.copy(retry=retrying.retry & retry_if_not_exception_type(CreatorError))
+
+
+def pace_method(client, method, platform, route, report, limit, background):
+    original, retrying = split_retry(client, method)
+    if original is None:
+        return
+    call = paced(original, platform, route, report, limit, background)
+    setattr(client, method, retrying.wraps(call) if retrying else call)
+
+
 def pace_client(client, platform, report=None, limit=None, background=False):
     config = PLATFORMS[platform]
     for method, route in config.methods.items():
-        original = getattr(client, method, None)
-        if original is not None:
-            setattr(client, method, paced(original, platform, route, report, limit, background))
+        pace_method(client, method, platform, route, report, limit, background)
     for method in config.transports:
-        original = getattr(client, method, None)
-        if original is not None:
-            setattr(client, method, paced(original, platform, None, report, limit, background))
+        pace_method(client, method, platform, None, report, limit, background)
     for method in EXEMPT:
         original = getattr(client, method, None)
         if original is not None:

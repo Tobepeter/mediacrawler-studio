@@ -215,17 +215,25 @@ class DesktopCrawler:
         if self.request.get('comments') and self.store.items:
             self.emit('state', status='running', message='正在获取评论')
             collector = CommentCollector(self.platform, self.client, self.store, self.request.get('replies', False))
-            failed = False
+            failed, throttled = False, None
             for item in self.store.items.values():
+                if throttled:
+                    self.store.comment_state(item, 'cancelled')
+                    continue
                 self.store.comment_state(item, 'running')
                 try:
-                    async with asyncio.timeout(60):
+                    # 带回复时一条要二十来次请求，节流排队也算在里面，只兜底真正卡住的情况
+                    async with asyncio.timeout(300):
                         await collector.fetch(item)
                     self.store.comment_state(item, 'completed')
-                except Exception:
+                except Exception as error:
+                    # 被节流拒绝时后面的条目也一样会被拒，停下并告诉用户要等多久
+                    throttled = throttle_detail(error) and str(error)
                     failed = True
-                    self.store.comment_state(item, 'error')
-            if failed:
+                    self.store.comment_state(item, 'cancelled' if throttled else 'error')
+            if throttled:
+                self.emit('warning', message=f'评论没取完：{throttled}，正文与已有评论已保留')
+            elif failed:
                 self.emit('warning', message='部分评论未取全，正文与已有评论已保留')
         if not self.defer_media():
             from desktop.content.media import enrich
@@ -265,8 +273,12 @@ class DesktopCrawler:
                 self.bili_details[f"bili:{video.get('View', {}).get('aid')}"] = video
         elif self.platform == "dy":
             # 分享短链无法在输入时区分作品和主页，这里给出明确指引
-            if urlparse(query).hostname == "v.douyin.com" and "/user/" in await self.client.resolve_short_url(query):
-                raise RuntimeError("这是博主主页的分享链接，请粘贴主页完整链接或使用找博主")
+            if urlparse(query).hostname == "v.douyin.com":
+                resolved = await self.client.resolve_short_url(query)
+                if "/user/" in resolved:
+                    raise RuntimeError("这是博主主页的分享链接，请粘贴主页完整链接或使用找博主")
+                # 解析出的完整链接直接交给上游，不让它再解析一次短链
+                query = resolved or query
             config.DY_SPECIFIED_ID_LIST = [query]
             fetch = self.crawler.get_aweme_detail
 

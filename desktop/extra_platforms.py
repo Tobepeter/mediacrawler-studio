@@ -128,4 +128,4 @@ class ExtraCollector:
                     return
             if not rows or not more:
                 return
-            await asyncio.sleep(2)
+            # 翻页节奏交给 pacing，不在这里另外等待

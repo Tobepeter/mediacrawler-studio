@@ -143,6 +143,15 @@ def link_unique(source, output, name):
             return target
         except FileExistsError:
             target = output / f'{Path(name).stem} ({index}){Path(name).suffix}'
+        except OSError:
+            # exFAT、FAT32 这类盘不支持硬链接：先独占文件名，再把临时文件移过去
+            try:
+                os.close(os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            except FileExistsError:
+                target = output / f'{Path(name).stem} ({index}){Path(name).suffix}'
+                continue
+            os.replace(source, target)
+            return target
 
 
 async def download_media(request, emit, page=None):

@@ -83,7 +83,12 @@ async def diagnose(path):
         process = await asyncio.create_subprocess_exec(path, 'check', '--json', stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         output, _ = await asyncio.wait_for(process.communicate(), 20)
         report = json.loads(output)
-    except (OSError, TimeoutError, ValueError):
+    except TimeoutError:
+        # 卡住的检查进程不能留下
+        process.kill()
+        await process.wait()
+        return None
+    except (OSError, ValueError):
         return None
     if not isinstance(report, dict) or 'ok' not in report:
         return None

@@ -254,3 +254,20 @@ async def test_same_name_is_not_overwritten(tmp_path, transport):
     assert (tmp_path / '作者 - 标题.jpg').read_bytes() == b'old'
     assert (tmp_path / '作者 - 标题 (2).jpg').read_bytes() == b'new'
 
+
+
+def test_delivery_falls_back_when_disk_has_no_hard_links(tmp_path, monkeypatch):
+    """exFAT 这类盘不支持硬链接，退回独占文件名后移动，不覆盖已有文件"""
+    import errno
+    import os
+    from desktop.media_download import link_unique
+
+    def no_links(*_):
+        raise OSError(errno.ENOTSUP, 'not supported')
+    monkeypatch.setattr(os, 'link', no_links)
+    (tmp_path / 'a.mp4').write_text('old')
+    source = tmp_path / 'work.mp4'
+    source.write_text('new')
+    target = link_unique(source, tmp_path, 'a.mp4')
+    assert target.name == 'a (2).mp4' and target.read_text() == 'new'
+    assert (tmp_path / 'a.mp4').read_text() == 'old' and not source.exists()

@@ -454,3 +454,28 @@ async def test_wait_turn_shares_the_other_group(waits):
     await client.request('GET', 'a')
     await wait_turn('zhihu')
     assert waits[1] > 0
+
+
+async def test_upstream_retries_each_take_their_own_turn(waits):
+    """上游 request 自带重试时，每次重试都要排队，被节流拒绝时不再重试"""
+    from tenacity import retry, stop_after_attempt, wait_fixed
+
+    class Client:
+        calls = 0
+
+        @retry(stop=stop_after_attempt(3), wait=wait_fixed(0))
+        async def request(self, method, url):
+            Client.calls += 1
+            if Client.calls < 3:
+                raise ValueError('数据异常')
+            return {'ok': True}
+
+    client, seen = Client(), []
+    pace_client(client, 'xhs', report=lambda kind, **detail: seen.append(detail.get('outcome')) if kind == 'platform-request' else None)
+    assert await client.request('GET', 'https://example.com/api/sns/web/v1/feed') == {'ok': True}
+    # 三次真实请求各排一次队、各记一行
+    assert Client.calls == 3 and seen == ['error', 'error', 'ok']
+    start_cooldown('xhs')
+    with pytest.raises(CreatorError):
+        await client.request('GET', 'https://example.com/api/sns/web/v1/feed')
+    assert Client.calls == 3
