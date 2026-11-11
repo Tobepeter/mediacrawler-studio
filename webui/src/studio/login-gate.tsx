@@ -1,13 +1,38 @@
 import { useTranslation } from 'react-i18next'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, LogOut, ScanLine, Square, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { StableLabel } from '@/components/common/stable-label'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { IconButton } from '@/components/common/icon-button'
 import { platformBusy, useStudio } from './store'
 import { useStudioRoute } from './route'
+
+// 名字占头像和退出按钮之间的固定空间，超长省略，只有被截断时悬停才显示全名
+function AccountName({ name }: { name: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  const clipped = () => {
+    const node = ref.current
+    return !!node && node.scrollWidth > node.clientWidth
+  }
+  return (
+    <Tooltip open={open} onOpenChange={(next) => setOpen(next && clipped())}>
+      <TooltipTrigger asChild>
+        <span ref={ref} className='min-w-0 flex-1 truncate'>
+          {name}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 // 仅展示账号和处理用户操作；启动会话检查由主进程管理
 export function LoginGate() {
@@ -85,7 +110,7 @@ export function LoginGate() {
   if (account === 'connected')
     return (
       <div
-        className='flex min-h-10 items-center gap-2'
+        className='flex min-h-10 w-full items-center gap-2'
         aria-label={t('已登录：{{name}}', {
           name: profile?.nickname || t('当前账号'),
         })}
@@ -101,9 +126,11 @@ export function LoginGate() {
             <UserRound className='size-4' aria-hidden='true' />
           </AvatarFallback>
         </Avatar>
-        <span className='max-w-32 truncate'>
-          {profile?.nickname || t('已登录')}
-        </span>
+        {/* 换平台时名字变了，提示的开合状态要重新开始，不沿用上一个账号的 */}
+        <AccountName
+          key={profile?.nickname || ''}
+          name={profile?.nickname || t('已登录')}
+        />
         <IconButton
           label={t('退出登录')}
           disabled={!window.studio || blocked}
