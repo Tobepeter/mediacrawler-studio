@@ -1,6 +1,6 @@
+import { pythonPath, spawnWorker } from './python-worker.mjs'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import path from 'node:path'
 import { platforms } from './contracts.mjs'
 
 // 手动全量检查：独立内存分区，单次执行，有限生命周期
@@ -82,25 +82,11 @@ export class HealthCheck {
       }
       if (this.closed || ended) throw new Error('检查已停止')
       const service = this.service
-      const python =
-        process.env.STUDIO_PYTHON ||
-        path.join(
-          service.root,
-          '.venv',
-          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-        )
-      const child = this.spawnProcess(
-        python,
-        ['-u', '-m', 'desktop.health_worker'],
-        {
-          cwd: service.root,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            PYTHONUNBUFFERED: '1',
-            PYTHONIOENCODING: 'utf-8',
-          },
-        },
+      const child = spawnWorker(
+        this.spawnProcess,
+        pythonPath(service.root),
+        service.root,
+        'desktop.health_worker',
       )
       this.child = child
       lines = createInterface({ input: child.stdout })

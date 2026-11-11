@@ -1,3 +1,4 @@
+import { spawnWorker } from './python-worker.mjs'
 import { createInterface } from 'node:readline'
 
 // 媒体下载/播放地址解析，不写回采集历史；进程退出后才解除忙碌
@@ -36,14 +37,11 @@ export class DownloadJob {
         result = null,
         code = 'network',
         throttle = {}
-      const child = this.spawnProcess(
+      const child = spawnWorker(
+        this.spawnProcess,
         this.python,
-        ['-u', '-m', 'desktop.download_worker'],
-        {
-          cwd: this.root,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-        },
+        this.root,
+        'desktop.download_worker',
       )
       this.child = child
       let timedOut = false

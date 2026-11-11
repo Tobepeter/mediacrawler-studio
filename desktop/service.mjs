@@ -1,3 +1,4 @@
+import { pythonPath, spawnWorker } from './python-worker.mjs'
 import healthPolicy from './health-policy.json' with { type: 'json' }
 import { logoutPlatform } from './logout-job.mjs'
 import { spawn } from 'node:child_process'
@@ -290,14 +291,7 @@ export class StudioService {
   }
 
   get python() {
-    return (
-      process.env.STUDIO_PYTHON ||
-      path.join(
-        this.root,
-        '.venv',
-        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-      )
-    )
+    return pythonPath(this.root)
   }
 
   mediaJob(platform, requestId) {
@@ -675,18 +669,11 @@ export class StudioService {
   // 一次性查询 worker：结果只回给调用方，取消时返回 cancelled，不进历史
   queryWorker(run, resultEvent, label, payload, timeoutMs = 45000, onEvent) {
     return new Promise((resolve, reject) => {
-      const child = this.spawnProcess(
+      const child = spawnWorker(
+        this.spawnProcess,
         this.python,
-        ['-u', '-m', 'desktop.worker'],
-        {
-          cwd: this.root,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            PYTHONUNBUFFERED: '1',
-            PYTHONIOENCODING: 'utf-8',
-          },
-        },
+        this.root,
+        'desktop.worker',
       )
       run.child = child
       let result = null
@@ -951,15 +938,12 @@ export class StudioService {
         this.finish(run, 'cancelled', '已取消')
         return
       }
-      const child = this.spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
-        cwd: this.root,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: '1',
-          PYTHONIOENCODING: 'utf-8',
-        },
-      })
+      const child = spawnWorker(
+        this.spawnProcess,
+        python,
+        this.root,
+        'desktop.worker',
+      )
       run.child = child
       let terminal = false
       const lines = createInterface({ input: child.stdout })

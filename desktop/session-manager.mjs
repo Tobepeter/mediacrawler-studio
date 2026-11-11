@@ -1,7 +1,7 @@
+import { pythonPath, spawnWorker } from './python-worker.mjs'
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { randomUUID } from 'node:crypto'
-import path from 'node:path'
 import { mergeProfile } from './account-profile.mjs'
 import { platforms } from './contracts.mjs'
 import policy from './health-policy.json' with { type: 'json' }
@@ -208,18 +208,12 @@ export class SessionManager {
       signal.removeEventListener('abort', onAbort)
     }
     if (!this.active(job)) return
-    const python =
-      process.env.STUDIO_PYTHON ||
-      path.join(
-        service.root,
-        '.venv',
-        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-      )
-    const child = this.spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
-      cwd: service.root,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
-    })
+    const child = spawnWorker(
+      this.spawnProcess,
+      pythonPath(service.root),
+      service.root,
+      'desktop.worker',
+    )
     job.child = child
     const lines = createInterface({ input: child.stdout })
     lines.on('line', (line) => {

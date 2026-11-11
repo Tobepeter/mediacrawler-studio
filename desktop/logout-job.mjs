@@ -1,5 +1,5 @@
+import { pythonPath, spawnWorker } from './python-worker.mjs'
 import { createInterface } from 'node:readline'
-import path from 'node:path'
 
 export async function logoutPlatform({
   platform,
@@ -42,22 +42,12 @@ export async function logoutPlatform({
       try {
         const targetId = await windows.prepare(platform, controller.signal)
         if (controller.signal.aborted) return
-        const python =
-          process.env.STUDIO_PYTHON ||
-          path.join(
-            root,
-            '.venv',
-            process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
-          )
-        child = spawnProcess(python, ['-u', '-m', 'desktop.worker'], {
-          cwd: root,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            PYTHONUNBUFFERED: '1',
-            PYTHONIOENCODING: 'utf-8',
-          },
-        })
+        child = spawnWorker(
+          spawnProcess,
+          pythonPath(root),
+          root,
+          'desktop.worker',
+        )
         child.stderr.resume()
         child.stdin.on('error', () => {})
         const lines = createInterface({ input: child.stdout })
