@@ -14,7 +14,7 @@ import { IconButton } from '@/components/common/icon-button'
 import { platformBusy, useStudio } from './store'
 import { useStudioRoute } from './route'
 
-// 名字占头像和退出按钮之间的固定空间，超长省略，只有被截断时悬停才显示全名
+// 名字按内容宽度显示，稍长就省略，只有被截断时悬停才显示全名
 function AccountName({ name }: { name: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const [open, setOpen] = useState(false)
@@ -25,7 +25,7 @@ function AccountName({ name }: { name: string }) {
   return (
     <Tooltip open={open} onOpenChange={(next) => setOpen(next && clipped())}>
       <TooltipTrigger asChild>
-        <span ref={ref} className='min-w-0 flex-1 truncate'>
+        <span ref={ref} className='max-w-24 truncate'>
           {name}
         </span>
       </TooltipTrigger>
@@ -110,7 +110,7 @@ export function LoginGate() {
   if (account === 'connected')
     return (
       <div
-        className='flex min-h-10 w-full items-center gap-2'
+        className='flex min-h-10 items-center gap-2'
         aria-label={t('已登录：{{name}}', {
           name: profile?.nickname || t('当前账号'),
         })}

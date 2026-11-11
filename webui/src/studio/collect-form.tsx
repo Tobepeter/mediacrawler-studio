@@ -190,8 +190,7 @@ export function CollectForm() {
               )
             })}
           </TabsList>
-          {/* 账号区固定宽度，切平台时名字长短不同也不挤动左边的平台标签 */}
-          <div className='flex h-10 w-48 shrink-0 items-center justify-end gap-2'>
+          <div className='flex h-10 shrink-0 items-center gap-2'>
             {(account === 'connected' || !!page) && <LoginGate />}
           </div>
         </div>
