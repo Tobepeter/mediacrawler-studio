@@ -29,6 +29,7 @@ import {
   activeStatuses,
   isContinuing,
   platformBlocked,
+  platformIds,
   platformNames,
   useForm,
   usePage,
@@ -167,7 +168,7 @@ export function CollectForm() {
             aria-label={t('平台')}
             className='min-w-0 justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
           >
-            {(Object.keys(platformNames) as Platform[]).map((platform) => {
+            {platformIds.map((platform) => {
               // 滚动续采是静默的，只有首屏和搜索第一屏才提示
               const collecting =
                 working[platform] === 'collect' &&

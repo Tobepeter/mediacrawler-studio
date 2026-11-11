@@ -40,7 +40,7 @@ export function TaskStatus() {
   const labels = {
     checking: t('连接中'),
     auth: t('等待扫码'),
-    running: task?.message === '正在获取评论' ? t('采集评论') : t('采集中'),
+    running: task?.stage === 'comments' ? t('采集评论') : t('采集中'),
     stopping: t('正在停止'),
     completed: t('已完成'),
     cancelled: t('已取消'),

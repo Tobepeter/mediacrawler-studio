@@ -1,3 +1,4 @@
+import { QR_TIMEOUT } from './login-feedback'
 import { recordLoginOutcome, loginMayBeBroken } from './login-health'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -54,7 +55,7 @@ export function LoginQr({
           task.action === 'connect' &&
           task.startedAt === startedAt
         ) {
-          state.updateView({ error: '获取二维码超时，请重试' }, platform)
+          state.updateView({ error: QR_TIMEOUT }, platform)
           void window.studio?.cancel(platform).catch(() => {})
         }
       },

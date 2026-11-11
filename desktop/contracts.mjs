@@ -68,6 +68,7 @@ export const platforms = {
 
 export const creatorPlatforms = capabilities.creator
 export const creatorSearchPlatforms = capabilities.creatorSearch
+export const commentPlatforms = capabilities.comments
 export const pagedSearchPlatforms = capabilities.pagedSearch
 export const feedPlatforms = capabilities.feed
 export const creatorLimit = capabilities.creatorLimit

@@ -190,6 +190,8 @@ export interface StudioTask extends CollectRequest {
   startedAt: number
   finishedAt?: number
   warning?: string
+  // 采集正文之后取评论时是 comments，底栏据此显示“采集评论”
+  stage?: 'comments'
   failure?: { code: string; stage: string; retryable?: boolean }
 }
 

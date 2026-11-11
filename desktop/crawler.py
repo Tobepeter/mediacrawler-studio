@@ -213,7 +213,7 @@ class DesktopCrawler:
         else:
             await self.search()
         if self.request.get('comments') and self.store.items:
-            self.emit('state', status='running', message='正在获取评论')
+            self.emit('state', status='running', message='正在获取评论', stage='comments')
             collector = CommentCollector(self.platform, self.client, self.store, self.request.get('replies', False))
             failed, throttled = False, None
             for item in self.store.items.values():

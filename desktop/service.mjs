@@ -17,6 +17,7 @@ import { sttStatus } from './stt-status.mjs'
 import {
   creatorLimit,
   creatorSearchPlatforms,
+  commentPlatforms,
   creatorPlatforms,
   feedPlatforms,
   isCreatorUrl,
@@ -46,7 +47,6 @@ function creatorInfo(value, platform) {
 const feedMemoryLimit = 600
 const feedCacheTtl = 30 * 60 * 1000
 const feedWaitLimit = 12
-const commentPlatforms = ['bili', 'dy', 'xhs']
 
 export class StudioService {
   // 同平台的采集、播放解析、下载和登出共用一个浏览器页面
@@ -985,6 +985,7 @@ export class StudioService {
             Object.assign(task, {
               status: event.status,
               message: event.message,
+              stage: event.stage,
             })
             if (event.status === 'auth') {
               this.state.accounts[request.platform] = 'expired'

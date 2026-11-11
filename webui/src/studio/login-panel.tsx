@@ -1,3 +1,4 @@
+import { QR_TIMEOUT } from './login-feedback'
 import { PlatformLogin } from './platform-login'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -98,9 +99,9 @@ function LegacyLoginPanel() {
             <div className='flex h-9 items-center text-body text-muted-foreground'>
               {!suspicious &&
                 (checkTimedOut ||
-                views[platform].error === '获取二维码超时，请重试' ||
+                views[platform].error === QR_TIMEOUT ||
                 (task?.platform === platform &&
-                  task.message === '获取二维码超时，请重试')
+                  task.failure?.code === 'TIMEOUT')
                   ? t('获取超时，请重试')
                   : failed && t('暂时无法获取二维码，请重试'))}
             </div>

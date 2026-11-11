@@ -47,8 +47,7 @@ import {
   SettingPage,
   SettingRow,
 } from './settings-row'
-import { platformNames, useStudio } from './store'
-import type { Platform } from './types'
+import { platformIds, platformNames, useStudio } from './store'
 
 const tabs = [
   { id: 'general', label: '通用', icon: SlidersHorizontal },
@@ -261,25 +260,23 @@ export function StudioSettings() {
             >
               <div className='h-full space-y-4 overflow-y-auto'>
                 <SettingGroup>
-                  {(Object.keys(platformNames) as Platform[]).map(
-                    (platform) => (
-                      <SettingRow
-                        key={platform}
-                        title={
-                          <span className='inline-flex items-center gap-2'>
-                            <PlatformIcon platform={platform} />
-                            {t(platformNames[platform])}
-                          </span>
-                        }
-                      >
-                        <span className='truncate text-muted-foreground'>
-                          {accounts[platform] === 'connected'
-                            ? profiles[platform]?.nickname || t('已登录')
-                            : t('未登录')}
+                  {platformIds.map((platform) => (
+                    <SettingRow
+                      key={platform}
+                      title={
+                        <span className='inline-flex items-center gap-2'>
+                          <PlatformIcon platform={platform} />
+                          {t(platformNames[platform])}
                         </span>
-                      </SettingRow>
-                    ),
-                  )}
+                      }
+                    >
+                      <span className='truncate text-muted-foreground'>
+                        {accounts[platform] === 'connected'
+                          ? profiles[platform]?.nickname || t('已登录')
+                          : t('未登录')}
+                      </span>
+                    </SettingRow>
+                  ))}
                 </SettingGroup>
                 <Button
                   variant='outline'

@@ -3,16 +3,10 @@ from urllib.parse import urlparse, urljoin
 import httpx
 
 from desktop.pacing import wait_turn
+from desktop.paging import CAPABILITIES
 
-HOSTS = {
-    "bili": ("bilibili.com", "b23.tv"),
-    "dy": ("douyin.com", "iesdouyin.com"),
-    "xhs": ("xiaohongshu.com", "xhslink.com"),
-    "zhihu": ("zhihu.com",),
-    "wb": ("weibo.com", "weibo.cn"),
-    "tieba": ("tieba.baidu.com",),
-    "ks": ("kuaishou.com", "gifshow.com"),
-}
+# 和主进程、界面共用一份平台域名
+HOSTS = {platform: tuple(hosts) for platform, hosts in CAPABILITIES['hosts'].items()}
 
 
 def allowed(url, platform):

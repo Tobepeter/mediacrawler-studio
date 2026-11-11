@@ -10,7 +10,7 @@ import {
   accountChecking,
   activeStatuses,
   platformBusy,
-  platformNames,
+  platformIds,
   useStudio,
 } from './store'
 import type { Platform } from './types'
@@ -28,7 +28,7 @@ export function Results() {
   return (
     <section className='flex flex-1 flex-col' aria-label={t('结果')}>
       {/* 各平台卡片保留挂载，切回时复用已加载的封面 */}
-      {(Object.keys(platformNames) as Platform[]).map((id) => (
+      {platformIds.map((id) => (
         <div
           key={id}
           className={id === platform ? 'flex flex-1 flex-col' : 'hidden'}

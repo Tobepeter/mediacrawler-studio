@@ -7,11 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { RetryNotice } from './retry-notice'
 import { ScrollSentinel } from './scroll-sentinel'
+import { commentPlatforms } from './creator-options'
 import { useStudio } from './store'
 import { ThrottledError } from './throttle'
 import type { CommentPage, ContentComment, ContentItem } from './types'
-
-const commentPlatforms = ['bili', 'dy', 'xhs']
 
 async function fetchComments(
   item: ContentItem,

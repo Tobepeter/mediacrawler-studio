@@ -31,6 +31,7 @@ export const platformNames = {
   tieba: '贴吧',
   ks: '快手',
 }
+export const platformIds = Object.keys(platformNames) as Platform[]
 const draftTimers = new Map<Platform, ReturnType<typeof setTimeout>>()
 export const activeStatuses = ['checking', 'auth', 'running', 'stopping']
 const initialForm = (platform: Platform): PlatformForm => ({
@@ -424,10 +425,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
         recordLoginOutcome(
           task.platform,
           id,
-          task.failure?.code === 'TIMEOUT' ||
-            task.message === '获取二维码超时，请重试'
-            ? 'timeout'
-            : 'failed',
+          task.failure?.code === 'TIMEOUT' ? 'timeout' : 'failed',
         )
       }
     }
@@ -446,7 +444,7 @@ export const useStudio = create<StudioStore>((set, get) => ({
             ) || current.selected
           : null,
         forms: Object.fromEntries(
-          (Object.keys(platformNames) as Platform[]).map((platform) => [
+          platformIds.map((platform) => [
             platform,
             current.edited[platform]
               ? current.forms[platform]

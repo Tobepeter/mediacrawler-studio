@@ -5,6 +5,7 @@ export const creatorPlatforms = capabilities.creator as readonly Platform[]
 export const creatorSearchPlatforms =
   capabilities.creatorSearch as readonly Platform[]
 export const feedPlatforms = capabilities.feed as readonly Platform[]
+export const commentPlatforms = capabilities.comments as readonly Platform[]
 export const creatorLimit = capabilities.creatorLimit
 export const creatorPresets = [20, 50, 100, 200] as const
 export const autoBatchSize = 20

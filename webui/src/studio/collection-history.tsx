@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { platformBusy, platformNames, useStudio } from './store'
+import { platformBusy, platformIds, platformNames, useStudio } from './store'
 import { PlatformIcon } from './platform-icon'
 import type { Platform } from './types'
 
@@ -50,7 +50,7 @@ export function CollectionHistory() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='all'>{t('全部')}</SelectItem>
-            {(Object.keys(platformNames) as Platform[]).map((id) => (
+            {platformIds.map((id) => (
               <SelectItem key={id} value={id}>
                 {t(platformNames[id])}
               </SelectItem>

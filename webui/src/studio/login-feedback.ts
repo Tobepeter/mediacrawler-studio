@@ -1,5 +1,8 @@
 import type { Platform, StudioState } from './types'
 
+// 前端自己判定取码超时时写进视图的错误，同时也是翻译键
+export const QR_TIMEOUT = '获取二维码超时，请重试'
+
 // 并行登录只通知当前前台平台，不重放缓存或其他平台的事件
 export function loginFeedback(
   previous: StudioState | undefined,
