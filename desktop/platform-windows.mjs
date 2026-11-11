@@ -11,6 +11,7 @@ export class PlatformWindows {
   bounds = null
   qrCapture = null
   backgroundCaptures = new Map()
+  preparing = new Map()
   onChange = () => {}
   onDismiss = () => {}
 
@@ -55,7 +56,21 @@ export class PlatformWindows {
     return Object.fromEntries(entries)
   }
 
-  async prepare(platform, signal) {
+  // 详情、评论、字幕这些只读任务不占平台互斥，同一平台可能同时来几次；
+  // 排队进行，避免两个调用同时建页或同时 attach debugger
+  prepare(platform, signal) {
+    const next = (this.preparing.get(platform) || Promise.resolve())
+      .catch(() => {})
+      .then(() => this.prepareNow(platform, signal))
+    this.preparing.set(platform, next)
+    const clear = () => {
+      if (this.preparing.get(platform) === next) this.preparing.delete(platform)
+    }
+    next.then(clear, clear)
+    return next
+  }
+
+  async prepareNow(platform, signal) {
     // 上次取码可能仍在释放 debugger，重试不能抢占同一调试会话
     if (this.qrCapture?.presentation.platform === platform)
       await this.qrCapture.promise.catch(() => {})

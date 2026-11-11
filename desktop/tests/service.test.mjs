@@ -981,7 +981,24 @@ test('评论按页取，节流结果原样返回，只支持三个平台', async
       [seen[1].kind, seen[1].cursor, seen[1].parent],
       ['comments', 20, 'c1'],
     )
-    assert.equal(service.commentJobs.size, 0)
+    assert.equal(service.liveJobs.size, 0)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('体检中点停止会结束子进程，不因没有采集任务而报错', async () => {
+  const { service, cleanup } = await createService('')
+  try {
+    const killed = []
+    service.operations.set('dy', {
+      kind: 'feature-check',
+      cancelled: false,
+      child: { kill: (signal) => killed.push(signal) },
+    })
+    await service.cancel('dy')
+    assert.equal(service.operations.get('dy').cancelled, true)
+    assert.deepEqual(killed, ['SIGKILL'])
   } finally {
     await cleanup()
   }

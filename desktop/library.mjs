@@ -30,9 +30,15 @@ export class StudioLibrary {
     this.entries.clear()
     for (const name of await readdir(this.directory)) {
       if (!/^[a-zA-Z0-9-]+\.json$/.test(name)) continue
-      const record = JSON.parse(
-        await readFile(path.join(this.directory, name), 'utf8'),
-      )
+      let record
+      try {
+        record = JSON.parse(
+          await readFile(path.join(this.directory, name), 'utf8'),
+        )
+      } catch {
+        // 单个历史文件坏了只跳过它，文件留在原处，不拖垮整个启动
+        continue
+      }
       if (
         record.id !== name.slice(0, -5) ||
         !record.task ||

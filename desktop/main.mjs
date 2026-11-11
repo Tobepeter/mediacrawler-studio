@@ -69,6 +69,9 @@ const logger = new StudioLogger(logsDir)
 process.on('uncaughtExceptionMonitor', (error) =>
   logger.write('error', 'main', 'uncaught', error),
 )
+process.on('unhandledRejection', (error) =>
+  logger.write('error', 'main', 'unhandled-rejection', error),
+)
 logger.write('info', 'main', 'startup', {
   version: app.getVersion(),
   electron: process.versions.electron,
@@ -452,14 +455,18 @@ app
       mainWindow.webContents.on('will-navigate', (event) =>
         event.preventDefault(),
       )
-      if (process.env.STUDIO_DEV_URL)
-        mainWindow.loadURL(process.env.STUDIO_DEV_URL)
-      else mainWindow.loadFile(path.join(root, 'api/webui/index.html'))
+      const loaded = process.env.STUDIO_DEV_URL
+        ? mainWindow.loadURL(process.env.STUDIO_DEV_URL)
+        : mainWindow.loadFile(path.join(root, 'api/webui/index.html'))
+      loaded.catch((error) =>
+        logger.write('error', 'main', 'load-failed', error),
+      )
     }
     createWindow()
     mainWindow.on('closed', () => app.quit())
     mainWindow.on('focus', () => service.sessions?.wake())
     app.on('second-instance', (_event, _argv, _cwd, data) => {
+      if (mainWindow.isDestroyed()) return
       mainWindow.show()
       mainWindow.focus()
       // 另一个版本等着启动，交给用户决定；同版本重复打开只需切到前台
@@ -473,9 +480,9 @@ app
       service.publish()
       if (accepted === true) app.quit()
     })
+    // 主窗口关掉就退出应用，退出清理期间点 Dock 不重建窗口
     app.on('activate', () => {
-      if (mainWindow.isDestroyed()) createWindow()
-      else mainWindow.show()
+      if (!mainWindow.isDestroyed()) mainWindow.show()
     })
     void service.sessions.start()
     let quitting = false
@@ -483,7 +490,8 @@ app
       if (quitting) return
       event.preventDefault()
       quitting = true
-      Promise.all([
+      // 任何一项失败都要等其余清理完再退出
+      Promise.allSettled([
         health.stop(),
         service.sessions.stopAll(true),
         service.stopAll(),
@@ -501,5 +509,9 @@ app
   })
   .catch((error) => {
     logger.write('error', 'main', 'startup-failed', error)
+    dialog.showErrorBox(
+      'MediaCrawler Studio 启动失败',
+      String(error?.message || error),
+    )
     app.exit(1)
   })

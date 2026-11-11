@@ -12,7 +12,9 @@ export class DownloadJob {
   }
 
   run(request) {
-    this.running = this.execute(request)
+    // 登记到 live，退出应用时统一取消，进程结束后移除
+    this.live?.add(this)
+    this.running = this.execute(request).finally(() => this.live?.delete(this))
     return this.running
   }
 
@@ -37,7 +39,11 @@ export class DownloadJob {
       const child = this.spawnProcess(
         this.python,
         ['-u', '-m', 'desktop.download_worker'],
-        { cwd: this.root, stdio: ['pipe', 'pipe', 'pipe'] },
+        {
+          cwd: this.root,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        },
       )
       this.child = child
       let timedOut = false

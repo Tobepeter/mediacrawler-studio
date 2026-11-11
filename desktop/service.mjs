@@ -62,7 +62,8 @@ export class StudioService {
   feedItems = new Map()
   transcripts = new Map()
   imageTexts = new Map()
-  commentJobs = new Set()
+  // 正在运行的媒体子进程，包括识别画面、OCR 检查这类不进任何列表的临时任务
+  liveJobs = new Set()
   persistence = Promise.resolve()
   state = {
     policy: healthPolicy,
@@ -309,6 +310,7 @@ export class StudioService {
       spawnProcess: this.spawnProcess,
       requestId,
       logger: this.logger,
+      live: this.liveJobs,
     })
   }
 
@@ -323,15 +325,17 @@ export class StudioService {
       (this.details.has(platform) || this.operations.has(platform))
     )
       return { code: 'busy' }
-    await this.details.get(platform)?.cancel()
     const page = this.state.pages[platform]
     const record = this.findItem(platform, id)
     if (!record) return { code: 'unavailable' }
     if (!existsSync(this.python)) return { code: 'environment' }
+    // 先登记新任务再等旧任务停，快速连点时中间那次也能被下一次取消
+    const previous = this.details.get(platform)
     const job = this.mediaJob(platform)
     job.itemId = id
     this.details.set(platform, job)
     try {
+      await previous?.cancel()
       const result = await job.run({ record, kind: 'detail', background })
       if (result.item?.id !== id || result.item.platform !== platform)
         return {
@@ -401,25 +405,20 @@ export class StudioService {
     if (!record) return { code: 'unavailable' }
     if (!existsSync(this.python)) return { code: 'environment' }
     const job = this.mediaJob(platform)
-    this.commentJobs.add(job)
-    try {
-      const result = await job.run({
-        record,
-        kind: 'comments',
-        cursor,
-        parent,
-      })
-      return {
-        code: result.code || '',
-        items: result.comments || [],
-        nextCursor: result.nextCursor ?? null,
-        hasMore: !!result.hasMore,
-        throttleCode: result.throttleCode,
-        retryAfter: result.retryAfter,
-        message: result.message,
-      }
-    } finally {
-      this.commentJobs.delete(job)
+    const result = await job.run({
+      record,
+      kind: 'comments',
+      cursor,
+      parent,
+    })
+    return {
+      code: result.code || '',
+      items: result.comments || [],
+      nextCursor: result.nextCursor ?? null,
+      hasMore: !!result.hasMore,
+      throttleCode: result.throttleCode,
+      retryAfter: result.retryAfter,
+      message: result.message,
     }
   }
 
@@ -1143,14 +1142,7 @@ export class StudioService {
   }
 
   async stopAll() {
-    await Promise.all(
-      [
-        ...this.details.values(),
-        ...this.commentJobs,
-        ...[...this.transcripts.values()].map(({ job }) => job),
-        ...[...this.imageTexts.values()].map(({ job }) => job),
-      ].map((job) => job.cancel()),
-    )
+    await Promise.allSettled([...this.liveJobs].map((job) => job.cancel()))
     this.feed.close()
     await Promise.all(
       [...this.operations.keys()].map((platform) => this.cancel(platform)),
@@ -1161,7 +1153,8 @@ export class StudioService {
     if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的平台')
     const run = this.operations.get(platform)
     if (!run) return
-    if (run.kind === 'creator-search') {
+    // 找博主和体检没有采集任务对象，直接结束子进程
+    if (run.kind === 'creator-search' || run.kind === 'feature-check') {
       run.cancelled = true
       run.child?.kill('SIGKILL')
       return
