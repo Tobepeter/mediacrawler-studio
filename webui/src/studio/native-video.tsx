@@ -170,7 +170,8 @@ export function NativeVideo({ item }: { item: ContentItem }) {
   return (
     <Tabs value={mode} onValueChange={changeMode} className='space-y-3'>
       <TabsContent value='video' className='mt-0'>
-        <div className='relative aspect-square max-h-[calc(90dvh-8rem)] w-full overflow-hidden rounded-lg bg-muted/40'>
+        {/* 播放器的焦点描边画在元素外面，会被这里的圆角裁剪切掉，改由外框显示一圈完整的 ring */}
+        <div className='relative aspect-square max-h-[calc(90dvh-8rem)] w-full overflow-hidden rounded-lg bg-muted/40 has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-ring'>
           {status === 'playing' ? (
             // 缓冲时原生控件自带转圈，这里不再叠一个；buffering 只用来做超时
             <>
@@ -179,7 +180,7 @@ export function NativeVideo({ item }: { item: ContentItem }) {
                 key={urls[index]}
                 src={urls[index]}
                 poster={item.images[0]}
-                className='absolute inset-0 size-full object-contain'
+                className='absolute inset-0 size-full object-contain outline-none'
                 controls={!capturing}
                 autoPlay
                 muted={muted}
