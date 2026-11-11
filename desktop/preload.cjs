@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld('studio', {
   recognizeImages: (platform, id) =>
     ipcRenderer.invoke('studio:recognize-images', platform, id),
   captureFrame: (rect) => ipcRenderer.invoke('studio:capture-frame', rect),
+  // 开发版探针用，安装版主进程不注册这两个通道
+  debugWindow: () => ipcRenderer.invoke('studio:debug-window'),
+  debugShowWindow: () => ipcRenderer.invoke('studio:debug-show-window'),
   recognizeFrame: (platform, png) =>
     ipcRenderer.invoke('studio:recognize-frame', platform, png),
   saveFrame: (platform, id, png, seconds, ask) =>

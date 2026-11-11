@@ -63,7 +63,7 @@ export interface AuthorTrip {
   form: PlatformForm
 }
 
-interface StudioStore extends StudioState {
+export interface StudioStore extends StudioState {
   platform: Platform
   forms: Record<Platform, PlatformForm>
   views: Record<Platform, ReturnType<typeof initialView>>

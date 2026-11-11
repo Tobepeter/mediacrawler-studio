@@ -19,6 +19,7 @@
     "test:node": "node --test desktop/tests/*.test.mjs",
     "test:python": "uv run --locked python -m pytest desktop/tests tests/cli -q",
     "cli": "uv run --locked mediacrawler",
+    "probe": "uv run --no-sync python scripts/studio_probe.py",
     "test:cli": "uv run --locked pytest tests/cli -q",
     "build:cli": "uv run --locked --group build python scripts/build_cli.py",
     "build:desktop": "node scripts/build-desktop.mjs",

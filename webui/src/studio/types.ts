@@ -335,6 +335,12 @@ export interface StudioBridge {
     width: number
     height: number
   }): Promise<Uint8Array>
+  debugWindow?(): Promise<{
+    visible: boolean
+    minimized: boolean
+    focused: boolean
+  }>
+  debugShowWindow?(): Promise<void>
   recognizeFrame?(
     platform: Platform,
     png: Uint8Array,

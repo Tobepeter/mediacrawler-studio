@@ -227,6 +227,22 @@ app
       const image = await mainWindow.webContents.capturePage(area)
       return image.toPNG()
     })
+    // 只给开发版探针用：截图要窗口可见，后台或收起时浏览器不刷新画面
+    if (!app.isPackaged) {
+      handle('debug-window', () => ({
+        visible: mainWindow.isVisible(),
+        minimized: mainWindow.isMinimized(),
+        focused: mainWindow.isFocused(),
+      }))
+      handle('debug-show-window', () => {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        // 应用不在前台时窗口会被挡住，浏览器按不可见处理，视频也不播，要连应用一起切到最前
+        app.focus({ steal: true })
+        mainWindow.show()
+        mainWindow.moveTop()
+        mainWindow.focus()
+      })
+    }
     handle('recognize-frame', (platform, png) =>
       service.recognizeFrame(platform, png),
     )
