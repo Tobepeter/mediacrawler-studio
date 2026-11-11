@@ -62,6 +62,7 @@ export class StudioService {
   details = new Map()
   feedItems = new Map()
   transcripts = new Map()
+  imageTexts = new Map()
   commentJobs = new Set()
   persistence = Promise.resolve()
   state = {
@@ -89,6 +90,11 @@ export class StudioService {
     // macOS 目录名不区分大小写，cache 会和 Chromium 的 Cache 混在一起
     const cacheDir = path.join(this.dataDir, 'app-cache')
     this.transcriptCache = new FileCache(path.join(cacheDir, 'transcripts'), {
+      maxEntries: 100,
+      logger: this.logger,
+    })
+    // 图中文字同样按作品 ID 存，可以随时重新识别
+    this.imageTextCache = new FileCache(path.join(cacheDir, 'image-text'), {
       maxEntries: 100,
       logger: this.logger,
     })
@@ -372,13 +378,16 @@ export class StudioService {
     )
     return browser.reduce(
       (sum, value) => sum + value,
-      this.transcriptCache.bytes() + this.feed.cache.bytes(),
+      this.transcriptCache.bytes() +
+        this.imageTextCache.bytes() +
+        this.feed.cache.bytes(),
     )
   }
 
   // 只清可以重新获取的内容，登录态和采集记录不在缓存里
   async clearCache() {
     this.transcriptCache.clear()
+    this.imageTextCache.clear()
     this.feed.cache.clear()
     await Promise.all(
       this.windows.cacheSessions().map((session) => session.clearCache()),
@@ -479,6 +488,58 @@ export class StudioService {
       }
     this.transcriptCache.set(id, result.transcript)
     return { code: '', transcript: result.transcript }
+  }
+
+  cachedImageText(platform, id) {
+    if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    return this.imageTextCache.get(id) || null
+  }
+
+  // 识别作品里的全部图片；同一条重复点击共用同一次识别
+  recognizeImages(platform, id) {
+    if (!Object.hasOwn(platforms, platform) || typeof id !== 'string')
+      throw new Error('不支持的操作')
+    const key = `${platform}:${id}`
+    const running = this.imageTexts.get(key)
+    if (running) return running.result
+    const job = this.mediaJob(platform)
+    const result = this.runRecognizeImages(job, platform, id).finally(() =>
+      this.imageTexts.delete(key),
+    )
+    this.imageTexts.set(key, { job, result })
+    return result
+  }
+
+  async runRecognizeImages(job, platform, id) {
+    const record = this.findItem(platform, id)
+    if (!record?.images?.length) return { code: 'no_images' }
+    if (!existsSync(this.python)) return { code: 'environment' }
+    const result = await job.run({ record, kind: 'ocr' })
+    if (!result.ocr)
+      return {
+        code: result.code || 'failed',
+        retryAfter: result.retryAfter,
+        message: result.message,
+      }
+    this.imageTextCache.set(id, result.ocr)
+    return { code: '', imageText: result.ocr }
+  }
+
+  // 视频暂停时截下的画面，只在内存里传给识别进程，不落盘
+  async recognizeFrame(platform, png) {
+    if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的操作')
+    if (!(png instanceof Uint8Array) || !png.length || png.length > 20e6)
+      throw new Error('画面无效')
+    if (!existsSync(this.python)) return { code: 'environment' }
+    const job = this.mediaJob(platform)
+    const result = await job.run({
+      record: { platform, images: [] },
+      kind: 'ocr-image',
+      image: Buffer.from(png).toString('base64'),
+    })
+    if (!result.ocr) return { code: result.code || 'failed' }
+    return { code: '', imageText: result.ocr }
   }
 
   async cancelDetail(platform, id) {
@@ -1085,6 +1146,7 @@ export class StudioService {
         ...this.details.values(),
         ...this.commentJobs,
         ...[...this.transcripts.values()].map(({ job }) => job),
+        ...[...this.imageTexts.values()].map(({ job }) => job),
       ].map((job) => job.cancel()),
     )
     this.feed.close()

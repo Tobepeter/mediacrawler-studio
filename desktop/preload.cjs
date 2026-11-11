@@ -36,6 +36,15 @@ contextBridge.exposeInMainWorld('studio', {
     ipcRenderer.invoke('studio:cached-transcript', platform, id),
   transcribe: (platform, id) =>
     ipcRenderer.invoke('studio:transcribe', platform, id),
+  cachedImageText: (platform, id) =>
+    ipcRenderer.invoke('studio:cached-image-text', platform, id),
+  recognizeImages: (platform, id) =>
+    ipcRenderer.invoke('studio:recognize-images', platform, id),
+  captureFrame: (rect) => ipcRenderer.invoke('studio:capture-frame', rect),
+  recognizeFrame: (platform, png) =>
+    ipcRenderer.invoke('studio:recognize-frame', platform, png),
+  saveFrame: (platform, id, png, seconds, ask) =>
+    ipcRenderer.invoke('studio:save-frame', platform, id, png, seconds, ask),
   loadDetail: (platform, id, options) =>
     ipcRenderer.invoke('studio:load-detail', platform, id, options),
   cancelDetail: (platform, id) =>

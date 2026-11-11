@@ -4,6 +4,7 @@ import { Loader2, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
+import { FrameTools, useFrameCapture } from './frame-tools'
 import { startMuted, usePlayback } from './playback'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
@@ -51,6 +52,9 @@ export function NativeVideo({ item }: { item: ContentItem }) {
   const request = useRef<string | null>(null)
   const refreshed = useRef(false)
   const failedSource = useRef('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [paused, setPaused] = useState(false)
+  const { capturing, capture } = useFrameCapture(videoRef)
 
   const play = (list: string[]) => {
     setUrls(list)
@@ -169,23 +173,37 @@ export function NativeVideo({ item }: { item: ContentItem }) {
         <div className='relative aspect-square max-h-[calc(90dvh-8rem)] w-full overflow-hidden rounded-lg bg-muted/40'>
           {status === 'playing' ? (
             // 缓冲时原生控件自带转圈，这里不再叠一个；buffering 只用来做超时
-            <video
-              key={urls[index]}
-              src={urls[index]}
-              poster={item.images[0]}
-              className='absolute inset-0 size-full object-contain'
-              controls
-              autoPlay
-              muted={muted}
-              playsInline
-              preload='metadata'
-              controlsList='nodownload'
-              aria-label={`${item.title} · ${t('视频播放器')}`}
-              onError={failed}
-              onWaiting={() => setBuffering(true)}
-              onCanPlay={() => setBuffering(false)}
-              onPlaying={() => setBuffering(false)}
-            />
+            <>
+              <video
+                ref={videoRef}
+                key={urls[index]}
+                src={urls[index]}
+                poster={item.images[0]}
+                className='absolute inset-0 size-full object-contain'
+                controls={!capturing}
+                autoPlay
+                muted={muted}
+                playsInline
+                preload='metadata'
+                controlsList='nodownload'
+                aria-label={`${item.title} · ${t('视频播放器')}`}
+                onError={failed}
+                onWaiting={() => setBuffering(true)}
+                onCanPlay={() => setBuffering(false)}
+                onPlaying={() => setBuffering(false)}
+                onPause={() => setPaused(true)}
+                onPlay={() => setPaused(false)}
+              />
+              {/* 暂停时才出现；截图时只隐藏不卸载，识别结果和弹出框状态不丢 */}
+              {paused && !buffering && (
+                <FrameTools
+                  item={item}
+                  video={videoRef}
+                  capture={capture}
+                  hidden={capturing}
+                />
+              )}
+            </>
           ) : (
             <>
               {item.images[0] && (

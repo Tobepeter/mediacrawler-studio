@@ -24,7 +24,8 @@ export class DownloadJob {
     }
     if (this.stopped) return cancelled
     // 视频保留平台上下文，候选失效或缺少 FFmpeg 时可刷新/兜底
-    if (request.kind !== 'images') {
+    // 下图片和识别截下的画面都不用平台页面
+    if (!['images', 'ocr-image'].includes(request.kind)) {
       request.targetId = await this.windows.prepare(request.record.platform)
     }
     if (this.stopped) return cancelled
@@ -49,7 +50,7 @@ export class DownloadJob {
           timedOut = true
           void this.cancel()
         },
-        ['playback', 'detail', 'comments'].includes(request.kind)
+        ['playback', 'detail', 'comments', 'ocr-image'].includes(request.kind)
           ? 45000
           : (request.kind === 'transcribe' ? 60 : 30) * 60 * 1000,
       )

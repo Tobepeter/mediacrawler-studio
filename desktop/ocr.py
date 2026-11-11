@@ -57,7 +57,9 @@ def lines_of(result):
     return [text for index, text in enumerate(texts) if index == 0 or text != texts[index - 1]]
 
 
-def recognize(paths):
+def recognize(sources):
+    """sources 可以是图片路径，也可以是内存里的图片字节（暂停时截的画面不落盘）"""
+    paths = sources
     if not available():
         raise OcrError('ocr_unavailable', UNAVAILABLE)
     pages, failed = [], 0
@@ -69,7 +71,7 @@ def recognize(paths):
         for index, path in enumerate(paths, 1):
             # 单张图坏了不拖垮整篇
             try:
-                text = '\n'.join(lines_of(ocr(str(path))))
+                text = '\n'.join(lines_of(ocr(path if isinstance(path, bytes) else str(path))))
             except Exception:
                 failed += 1
                 text = ''
@@ -121,3 +123,18 @@ async def ocr_result(request, emit, page=None):
         raise
     except RuntimeError as error:
         return {'saved': 0, 'files': [], 'code': str(error) or 'download_failed'}
+
+
+async def ocr_image_result(request):
+    """识别一张内存里的图片，比如视频暂停时截下的画面"""
+    import base64
+    try:
+        data = base64.b64decode(request.get('image') or '', validate=True)
+    except ValueError:
+        return {'saved': 0, 'files': [], 'code': 'invalid_image'}
+    if not data:
+        return {'saved': 0, 'files': [], 'code': 'invalid_image'}
+    try:
+        return {'saved': 1, 'files': [], 'code': '', 'ocr': result_of(await asyncio.to_thread(recognize, [data]))}
+    except OcrError as error:
+        return {'saved': 0, 'files': [], 'code': error.code, 'message': str(error)}

@@ -204,6 +204,55 @@ app
     handle('cached-transcript', (platform, id) =>
       service.cachedTranscript(platform, id),
     )
+    handle('cached-image-text', (platform, id) =>
+      service.cachedImageText(platform, id),
+    )
+    handle('recognize-images', (platform, id) =>
+      service.recognizeImages(platform, id),
+    )
+    // 截取播放器所在区域：平台视频跨域，页面里读不到像素，只能由主进程截屏
+    handle('capture-frame', async (rect) => {
+      const area = Object.fromEntries(
+        ['x', 'y', 'width', 'height'].map((key) => [
+          key,
+          Math.round(Number(rect?.[key])),
+        ]),
+      )
+      if (
+        Object.values(area).some((value) => !Number.isFinite(value)) ||
+        area.width < 8 ||
+        area.height < 8
+      )
+        throw new Error('画面区域无效')
+      const image = await mainWindow.webContents.capturePage(area)
+      return image.toPNG()
+    })
+    handle('recognize-frame', (platform, png) =>
+      service.recognizeFrame(platform, png),
+    )
+    handle('save-frame', async (platform, id, png, seconds, ask = false) => {
+      if (!(png instanceof Uint8Array) || !png.length)
+        throw new Error('画面无效')
+      const item = service.findItem(platform, id)
+      const total = Math.max(0, Math.floor(Number(seconds) || 0))
+      const clock = `${String(Math.floor(total / 60)).padStart(2, '0')}-${String(total % 60).padStart(2, '0')}`
+      let target = availablePath(
+        path.join(
+          app.getPath('downloads'),
+          `${item ? downloadName(item) : '画面'} ${clock}.png`,
+        ),
+      )
+      if (ask === true) {
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: target,
+          filters: [{ name: 'PNG', extensions: ['png'] }],
+        })
+        if (result.canceled) return { saved: false }
+        target = result.filePath
+      }
+      await writeFile(target, Buffer.from(png))
+      return { saved: true, name: path.basename(target) }
+    })
     handle('load-detail', (platform, id, options) =>
       service.loadDetail(platform, id, options),
     )

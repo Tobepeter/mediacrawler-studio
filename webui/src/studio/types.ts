@@ -73,6 +73,14 @@ export interface ContentTranscript {
   createdAt: string
 }
 
+// 图中文字：图文帖逐张识别，或视频暂停时识别当前画面
+export interface ContentImageText {
+  source: 'ocr'
+  text: string
+  images: { index: number; text: string }[]
+  createdAt: string
+}
+
 export interface SttStatus {
   state: 'ready' | 'installed' | 'missing'
   busy: boolean
@@ -313,6 +321,31 @@ export interface StudioBridge {
     retryAfter?: number
     message?: string
   }>
+  cachedImageText?(
+    platform: Platform,
+    id: string,
+  ): Promise<ContentImageText | null>
+  recognizeImages?(
+    platform: Platform,
+    id: string,
+  ): Promise<{ code: string; imageText?: ContentImageText; message?: string }>
+  captureFrame?(rect: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }): Promise<Uint8Array>
+  recognizeFrame?(
+    platform: Platform,
+    png: Uint8Array,
+  ): Promise<{ code: string; imageText?: ContentImageText }>
+  saveFrame?(
+    platform: Platform,
+    id: string,
+    png: Uint8Array,
+    seconds: number,
+    ask?: boolean,
+  ): Promise<{ saved: boolean; name?: string }>
   loadDetail?(
     platform: Platform,
     id: string,

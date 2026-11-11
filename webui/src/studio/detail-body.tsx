@@ -5,6 +5,7 @@ import { CopyButton } from '@/components/common/copy-button'
 import { MarkdownRenderer } from '@/components/common/markdown-renderer'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CommentsPanel, useCommentsTab } from './comments-panel'
+import { ImageTextActions, ImageTextPanel, useImageTextTab } from './image-text'
 import { RetryNotice } from './retry-notice'
 import {
   TranscriptActions,
@@ -21,6 +22,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
   const detail = useDetailMedia(item)
   const hasTranscript = useTranscriptTab(item)
   const hasComments = useCommentsTab(item)
+  const hasImageText = useImageTextTab(item)
   const [tab, setTab] = useState('body')
   // 推荐流卡片没有正文，补全时占位，失败时不要说成“没有正文”
   if (item.feed && !item.text && !detail.loading) {
@@ -61,10 +63,11 @@ export function DetailBody({ item }: { item: ContentItem }) {
   )
   const comments = item.comments || []
   const bodyText = item.markdown || item.text
-  const multiple = hasTranscript || hasComments
+  const multiple = hasTranscript || hasImageText || hasComments
   // 选中的 Tab 可能消失（比如 stt 被卸载），退回正文，不留空白
   const active =
     (tab === 'transcript' && !hasTranscript) ||
+    (tab === 'image-text' && !hasImageText) ||
     (tab === 'comments' && !hasComments)
       ? 'body'
       : tab
@@ -77,6 +80,9 @@ export function DetailBody({ item }: { item: ContentItem }) {
             <TabsTrigger value='body'>{t('正文')}</TabsTrigger>
             {hasTranscript && (
               <TabsTrigger value='transcript'>{t('字幕')}</TabsTrigger>
+            )}
+            {hasImageText && (
+              <TabsTrigger value='image-text'>{t('图中文字')}</TabsTrigger>
             )}
             {hasComments && (
               <TabsTrigger value='comments'>
@@ -98,6 +104,7 @@ export function DetailBody({ item }: { item: ContentItem }) {
           />
         )}
         {active === 'transcript' && <TranscriptActions item={item} />}
+        {active === 'image-text' && <ImageTextActions item={item} />}
       </div>
       <TabsContent value='body' className='mt-0'>
         {body}
@@ -106,6 +113,11 @@ export function DetailBody({ item }: { item: ContentItem }) {
       {hasTranscript && (
         <TabsContent value='transcript' className='mt-0'>
           <TranscriptPanel item={item} />
+        </TabsContent>
+      )}
+      {hasImageText && (
+        <TabsContent value='image-text' className='mt-0'>
+          <ImageTextPanel item={item} />
         </TabsContent>
       )}
       {hasComments && (

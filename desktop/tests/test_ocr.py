@@ -159,3 +159,21 @@ def test_real_engine_reads_a_text_card():
         image.save(path)
         pages = ocr.recognize([path])
     assert '阳光便利店' in pages[0]['text']
+
+
+async def test_frame_bytes_are_recognized_without_a_file(monkeypatch):
+    import base64
+    seen = []
+
+    def run(source):
+        seen.append(source)
+        return output(('画面里的字', 0.9))
+    monkeypatch.setattr(ocr, 'available', lambda: True)
+    monkeypatch.setattr(ocr, 'engine', lambda: run)
+    result = await ocr.ocr_image_result({'image': base64.b64encode(b'png-bytes').decode()})
+    assert result['code'] == '' and result['ocr']['text'] == '画面里的字' and seen == [b'png-bytes']
+
+
+@pytest.mark.parametrize('image', ['', '不是base64!'])
+async def test_bad_frame_is_rejected(image):
+    assert (await ocr.ocr_image_result({'image': image}))['code'] == 'invalid_image'

@@ -25,6 +25,9 @@ async def main(request):
             pass
     if request['kind'] == 'images':
         return await download_record(request, emit)
+    if request['kind'] == 'ocr-image':
+        from desktop.ocr import ocr_image_result
+        return await ocr_image_result(request)
     from playwright.async_api import async_playwright
     async with async_playwright() as playwright:
         async with asyncio.timeout(20):
@@ -44,6 +47,9 @@ async def main(request):
                     if request['kind'] == 'comments':
                         from desktop.comments import load_comments
                         return await load_comments(request, emit, page)
+                    if request['kind'] == 'ocr':
+                        from desktop.ocr import ocr_result
+                        return await ocr_result(request, emit, page)
                     if request['kind'] == 'transcribe':
                         from desktop.transcribe import transcribe_result
                         return await transcribe_result(request, emit, page)
