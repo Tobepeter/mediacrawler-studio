@@ -12,6 +12,7 @@ import { FileCache } from './file-cache.mjs'
 import { JsonCache } from './json-cache.mjs'
 import path from 'node:path'
 import { homedir } from 'node:os'
+import { mergeProfile } from './account-profile.mjs'
 import {
   creatorLimit,
   creatorSearchPlatforms,
@@ -950,17 +951,10 @@ export class StudioService {
             delete this.state.profiles[request.platform]
           } else if (event.type === 'account') {
             this.state.accounts[request.platform] = 'connected'
-            this.state.profiles[request.platform] = {
-              nickname:
-                typeof event.profile?.nickname === 'string'
-                  ? event.profile.nickname.slice(0, 100)
-                  : '',
-              avatar:
-                typeof event.profile?.avatar === 'string' &&
-                /^https:\/\//i.test(event.profile.avatar)
-                  ? event.profile.avatar
-                  : '',
-            }
+            this.state.profiles[request.platform] = mergeProfile(
+              this.state.profiles[request.platform],
+              event.profile,
+            )
             this.windows.flush(request.platform).catch(() => {})
             this.windows.hide(request.platform)
           } else if (event.type === 'warning') {

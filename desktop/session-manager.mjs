@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
+import { mergeProfile } from './account-profile.mjs'
 import { platforms } from './contracts.mjs'
 import policy from './health-policy.json' with { type: 'json' }
 
@@ -269,15 +270,10 @@ export class SessionManager {
       clearTimeout(job.refresh)
       job.connected = true
       this.service.state.accounts[platform] = 'connected'
-      this.service.state.profiles[platform] = {
-        nickname:
-          typeof event.profile?.nickname === 'string'
-            ? event.profile.nickname.slice(0, 100)
-            : '',
-        avatar: /^https:\/\//i.test(event.profile?.avatar || '')
-          ? event.profile.avatar
-          : '',
-      }
+      this.service.state.profiles[platform] = mergeProfile(
+        this.service.state.profiles[platform],
+        event.profile,
+      )
       this.update(job, {
         status: 'connected',
         image: undefined,
