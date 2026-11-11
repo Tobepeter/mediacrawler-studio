@@ -515,5 +515,9 @@
   "Hugging Face": "Hugging Face",
   "打开目录": "Open folder",
   "命令行下载": "Command line",
-  "复制下载命令": "Copy download command"
+  "复制下载命令": "Copy download command",
+  "图片转文字": "Image to text",
+  "正在检查 OCR 组件": "Checking the OCR component",
+  "这个版本没有带 OCR 组件，图中文字和暂停识别不显示": "This build has no OCR component, so image text and paused-frame recognition are hidden",
+  "内置 RapidOCR，图文详情和视频暂停时可以识别文字": "Built-in RapidOCR recognizes text in image posts and paused videos"
 }

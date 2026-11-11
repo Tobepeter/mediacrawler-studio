@@ -33,6 +33,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ThemeToggle } from './theme-toggle'
 import { SttSettings } from './transcript'
+import { OcrSettings } from './image-text'
 import { CacheSettings } from './cache-settings'
 import { CliSettings } from './cli-settings'
 import { FeatureSettings } from './feature-settings'
@@ -213,6 +214,7 @@ export function StudioSettings() {
                   />
                   <CliSettings />
                   <SttSettings />
+                  <OcrSettings />
                   <CacheSettings />
                   <SettingRow
                     title={t('运行日志')}

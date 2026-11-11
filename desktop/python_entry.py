@@ -1,4 +1,4 @@
-"""桌面内部 Python 入口，与对外 CLI 独立打包"""
+"""桌面内部 worker 入口：打包后由 mediacrawler 运行时的 -u -m <worker> 转进来，只认这几个 worker"""
 import os
 from pathlib import Path
 import runpy

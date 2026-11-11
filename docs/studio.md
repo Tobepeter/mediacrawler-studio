@@ -22,7 +22,7 @@ npm run build
 npm start
 ```
 
-开发模式的 Python 默认使用项目 `.venv`，可通过 `STUDIO_PYTHON` 指定解释器路径。打包模式使用随应用附带的 `studio-python`，不依赖系统 Python 或独立 CLI。当前启动与打包脚本在 macOS 验证
+开发模式的 Python 默认使用项目 `.venv`，可通过 `STUDIO_PYTHON` 指定解释器路径。打包模式使用随应用附带的 `Resources/mediacrawler`（独立 CLI 的运行时，桌面用 `-u -m <worker>` 启动内部 worker），不依赖系统 Python。当前启动与打包脚本在 macOS 验证
 
 主题统一由 `next-themes` 管理。桌面 Python worker 连接 Electron CDP 时使用 `no_defaults=True`，保留系统媒体偏好，避免后台连接/断开把主界面临时切成浅色。`desktop/tests/test_cdp_theme.py` 用隔离、无头、静音浏览器回归两类 worker 的反复连接，不访问真实平台
 
@@ -30,17 +30,14 @@ npm start
 
 ## 桌面与 CLI 构建
 
-| 命令                                     | 行为                                                           |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `npm run build:cli`                      | 只生成独立 CLI                                                 |
-| `npm run build:desktop`                  | 生成桌面 Python、前端和应用；已有完整 CLI 产物则附带，否则省略 |
-| `npm run build:desktop:strict`           | 先构建 CLI，再构建桌面；失败即停止                             |
-| `npm run build:all`                      | 与严格模式相同，不重复构建 CLI                                 |
-| `npm run build:desktop -- --without-cli` | 明确生成不附带 CLI 的桌面应用                                  |
+| 命令                    | 行为                                             |
+| ----------------------- | ------------------------------------------------ |
+| `npm run build:cli`     | 只生成 Python 运行时（也就是独立 CLI）           |
+| `npm run build:desktop` | 先生成运行时，再生成前端和应用，任一步失败即停止 |
 
-桌面与 CLI 共用 Python 业务源码，各自打包运行依赖。桌面始终附带 `Resources/studio-python`，可选附带 `Resources/mediacrawler`，缺少后者不会影响桌面 worker。完整目录不可只保留一个可执行文件
+桌面与 CLI 共用一份 Python 运行时 `Resources/mediacrawler`（约 670MB，原来桌面和 CLI 各带一份），完整目录不可只保留一个可执行文件。OCR 和语音转写都可拆：构建环境没有 rapidocr 就不带 OCR，没有 `vendor/stt` 就不带 stt，界面隐藏对应入口并在设置里说明
 
-语音转写的 `stt` 由 ai-voice 单独构建成 zip 包（自带解释器，只支持 macOS arm64），用 `npm run vendor:stt -- <stt-版本-平台.zip>` 校验 sha256 后解压到 `build/vendor/stt`（不进 Git）；打包时检查 `manifest.json` 的平台和接口版本，对得上就附带为 `Resources/stt`，没有就不带。资源目录在打包后原样再复制一遍，保留相对符号链接（打包器自带的复制会把它们改成指向构建目录的绝对路径）
+语音转写的 `stt` 由 ai-voice 单独构建成 zip 包（自带解释器，只支持 macOS arm64），把它解压出的 `stt` 文件夹直接复制到仓库根目录的 `vendor/stt`（不进 Git，没有就当没有这个功能）；打包时检查 `manifest.json` 的平台和接口版本，对得上就附带为 `Resources/stt`，没有就不带。资源目录在打包后原样再复制一遍，保留相对符号链接（打包器自带的复制会把它们改成指向构建目录的绝对路径）
 
 产物在 `dist/desktop`，目前生成本机平台/架构的应用目录；macOS 签名、公证与 DMG 尚未配置。macOS 设置提供「安装命令 / 移除命令」，只在附带 CLI 的发布版可用，开发模式显示为禁用，未包含 CLI 的发布版隐藏；其他系统暂不提供此入口。通过 `/usr/local/bin/mediacrawler` 软链接指向当前应用内 CLI，不修改 shell 配置。目录不可写时通知失败，不自动提权；同名文件或其他来源的链接不覆盖、不删除。移除只删当前应用的链接，不动 CLI 本体、登录数据或应用。移动应用后旧链接需要先移除，避免覆盖其他安装来源
 

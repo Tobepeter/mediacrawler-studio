@@ -31,8 +31,8 @@ class SttError(RuntimeError):
 
 
 def bundled():
-    """安装版里和运行时同在资源目录（resources/stt/stt），源码运行时在 build/vendor/stt/stt"""
-    base = Path(sys.executable).resolve().parent.parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1] / 'build' / 'vendor'
+    """安装版里和运行时同在资源目录（resources/stt/stt），源码运行时在 vendor/stt/stt，没有就算没有"""
+    base = Path(sys.executable).resolve().parent.parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1] / 'vendor'
     path = base / 'stt' / 'stt'
     return str(path) if path.is_file() and os.access(path, os.X_OK) else None
 

@@ -15,11 +15,11 @@ function executable(file) {
   }
 }
 
-// 安装版在资源目录 resources/stt/stt，源码运行时在 build/vendor/stt/stt（npm run vendor:stt 放进去）
+// 安装版在资源目录 resources/stt/stt，源码运行时在 vendor/stt/stt（手动复制进来，没有就算没有）
 export function bundledStt({ packaged, resources, root }) {
   const file = packaged
     ? path.join(resources, 'stt', 'stt')
-    : path.join(root, 'build/vendor/stt/stt')
+    : path.join(root, 'vendor/stt/stt')
   return executable(file) ? file : null
 }
 

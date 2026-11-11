@@ -71,7 +71,7 @@ test('包里的优先，没有再找 PATH 和 ~/.local/bin', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'studio-stt-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   assert.equal(bundledStt({ packaged: false, root }), null)
-  const vendored = await executable(path.join(root, 'build/vendor/stt'))
+  const vendored = await executable(path.join(root, 'vendor/stt'))
   assert.equal(bundledStt({ packaged: false, root }), vendored)
   const packaged = await executable(path.join(root, 'Resources/stt'))
   assert.equal(

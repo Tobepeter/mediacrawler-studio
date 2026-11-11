@@ -111,14 +111,14 @@ async def test_diagnose_gives_up_on_broken_output(tmp_path):
 
 
 def test_bundled_stt_sits_next_to_the_frozen_runtime(tmp_path, monkeypatch):
-    runtime = tmp_path / 'resources' / 'studio-python'
+    runtime = tmp_path / 'resources' / 'mediacrawler'
     runtime.mkdir(parents=True)
     target = tmp_path / 'resources' / 'stt' / 'stt'
     target.parent.mkdir()
     target.write_text('')
     target.chmod(0o755)
     monkeypatch.setattr(transcribe.sys, 'frozen', True, raising=False)
-    monkeypatch.setattr(transcribe.sys, 'executable', str(runtime / 'studio-python'))
+    monkeypatch.setattr(transcribe.sys, 'executable', str(runtime / 'mediacrawler'))
     assert transcribe.bundled() == str(target)
     assert transcribe.locate() == (str(target), 'bundled')
 

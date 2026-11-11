@@ -321,6 +321,7 @@ export interface StudioBridge {
     options?: { cursor?: string | number; parent?: string },
   ): Promise<CommentPage>
   sttStatus?(): Promise<SttStatus>
+  ocrStatus?(): Promise<{ state: 'ready' | 'missing' | 'unknown' }>
   sttOpen?(kind: 'page' | 'folder', target: string): Promise<void>
   saveTranscript?(
     platform: Platform,

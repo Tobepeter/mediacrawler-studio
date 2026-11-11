@@ -226,6 +226,19 @@ const debug = {
     refresh: () =>
       queryClient.invalidateQueries({ queryKey: ['studio', 'stt-status'] }),
   },
+  // OCR 组件有没有：用法同 stt，preview({ state: 'missing' }) 看没带 OCR 时的界面
+  ocr: {
+    check: () =>
+      queryClient.fetchQuery({
+        queryKey: ['studio', 'ocr-status'],
+        queryFn: () => window.studio!.ocrStatus!(),
+        staleTime: 0,
+      }),
+    preview: (status: { state: 'ready' | 'missing' | 'unknown' }) =>
+      queryClient.setQueryData(['studio', 'ocr-status'], status),
+    refresh: () =>
+      queryClient.invalidateQueries({ queryKey: ['studio', 'ocr-status'] }),
+  },
   // 图文帖的图中文字，走和界面同一个 IPC
   imageText: {
     cached: (id: string, platform = state().platform) =>

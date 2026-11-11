@@ -177,3 +177,15 @@ async def test_frame_bytes_are_recognized_without_a_file(monkeypatch):
 @pytest.mark.parametrize('image', ['', '不是base64!'])
 async def test_bad_frame_is_rejected(image):
     assert (await ocr.ocr_image_result({'image': image}))['code'] == 'invalid_image'
+
+
+def test_worker_reports_whether_this_runtime_has_ocr():
+    """桌面启动时用它决定显不显示 OCR 入口；只查模块，不加载模型"""
+    import json
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[2]
+    output = subprocess.run([sys.executable, '-u', '-m', 'desktop.download_worker'], input=json.dumps({'kind': 'ocr-check'}),
+                            capture_output=True, text=True, cwd=root, timeout=60, check=True).stdout
+    event = json.loads(output.strip().splitlines()[-1])
+    assert event['type'] == 'download-result' and event['ocrState'] == ocr.check()['state']

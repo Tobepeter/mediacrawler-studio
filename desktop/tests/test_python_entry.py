@@ -21,18 +21,24 @@ def test_desktop_entry_rejects_non_worker(monkeypatch, args):
         python_entry.main()
 
 
-def test_build_targets_share_core_but_desktop_excludes_cli(monkeypatch):
+def test_one_runtime_for_cli_and_desktop(monkeypatch):
     builder = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/build_python.py'))
     calls = []
     monkeypatch.setattr('shutil.which', lambda _: '/usr/bin/node')
     monkeypatch.setattr('subprocess.run', lambda args, **kwargs: calls.append(args))
-    builder['build']('desktop')
-    builder['build']('cli')
-    desktop, cli = calls
-    assert desktop[-1] == 'desktop/python_entry.py'
-    assert cli[-1] == 'mediacrawler_cli/__main__.py'
-    assert desktop[desktop.index('--name') + 1] == 'studio-python'
-    assert cli[cli.index('--name') + 1] == 'mediacrawler'
-    assert '--collect-submodules' == desktop[desktop.index('media_platform') - 1]
-    assert '--exclude-module' == desktop[desktop.index('mediacrawler_cli') - 1]
-    assert '--collect-submodules' == cli[cli.index('mediacrawler_cli') - 1]
+    builder['build']()
+    [args] = calls
+    assert args[-1] == 'mediacrawler_cli/__main__.py'
+    assert args[args.index('--name') + 1] == 'mediacrawler'
+    for module in ('desktop', 'media_platform', 'mediacrawler_cli'):
+        assert args[args.index(module) - 1] == '--collect-submodules'
+
+
+def test_cli_entry_hands_desktop_workers_to_the_desktop_entry(monkeypatch):
+    from mediacrawler_cli import __main__ as cli
+    calls = []
+    monkeypatch.setattr('sys.argv', ['mediacrawler', '-u', '-m', 'desktop.health_worker'])
+    monkeypatch.setattr(python_entry.runpy, 'run_module', lambda name, **kwargs: calls.append(name))
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+    cli.main()
+    assert calls == ['desktop.health_worker']

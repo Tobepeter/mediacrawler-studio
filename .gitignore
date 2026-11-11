@@ -9,6 +9,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# 外部工程交付的可选组件（stt 独立包等），手动复制进来，不进 Git
+/vendor/
 develop-eggs/
 dist/
 downloads/

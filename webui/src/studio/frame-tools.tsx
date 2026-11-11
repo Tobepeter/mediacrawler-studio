@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { useOcrAvailable } from './image-text'
 import { useStudio } from './store'
 import type { ContentItem } from './types'
 
@@ -103,6 +104,7 @@ export function FrameTools(props: {
   const { t } = useTranslation('studio')
   const [saving, setSaving] = useState(false)
   const [open, setOpen] = useState(false)
+  const ocr = useOcrAvailable()
   const [result, setResult] = useState<Recognition>({ status: 'idle' })
   // 竖屏视频居中时，播放区的角落离画面很远，工具条要贴着画面本身的右上角
   const [place, setPlace] = useState({ top: 8, right: 8 })
@@ -206,55 +208,57 @@ export function FrameTools(props: {
         )}
         {t('保存画面')}
       </Button>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next)
-          if (next) void recognize()
-        }}
-      >
-        <PopoverTrigger asChild>
-          <Button
-            variant='secondary'
-            size='sm'
-            className='bg-background/85 shadow-sm backdrop-blur'
-          >
-            <ScanText />
-            {t('识别文字')}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align='end' className='w-80'>
-          <div className='mb-2 flex min-h-7 items-center justify-between gap-2'>
-            <span className='text-caption text-muted-foreground'>
-              {t('画面文字')}
-            </span>
-            {result.status === 'done' && (
-              <CopyButton
-                text={result.text}
-                label={t('复制画面文字')}
-                className='size-7 shrink-0'
-              />
-            )}
-          </div>
-          {result.status === 'loading' ? (
-            <p
-              className='flex items-center gap-2 text-body text-muted-foreground'
-              role='status'
+      {ocr && (
+        <Popover
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next)
+            if (next) void recognize()
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              variant='secondary'
+              size='sm'
+              className='bg-background/85 shadow-sm backdrop-blur'
             >
-              <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
-              {t('正在识别')}
-            </p>
-          ) : result.status === 'done' ? (
-            <p className='max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-body leading-relaxed'>
-              {result.text}
-            </p>
-          ) : result.status === 'error' ? (
-            <p className='text-body text-muted-foreground'>
-              {t(result.message)}
-            </p>
-          ) : null}
-        </PopoverContent>
-      </Popover>
+              <ScanText />
+              {t('识别文字')}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align='end' className='w-80'>
+            <div className='mb-2 flex min-h-7 items-center justify-between gap-2'>
+              <span className='text-caption text-muted-foreground'>
+                {t('画面文字')}
+              </span>
+              {result.status === 'done' && (
+                <CopyButton
+                  text={result.text}
+                  label={t('复制画面文字')}
+                  className='size-7 shrink-0'
+                />
+              )}
+            </div>
+            {result.status === 'loading' ? (
+              <p
+                className='flex items-center gap-2 text-body text-muted-foreground'
+                role='status'
+              >
+                <Loader2 className='size-4 animate-spin motion-reduce:animate-none' />
+                {t('正在识别')}
+              </p>
+            ) : result.status === 'done' ? (
+              <p className='max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-body leading-relaxed'>
+                {result.text}
+              </p>
+            ) : result.status === 'error' ? (
+              <p className='text-body text-muted-foreground'>
+                {t(result.message)}
+              </p>
+            ) : null}
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   )
 }

@@ -25,6 +25,10 @@ async def main(request):
             pass
     if request['kind'] == 'images':
         return await download_record(request, emit)
+    if request['kind'] == 'ocr-check':
+        # OCR 可拆：这份运行时里有没有 rapidocr，只查模块，不加载模型
+        from desktop.ocr import check
+        return {'saved': 0, 'code': '', 'ocrState': check()['state']}
     if request['kind'] == 'ocr-image':
         from desktop.ocr import ocr_image_result
         return await ocr_image_result(request)

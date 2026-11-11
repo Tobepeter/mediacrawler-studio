@@ -290,7 +290,7 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
                        timeout: int = typer.Option(1800, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """把视频转成带时间戳的文字，有平台字幕时直接用字幕
 
-    需要 stt 语音转写服务（127.0.0.1:29556）：安装版自带，源码运行时用 build/vendor/stt 或本机的 stt 命令；模型不随包，--check 会列出缺什么
+    需要 stt 语音转写服务（127.0.0.1:29556）：安装版自带，源码运行时用 vendor/stt 或本机的 stt 命令；模型不随包，--check 会列出缺什么
 
     transcribe --check
 
@@ -598,10 +598,10 @@ def main():
         from platformdirs import user_cache_path
         os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', str(user_cache_path('ms-playwright', appauthor=False)))
         os.environ['PATH'] = str(root / 'bin') + os.pathsep + os.environ.get('PATH', '')
-    if sys.argv[1:3] == ['-u', '-m'] and len(sys.argv) == 4 and sys.argv[3] in ('desktop.worker', 'desktop.download_worker'):
-        import runpy
-        os.chdir(root)
-        runpy.run_module(sys.argv[3], run_name='__main__')
+    # 桌面端和 CLI 共用这一份运行时，桌面用 -u -m <worker> 启动内部 worker
+    if sys.argv[1:3] == ['-u', '-m']:
+        from desktop.python_entry import main as desktop_worker
+        desktop_worker()
         return
     if len(sys.argv) == 3 and sys.argv[1] == '_worker':
         from mediacrawler_cli.worker import main as worker

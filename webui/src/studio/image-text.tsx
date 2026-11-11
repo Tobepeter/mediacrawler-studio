@@ -11,15 +11,34 @@ import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/common/copy-button'
 import { IconButton } from '@/components/common/icon-button'
 import { EstimateCountdown } from './estimate-countdown'
+import { SettingRow } from './settings-row'
 import type { ContentItem } from './types'
 
 // 视频只有一张封面，图集至少两张；抖音旧记录的图集可能被标成 video
 const isGallery = (item: ContentItem) =>
   item.images.length > 1 || item.contentType !== 'video'
 
+const ocrKey = ['studio', 'ocr-status']
+
+// OCR 可拆：打开应用查一次，运行时里没有就隐藏图中文字和暂停识别，设置里说明
+export function useOcrStatus() {
+  return useQuery({
+    queryKey: ocrKey,
+    queryFn: () => window.studio!.ocrStatus!(),
+    enabled: !!window.studio?.ocrStatus,
+    staleTime: Infinity,
+  })
+}
+
+export function useOcrAvailable() {
+  return useOcrStatus().data?.state !== 'missing'
+}
+
 // 有图的图文帖才有这个 Tab；视频的画面文字在播放器暂停时识别
 export function useImageTextTab(item: ContentItem) {
+  const available = useOcrAvailable()
   return (
+    available &&
     !!window.studio?.recognizeImages &&
     item.images.length > 0 &&
     isGallery(item)
@@ -68,6 +87,8 @@ function useRecognition(item: ContentItem) {
       toast.warning(t(failureText[result.code] || '图片识别失败，请重试'), {
         id: 'image-text',
       })
+      if (result.code === 'ocr_unavailable')
+        void client.invalidateQueries({ queryKey: ocrKey })
     },
     onError: () => {
       toast.error(t('图片识别失败，请重试'), { id: 'image-text' })
@@ -177,5 +198,24 @@ export function ImageTextPanel({ item }: { item: ContentItem }) {
         </div>
       ))}
     </div>
+  )
+}
+
+export function OcrSettings() {
+  const { t } = useTranslation('studio')
+  const status = useOcrStatus()
+  if (!window.studio?.ocrStatus) return null
+  const state = status.data?.state
+  return (
+    <SettingRow
+      title={t('图片转文字')}
+      hint={
+        !state
+          ? t('正在检查 OCR 组件')
+          : state === 'missing'
+            ? t('这个版本没有带 OCR 组件，图中文字和暂停识别不显示')
+            : t('内置 RapidOCR，图文详情和视频暂停时可以识别文字')
+      }
+    />
   )
 }

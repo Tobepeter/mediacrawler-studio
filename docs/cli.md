@@ -113,7 +113,7 @@ mediacrawler comments --source '作品链接' --parent 主评论ID
 
 ## 视频转文字
 
-调用 `stt` 语音转写服务的 HTTP 接口（`127.0.0.1:29556`）。`stt` 按这个顺序找：安装版资源目录里自带的（`Resources/stt`）、源码运行时的 `build/vendor/stt`、PATH 和 `~/.local/bin` 里的 `stt` 命令；后台空闲退出时自动叫醒。模型不随包，从 Hugging Face 或魔搭的缓存读，本工具不下载。
+调用 `stt` 语音转写服务的 HTTP 接口（`127.0.0.1:29556`）。`stt` 按这个顺序找：安装版资源目录里自带的（`Resources/stt`）、源码运行时的 `vendor/stt`、PATH 和 `~/.local/bin` 里的 `stt` 命令；后台空闲退出时自动叫醒。模型不随包，从 Hugging Face 或魔搭的缓存读，本工具不下载。
 
 `--check` 输出 `state`：`ready` 服务已连上，`installed` 条件齐全、用时启动，`incomplete` 缺模型或依赖（`missing` 列出每项的名称、大小、应放的目录 `path`、需要的文件、下载页和命令行下载命令 `hint`，`downloadBytes` 是合计大小），`missing` 没有 `stt`；前两种退出码 0。另有 `source`（`bundled` 或 `system`）和 `path`。转写时缺模型返回 `stt_incomplete`，没有 `stt` 返回 `stt_unavailable`。
 
@@ -200,19 +200,15 @@ npm run test:python
 ## 构建
 
 ```sh
-npm run build:cli               # 仅构建独立 CLI
-npm run build:desktop           # 宽松：有完整 CLI 产物就带上，没有也可构建
-npm run build:desktop:strict    # 先构建 CLI，再构建桌面，任一步失败即停止
-npm run build:all               # 全量，等同严格模式
-npm run build:desktop -- --without-cli  # 明确不携带 CLI
+npm run build:cli               # 构建 Python 运行时（就是独立 CLI）
+npm run build:desktop           # 先构建运行时，再构建前端和桌面应用，任一步失败即停止
 ```
 
 - CLI：`dist/cli/mediacrawler/mediacrawler`（Windows 为 `.exe`），整个目录一起分发，内含 Python、依赖和 Node 签名运行时
-- 桌面内部 Python：`dist/runtime/studio-python/studio-python`，有独立入口，仅执行采集与下载 worker，不包含 `mediacrawler_cli`；`npm run build:runtime` 可单独生成
-- 两个入口共用 Python 业务源码与打包配置，各自包含运行依赖；桌面不依赖独立 CLI，接受同时携带时的包体冗余
-- 每次桌面构建都会生成内部 Python 与前端；宽松模式不重新生成 CLI，严格/全量模式只生成一次 CLI，确保使用本次源码
+- 桌面和 CLI 共用这一份运行时：桌面用 `mediacrawler -u -m <worker>` 启动内部 worker（`desktop/python_entry.py` 只认 `desktop.worker`、`desktop.download_worker`、`desktop.health_worker`），普通命令照常走 CLI。单独发布 CLI 就发这个目录
+- OCR 可拆：构建环境里装了 rapidocr 才收进包，没装打出来的包不带 OCR，`ocr --check` 和桌面设置会说明
 - 首次运行分发版：`mediacrawler install-browser` 下载对应 Chromium；缺失时可使用已安装的 Chrome 程序（独立 profile），或用 `MEDIACRAWLER_BROWSER_EXECUTABLE` 指定程序路径；`mediacrawler doctor` 本地验证运行时
-- Electron：`dist/desktop/`，包含前端、`Resources/studio-python` 和可选的 `Resources/mediacrawler`，桌面使用 Electron 自带 Chromium；附带 CLI 仍使用自己的浏览器/profile
+- Electron：`dist/desktop/`，包含前端、`Resources/mediacrawler`（运行时）和可选的 `Resources/stt`，桌面使用 Electron 自带 Chromium；附带 CLI 仍使用自己的浏览器/profile
 - macOS 设置提供可选「安装命令 / 移除命令」，使用 `/usr/local/bin/mediacrawler` 软链接指向当前应用内 CLI，成功或失败均有通知；开发模式禁用、无 CLI 发布版隐藏，其他系统暂不支持。不会自动修改 shell 配置、提权或覆盖同名命令，移除保留 CLI 本体与登录数据
 - `build/`、`dist/` 均忽略提交，开发仍用 `npm run dev` 热更新
 - 当前构建本机系统和架构，不进行跨平台构建；macOS 分发签名/公证尚未配置

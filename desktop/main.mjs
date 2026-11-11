@@ -30,11 +30,12 @@ import { bundledStt } from './stt-status.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 app.setName('MediaCrawler Studio')
+// 安装版的 Python 运行时就是附带的 CLI，桌面用 -u -m <worker> 启动内部 worker
 if (app.isPackaged && !process.env.STUDIO_PYTHON) {
   process.env.STUDIO_PYTHON = path.join(
     process.resourcesPath,
-    'studio-python',
-    process.platform === 'win32' ? 'studio-python.exe' : 'studio-python',
+    'mediacrawler',
+    process.platform === 'win32' ? 'mediacrawler.exe' : 'mediacrawler',
   )
 }
 // 开发版和安装版共用登录态、历史和缓存，只有日志分开；同一份数据同时只能开一个
@@ -188,6 +189,7 @@ app
       service.loadComments(platform, id, options),
     )
     handle('stt-status', () => service.sttStatus())
+    handle('ocr-status', () => service.ocrStatus())
     // 只认模型站的地址；目录要先建好，用户下载后直接放进去
     handle('stt-open', async (kind, target) => {
       if (kind === 'page') {

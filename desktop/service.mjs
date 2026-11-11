@@ -518,6 +518,16 @@ export class StudioService {
     return { code: '', imageText: result.ocr }
   }
 
+  // OCR 可拆：运行时里没有就隐藏入口；查不出来按可用处理，用到时再报错
+  async ocrStatus() {
+    if (!existsSync(this.python)) return { state: 'missing' }
+    const result = await this.mediaJob(null).run({
+      record: { platform: null, images: [] },
+      kind: 'ocr-check',
+    })
+    return { state: result.ocrState || 'unknown' }
+  }
+
   // 视频暂停时截下的画面，只在内存里传给识别进程，不落盘
   async recognizeFrame(platform, png) {
     if (!Object.hasOwn(platforms, platform)) throw new Error('不支持的操作')
