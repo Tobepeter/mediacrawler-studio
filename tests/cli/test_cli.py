@@ -328,3 +328,19 @@ def test_skill_reports_missing_doc(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, 'skill_path', lambda: tmp_path / 'none.md')
     result = CliRunner().invoke(cli.app, ['skill'])
     assert result.exit_code == 5 and 'SKILL_MISSING' in result.output
+
+
+def test_run_only_cleans_its_own_platform(tmp_path, monkeypatch, capsys):
+    """开跑前只清自己的缓存，不去拿别的平台的锁，并行跑别的平台不受影响"""
+    other = tmp_path / 'runs' / 'dy' / 'default' / 'stale'
+    other.mkdir(parents=True)
+    fake_worker(monkeypatch, 'import json; print(json.dumps({"type":"complete","items":[]}))')
+    run(request(tmp_path))
+    assert other.exists()
+
+
+def test_unwritable_data_dir_is_a_structured_error(tmp_path):
+    blocked = tmp_path / 'file'
+    blocked.write_text('')
+    with pytest.raises(CLIError, match='STORAGE_ERROR'):
+        run(request(blocked))

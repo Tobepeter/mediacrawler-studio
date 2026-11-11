@@ -2,6 +2,7 @@ import json
 import os
 import queue
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -52,9 +53,15 @@ def recover(data_dir, platform, profile, lock_timeout=0):
 
 
 def run(request):
-    root, profile, base = paths(request.pop('data_dir'), request['platform'], request.pop('profile'))
+    try:
+        root, profile, base = paths(request.pop('data_dir'), request['platform'], request.pop('profile'))
+        # 只清自己这个平台和 profile，不去碰别的 profile 的锁，并行跑别的平台不会被误判占用
+        clean(root, request['platform'], profile.name, keep=KEEP_RUNS)
+    except OSError:
+        raise CLIError('STORAGE_ERROR') from None
+    except KeyboardInterrupt:
+        raise CLIError('CANCELLED') from None
     run_id = time.strftime('%Y%m%d-%H%M%S-') + uuid.uuid4().hex[:8]
-    clean(root, keep=KEEP_RUNS)
     run_dir = root / 'runs' / request['platform'] / profile.name / run_id
     request.update(run_dir=str(run_dir), profile_dir=str(profile), supervisor=identity(os.getpid()), worker_lock=str(base) + '.worker')
     lock = FileLock(str(base) + '.lock', timeout=request['lock_timeout'])
@@ -68,6 +75,10 @@ def run(request):
         if lock.is_locked:
             lock.release()
         raise CLIError('PROFILE_BUSY', run_id) from None
+    except KeyboardInterrupt:
+        if lock.is_locked:
+            lock.release()
+        raise CLIError('CANCELLED', run_id) from None
     except BaseException:
         if lock.is_locked:
             lock.release()
@@ -186,6 +197,8 @@ def run(request):
     except Exception:
         error = CLIError('RUNTIME_ERROR', run_id)
     finally:
+        # 收尾要停浏览器、落盘结果，最多十来秒；这期间再按 Ctrl+C 不打断，否则结果和锁都留不下
+        interrupt = signal.signal(signal.SIGINT, signal.SIG_IGN) if threading.current_thread() is threading.main_thread() else None
         try:
             stop(list(reversed(records)))
             if process:
@@ -222,6 +235,8 @@ def run(request):
                     error = error or CLIError('OUTPUT_ERROR', run_id)
         finally:
             lock.release()
+            if interrupt is not None:
+                signal.signal(signal.SIGINT, interrupt)
     values = list(items.values())
     if error is None and page['has_more'] is None:
         page['has_more'] = False
