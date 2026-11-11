@@ -310,13 +310,13 @@ def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地�
                 source: Optional[str] = typer.Option(None, help='作品页面链接，下载全部图片后识别'),
                 input: Optional[str] = typer.Option(None, '--input', help='采集结果 JSON/JSONL 文件，- 表示 stdin'),
                 auto: bool = typer.Option(False, '--auto', help='配合 --input，只识别正文不到 100 字、至少两张图的图文帖'),
-                check_only: bool = typer.Option(False, '--check', help='只检查本机 rapidocr 是否可用'),
+                check_only: bool = typer.Option(False, '--check', help='只检查当前环境能否识别图片'),
                 platform: Optional[str] = None, profile: str = 'default', data_dir: Optional[str] = None,
                 non_interactive: bool = False, qr: str = typer.Option('terminal', '--login-mode', '--qr', help='terminal 终端二维码、image 图片、browser 浏览器'),
                 timeout: int = typer.Option(900, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """识别图文帖图片里的文字，干货写在图里、正文只有一句“见图”时用
 
-    需要本机安装 rapidocr，本工具不安装 OCR 引擎；视频请用 transcribe
+    在项目环境里直接调用 rapidocr，模型每次运行只加载一次；安装版暂不带 OCR；视频请用 transcribe
 
     ocr --check
 
@@ -348,7 +348,7 @@ def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地�
             raise typer.Exit(1)
         return
     if check()['state'] != 'ready':
-        typer.echo(json.dumps({'code': 'ocr_unavailable', 'message': '需要本机安装 rapidocr', 'retryable': False}, ensure_ascii=False), err=True)
+        typer.echo(json.dumps({'code': 'ocr_unavailable', 'message': '当前环境没有 OCR 依赖，开发环境运行 uv sync 安装', 'retryable': False}, ensure_ascii=False), err=True)
         raise typer.Exit(1)
     records = None
     if source:

@@ -57,6 +57,14 @@ default = true
 build = [
     "pyinstaller>=6.22.3",
 ]
+ocr = [
+    "onnxruntime>=1.31.1",
+    "rapidocr>=3",
+]
+
+[tool.uv]
+# 图片转文字直接在项目环境里调用 rapidocr；打包时排除，安装版体积不变
+default-groups = ["ocr"]
 
 [project.scripts]
 mediacrawler = "mediacrawler_cli.__main__:main"

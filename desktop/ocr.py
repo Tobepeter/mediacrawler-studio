@@ -1,30 +1,22 @@
-"""图片转文字：调用本机 rapidocr，本工具不安装 OCR 引擎，桌面与 CLI 共用
+"""图片转文字：在项目环境里直接调用 rapidocr，桌面与 CLI 共用
 图文帖的干货常写在图里，正文只有一句“见图”，这时才需要识别；视频用字幕，不识别封面"""
 import asyncio
-import json
-import shutil
-import subprocess
+import functools
+import importlib.util
+import logging
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 from desktop.paging import CreatorError
 
-UNAVAILABLE = '需要本机安装 rapidocr（uv tool install rapidocr），当前未检测到'
+UNAVAILABLE = '当前环境没有 OCR 依赖，开发环境运行 uv sync 安装；安装版暂不带 OCR'
 # 正文短于这个字数、又有多张图时，干货多半在图里
 SHORT_TEXT = 100
 MIN_SCORE = 0.5
-TIMEOUT_SECONDS = 600
-# 在 rapidocr 自己的环境里运行，引擎只加载一次，逐张输出一行 JSON
-SCRIPT = '''
-import json, sys
-from rapidocr import RapidOCR
-engine = RapidOCR()
-for path in sys.argv[1:]:
-    result = engine(path)
-    lines = [{"text": text, "score": round(float(score), 3)} for text, score in zip(result.txts or (), result.scores or ())]
-    print(json.dumps({"path": path, "lines": lines}, ensure_ascii=False), flush=True)
-'''
+# 同一进程里的识别排队进行，引擎不并发使用
+lock = threading.Lock()
 
 
 class OcrError(RuntimeError):
@@ -33,26 +25,21 @@ class OcrError(RuntimeError):
         self.code = code
 
 
-def command():
-    fallback = Path.home() / '.local' / 'bin' / 'rapidocr'
-    return shutil.which('rapidocr') or (str(fallback) if fallback.exists() else None)
-
-
-def interpreter():
-    """uv tool 装的命令第一行就是它自己环境的 Python"""
-    path = command()
-    if not path:
-        return None
-    try:
-        first = Path(path).read_text(errors='ignore').split('\n', 1)[0]
-    except OSError:
-        return None
-    python = first[2:].strip() if first.startswith('#!') else ''
-    return python if python and Path(python).exists() else None
+def available():
+    return all(importlib.util.find_spec(name) for name in ('rapidocr', 'onnxruntime'))
 
 
 def check():
-    return {'state': 'ready' if interpreter() else 'missing'}
+    return {'state': 'ready' if available() else 'missing'}
+
+
+@functools.cache
+def engine():
+    """第一次识别时加载模型，同一进程之后都复用"""
+    from rapidocr import RapidOCR
+    # 空图会打“没检测到文字”的警告，对调用方没用
+    logging.getLogger('RapidOCR').setLevel(logging.ERROR)
+    return RapidOCR()
 
 
 def is_gallery(record):
@@ -66,26 +53,32 @@ def needs_ocr(record):
     return len(record.get('images') or []) >= 2 and len(text) < SHORT_TEXT
 
 
+def lines_of(result):
+    texts = [text.strip() for text, score in zip(result.txts or (), result.scores or ()) if score >= MIN_SCORE and text and text.strip()]
+    # 标题图常把同一句排十几行，连续重复的只留一行
+    return [text for index, text in enumerate(texts) if index == 0 or text != texts[index - 1]]
+
+
 def recognize(paths):
-    python = interpreter()
-    if not python:
+    if not available():
         raise OcrError('ocr_unavailable', UNAVAILABLE)
-    try:
-        done = subprocess.run([python, '-c', SCRIPT, *map(str, paths)], capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        raise OcrError('ocr_failed', '图片识别超时') from None
-    if done.returncode:
-        raise OcrError('ocr_failed', (done.stderr.strip().splitlines() or ['图片识别失败'])[-1][:200])
-    pages = {}
-    for line in done.stdout.splitlines():
+    pages, failed = [], 0
+    with lock:
         try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        texts = [item['text'].strip() for item in row.get('lines') or [] if item.get('score', 0) >= MIN_SCORE and item.get('text', '').strip()]
-        # 标题图常把同一句排十几行，连续重复的只留一行
-        pages[row['path']] = [text for index, text in enumerate(texts) if index == 0 or text != texts[index - 1]]
-    return [{'index': index, 'text': '\n'.join(pages.get(str(path), []))} for index, path in enumerate(paths, 1)]
+            ocr = engine()
+        except Exception as error:
+            raise OcrError('ocr_failed', f'OCR 引擎加载失败：{type(error).__name__}') from None
+        for index, path in enumerate(paths, 1):
+            # 单张图坏了不拖垮整篇
+            try:
+                text = '\n'.join(lines_of(ocr(str(path))))
+            except Exception:
+                failed += 1
+                text = ''
+            pages.append({'index': index, 'text': text})
+    if paths and failed == len(paths):
+        raise OcrError('ocr_failed', '图片识别失败')
+    return pages
 
 
 def result_of(pages):
@@ -107,7 +100,7 @@ async def ocr_record(request, emit, page=None):
     if not record.get('images'):
         raise OcrError('no_images', '这条作品没有图片')
     # 先确认能识别，不白下载
-    if not interpreter():
+    if not available():
         raise OcrError('ocr_unavailable', UNAVAILABLE)
     with tempfile.TemporaryDirectory(prefix='mediacrawler-ocr-') as folder:
         result = await download_record({

@@ -36,6 +36,8 @@ def build(target, clean=False):
     for module in modules:
         args.extend(['--collect-submodules', module])
     args.extend(['--exclude-module', 'pytest', '--exclude-module', 'desktop.tests'])
+    # OCR 依赖只在开发环境，安装版不带，体积不变；打包后 ocr 返回 ocr_unavailable
+    args.extend(['--exclude-module', 'rapidocr', '--exclude-module', 'onnxruntime'])
     if clean:
         args.append('--clean')
     args.append(entry)
