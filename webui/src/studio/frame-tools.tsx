@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageDown, Loader2, ScanText } from 'lucide-react'
 import { toast } from 'sonner'
@@ -50,10 +50,18 @@ export function useFrameCapture(video: RefObject<HTMLVideoElement | null>) {
   return { capturing, capture }
 }
 
-type Recognition =
+export type Recognition =
   | { status: 'idle' | 'loading' }
   | { status: 'done'; text: string }
   | { status: 'error'; message: string }
+
+// 只在开发版赋值，见 debug.ts
+export const frameDebug: {
+  current: {
+    capture: () => Promise<Uint8Array | null>
+    recognize: () => Promise<Recognition>
+  } | null
+} = { current: null }
 
 // 暂停时出现在画面右上角：保存当前画面、识别画面里的字；继续播放就收起
 export function FrameTools(props: {
@@ -93,29 +101,41 @@ export function FrameTools(props: {
     }
   }
 
-  const recognize = async () => {
-    if (result.status === 'loading' || !window.studio?.recognizeFrame) return
+  const recognize = async (): Promise<Recognition> => {
+    if (result.status === 'loading' || !window.studio?.recognizeFrame)
+      return result
     setResult({ status: 'loading' })
+    let next: Recognition
     try {
       const png = await capture()
       if (!png) throw new Error('capture')
       const answer = await window.studio.recognizeFrame(item.platform, png)
-      if (answer.imageText)
-        setResult({ status: 'done', text: answer.imageText.text })
-      else
-        setResult({
-          status: 'error',
-          message:
-            answer.code === 'no_text'
-              ? '画面里没有识别到文字'
-              : answer.code === 'ocr_unavailable'
-                ? '图片识别不可用'
-                : '识别失败，请重试',
-        })
+      next = answer.imageText
+        ? { status: 'done', text: answer.imageText.text }
+        : {
+            status: 'error',
+            message:
+              answer.code === 'no_text'
+                ? '画面里没有识别到文字'
+                : answer.code === 'ocr_unavailable'
+                  ? '图片识别不可用'
+                  : '识别失败，请重试',
+          }
     } catch {
-      setResult({ status: 'error', message: '识别失败，请重试' })
+      next = { status: 'error', message: '识别失败，请重试' }
     }
+    setResult(next)
+    return next
   }
+
+  // 开发版把截图和识别交给调试入口，验收时一次调用拿结果，不用点按钮、读 DOM
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    frameDebug.current = { capture, recognize }
+    return () => {
+      frameDebug.current = null
+    }
+  })
 
   return (
     <div
