@@ -3,6 +3,7 @@ import { recordLoginDuration } from './login-estimate'
 import { recordLoginOutcome } from './login-health'
 import { t, translateMessage } from '@/i18n/studio'
 import { create } from 'zustand'
+import { replaceEqualDeep } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   autoBatchSize,
@@ -14,7 +15,6 @@ import {
 import { taskFeedback } from './task-feedback'
 import type {
   CollectRequest,
-  LoginMode,
   ContentItem,
   Platform,
   PlatformForm,
@@ -31,12 +31,7 @@ export const platformNames = {
   tieba: '贴吧',
   ks: '快手',
 }
-export const accountNames = {
-  unknown: '未连接',
-  saved: '已保存会话',
-  connected: '已连接',
-  expired: '需要登录',
-}
+const draftTimers = new Map<Platform, ReturnType<typeof setTimeout>>()
 export const activeStatuses = ['checking', 'auth', 'running', 'stopping']
 const initialForm = (platform: Platform): PlatformForm => ({
   platform,
@@ -90,8 +85,6 @@ export interface StudioStore extends StudioState {
   openAuthor: (item: ContentItem) => Promise<void>
   leaveAuthor: () => Promise<void>
   backToFeed: () => Promise<void>
-  loginMode: LoginMode
-  setLoginMode: (value: LoginMode) => boolean
   askBeforeDownload: boolean
   setAskBeforeDownload: (value: boolean) => boolean
   selected: ContentItem | null
@@ -322,17 +315,6 @@ export const useStudio = create<StudioStore>((set, get) => ({
     const scroller = mainScroller()
     if (scroller) scroller.scrollTop = 0
   },
-  loginMode: 'qrcode',
-  setLoginMode: (value) => {
-    try {
-      window.localStorage.setItem('studio-login-mode', value)
-      set({ loginMode: value })
-      return true
-    } catch {
-      toast.error(t('设置保存失败，请重试'), { id: 'settings-save' })
-      return false
-    }
-  },
   askBeforeDownload: readDownloadPrompt(),
   setAskBeforeDownload: (value) => {
     try {
@@ -371,9 +353,18 @@ export const useStudio = create<StudioStore>((set, get) => ({
       edited: { ...state.edited, [platform]: true },
     }))
     get().updateView({ error: '' }, platform)
-    window.studio?.saveDraft(platform, form).catch(() => {
-      toast.error(t('输入暂未保存，请稍后重试'), { id: 'draft-save' })
-    })
+    // 每个键都存一次会让主进程反复重写 workspace.json，停手一会儿再存
+    clearTimeout(draftTimers.get(platform))
+    const studio = window.studio
+    draftTimers.set(
+      platform,
+      setTimeout(() => {
+        draftTimers.delete(platform)
+        studio?.saveDraft(platform, form).catch(() => {
+          toast.error(t('输入暂未保存，请稍后重试'), { id: 'draft-save' })
+        })
+      }, 400),
+    )
   },
   receive: (state) => {
     const previous = get()
@@ -440,26 +431,30 @@ export const useStudio = create<StudioStore>((set, get) => ({
         )
       }
     }
-    set((current) => ({
-      ...state,
-      // 主进程删除字段时快照里就没有这个键，合并不会清掉，要显式覆盖
-      handoff: state.handoff,
-      featureCheck: state.featureCheck,
-      ready: true,
-      selected: current.selected
-        ? state.pages[current.platform]?.results.find(
-            (item) => item.id === current.selected?.id,
-          ) || current.selected
-        : null,
-      forms: Object.fromEntries(
-        (Object.keys(platformNames) as Platform[]).map((platform) => [
-          platform,
-          current.edited[platform]
-            ? current.forms[platform]
-            : state.drafts[platform] || current.forms[platform],
-        ]),
-      ) as Record<Platform, PlatformForm>,
-    }))
+    set((current) => {
+      // 主进程每次推整份快照，没变的部分沿用旧引用，订阅它的组件和卡片不重渲染
+      const shared = replaceEqualDeep(current as unknown as StudioState, state)
+      return {
+        ...shared,
+        // 主进程删除字段时快照里就没有这个键，合并不会清掉，要显式覆盖
+        handoff: state.handoff,
+        featureCheck: state.featureCheck,
+        ready: true,
+        selected: current.selected
+          ? shared.pages[current.platform]?.results.find(
+              (item) => item.id === current.selected?.id,
+            ) || current.selected
+          : null,
+        forms: Object.fromEntries(
+          (Object.keys(platformNames) as Platform[]).map((platform) => [
+            platform,
+            current.edited[platform]
+              ? current.forms[platform]
+              : shared.drafts[platform] || current.forms[platform],
+          ]),
+        ) as Record<Platform, PlatformForm>,
+      }
+    })
     if (loginNotice)
       toast[loginNotice.kind](t(loginNotice.message), { id: loginNotice.id })
     if (feedback)

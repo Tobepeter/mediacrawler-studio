@@ -41,7 +41,11 @@ async function pump(platform: Platform) {
       if (result.code === 'throttled') {
         const delay =
           (('retryAfter' in result && result.retryAfter) || 0) * 1000
-        if (delay > MAX_THROTTLE_WAIT_MS) return
+        // 等太久就先让出，到点再接着补，不让视口里的卡片一直停在骨架屏
+        if (delay > MAX_THROTTLE_WAIT_MS) {
+          setTimeout(() => void pump(platform), delay)
+          return
+        }
         await wait(Math.max(delay, 1000))
         continue
       }
@@ -53,6 +57,13 @@ async function pump(platform: Platform) {
     queue.running = false
   }
 }
+
+// 窗口切走时补封面会停下，切回来接着补还在视口里的
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return
+  for (const [platform, queue] of queues)
+    if (queue.visible.size) void pump(platform)
+})
 
 // 卡片进入视口且列表没给封面时，排队取一次详情，封面和正文一起回来
 export function useCoverBackfill(item: ContentItem) {

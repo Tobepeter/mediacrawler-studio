@@ -19,7 +19,9 @@ export function CacheSettings() {
   const clear = useMutation({
     mutationFn: () => window.studio!.clearCache!(),
     onSuccess: () => {
+      // 主进程同时清了字幕和图中文字，两边的查询结果都要丢掉
       client.removeQueries({ queryKey: ['studio', 'transcript'] })
+      client.removeQueries({ queryKey: ['studio', 'image-text'] })
       void client.invalidateQueries({ queryKey: sizeKey })
       toast.success(t('缓存已清理'), { id: 'clear-cache' })
     },

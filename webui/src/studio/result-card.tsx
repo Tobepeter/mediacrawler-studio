@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUpRight, Heart, Images, MessageSquare } from 'lucide-react'
 import { IconButton } from '@/components/common/icon-button'
@@ -15,14 +15,25 @@ import { platformNames, useStudio } from './store'
 import type { ContentItem } from './types'
 
 // 博主页每张卡片的平台和作者都相同，改为展示点赞；推荐流只隐藏平台标签
-export function ResultCard(props: {
+const formats = new Map<string, Intl.NumberFormat>()
+function compactFormat(language: string) {
+  let format = formats.get(language)
+  if (!format) {
+    format = new Intl.NumberFormat(language, { notation: 'compact' })
+    formats.set(language, format)
+  }
+  return format
+}
+
+// 每来一条结果都会推一次状态，卡片按 item 引用跳过重渲染
+export const ResultCard = memo(function ResultCard(props: {
   item: ContentItem
   creatorPage?: boolean
   hidePlatform?: boolean
 }) {
   const { item, creatorPage, hidePlatform } = props
   const { t, i18n } = useTranslation('studio')
-  const compact = new Intl.NumberFormat(i18n.language, { notation: 'compact' })
+  const compact = compactFormat(i18n.language)
   const patch = useStudio((state) => state.patch)
   const cover = useCoverBackfill(item)
   return (
@@ -111,7 +122,7 @@ export function ResultCard(props: {
       </CardFooter>
     </Card>
   )
-}
+})
 
 // 封面占位尺寸固定；第一次加载完成时淡入，显示过的直接出现，返回列表不再闪白
 function ResultCover({ src }: { src: string }) {

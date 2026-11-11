@@ -67,7 +67,6 @@ export function StudioSettings() {
     pending,
     requests,
     patch,
-    setLoginMode,
     askBeforeDownload,
     setAskBeforeDownload,
   } = useStudio()
@@ -97,9 +96,8 @@ export function StudioSettings() {
       window.localStorage.setItem('studio-theme', 'system')
       setTheme('system')
       const downloadSaved = setAskBeforeDownload(false)
-      const loginSaved = setLoginMode('qrcode')
       if (!resetPlayback()) throw new Error('playback')
-      if (downloadSaved && loginSaved)
+      if (downloadSaved)
         toast.success(i18n.t('已恢复默认设置', { ns: 'studio' }), {
           id: 'settings-save',
         })
@@ -276,7 +274,7 @@ export function StudioSettings() {
                       >
                         <span className='truncate text-muted-foreground'>
                           {accounts[platform] === 'connected'
-                            ? profiles[platform]?.nickname || t('已连接')
+                            ? profiles[platform]?.nickname || t('已登录')
                             : t('未登录')}
                         </span>
                       </SettingRow>
