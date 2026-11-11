@@ -261,7 +261,7 @@ def test_cli_reports_busy_with_retry(tmp_path, monkeypatch):
     source = tmp_path / 'a.mp4'
     source.write_bytes(b'x')
     monkeypatch.setattr(transcribe, 'transcribe_file', AsyncMock(side_effect=SttError('stt_busy', '正忙', 9)))
-    assert cli('--file', str(source)).exit_code == 1
+    assert cli('--file', str(source)).exit_code == 5
 
 
 async def test_download_pipeline_switches_to_transcribe(monkeypatch):
