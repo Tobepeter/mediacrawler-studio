@@ -329,12 +329,6 @@ export interface StudioBridge {
     platform: Platform,
     id: string,
   ): Promise<{ code: string; imageText?: ContentImageText; message?: string }>
-  captureFrame?(rect: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }): Promise<Uint8Array>
   debugWindow?(): Promise<{
     visible: boolean
     minimized: boolean

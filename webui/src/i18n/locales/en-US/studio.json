@@ -499,5 +499,6 @@
   "这条作品没有图片": "This post has no images",
   "重新识别": "Recognize again",
   "保存画面": "Save frame",
-  "识别文字": "Read text"
+  "识别文字": "Read text",
+  "取不到当前画面，请重试": "Couldn't grab the current frame, try again"
 }

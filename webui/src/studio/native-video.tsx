@@ -4,7 +4,7 @@ import { Loader2, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ImageGallery } from '@/components/common/image-gallery/image-gallery'
-import { FrameTools, useFrameCapture } from './frame-tools'
+import { FrameTools } from './frame-tools'
 import { startMuted, usePlayback } from './playback'
 import { platformBusy, useStudio } from './store'
 import type { ContentItem } from './types'
@@ -54,7 +54,6 @@ export function NativeVideo({ item }: { item: ContentItem }) {
   const failedSource = useRef('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const [paused, setPaused] = useState(false)
-  const { capturing, capture } = useFrameCapture(videoRef)
 
   const play = (list: string[]) => {
     setUrls(list)
@@ -181,7 +180,7 @@ export function NativeVideo({ item }: { item: ContentItem }) {
                 src={urls[index]}
                 poster={item.images[0]}
                 className='absolute inset-0 size-full object-contain outline-none'
-                controls={!capturing}
+                controls
                 autoPlay
                 muted={muted}
                 playsInline
@@ -195,14 +194,9 @@ export function NativeVideo({ item }: { item: ContentItem }) {
                 onPause={() => setPaused(true)}
                 onPlay={() => setPaused(false)}
               />
-              {/* 暂停时才出现；截图时只隐藏不卸载，识别结果和弹出框状态不丢 */}
+              {/* 暂停时才出现，继续播放就收起；进行中的识别照常跑完，结果丢掉也没关系 */}
               {paused && !buffering && (
-                <FrameTools
-                  item={item}
-                  video={videoRef}
-                  capture={capture}
-                  hidden={capturing}
-                />
+                <FrameTools item={item} video={videoRef} />
               )}
             </>
           ) : (

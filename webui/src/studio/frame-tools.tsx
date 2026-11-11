@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageDown, Loader2, ScanText } from 'lucide-react'
 import { toast } from 'sonner'
@@ -76,43 +76,6 @@ async function grabFrame(source: HTMLVideoElement) {
   }
 }
 
-// 退路：由主进程截播放器区域；截之前收起控件和工具条，会闪一下。
-// 等控件收起再截，窗口在后台时浏览器不刷新画面，最多等 100 毫秒，避免一直卡住
-const nextFrame = () =>
-  Promise.race([
-    new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve)),
-    ),
-    new Promise((resolve) => setTimeout(resolve, 100)),
-  ])
-
-export function useFrameCapture(video: RefObject<HTMLVideoElement | null>) {
-  const [capturing, setCapturing] = useState(false)
-  const capture = async () => {
-    const element = video.current
-    if (!element) return null
-    try {
-      return await grabFrame(element)
-    } catch {
-      if (!window.studio?.captureFrame) return null
-    }
-    setCapturing(true)
-    try {
-      await nextFrame()
-      const { box, left, top, width, height } = contentBox(element)
-      return await window.studio.captureFrame({
-        x: box.left + left,
-        y: box.top + top,
-        width,
-        height,
-      })
-    } finally {
-      setCapturing(false)
-    }
-  }
-  return { capturing, capture }
-}
-
 export type Recognition =
   | { status: 'idle' | 'loading' }
   | { status: 'done'; text: string }
@@ -127,13 +90,16 @@ export const frameDebug: {
 } = { current: null }
 
 // 暂停时出现在画面右上角：保存当前画面、识别画面里的字；继续播放就收起
+// 识别和保存都是后台任务：工具条随播放收起、弹出框关掉都不影响任务；
+// 结果回来时界面已经没了，这一次就丢掉；每次识别带编号，旧结果不会盖住新的
 export function FrameTools(props: {
   item: ContentItem
   video: RefObject<HTMLVideoElement | null>
-  capture: () => Promise<Uint8Array | null>
-  hidden?: boolean
 }) {
-  const { item, video, capture, hidden } = props
+  const { item, video } = props
+  const latest = useRef(0)
+  const capture = () =>
+    video.current ? grabFrame(video.current) : Promise.resolve(null)
   const { t } = useTranslation('studio')
   const [saving, setSaving] = useState(false)
   const [open, setOpen] = useState(false)
@@ -157,8 +123,11 @@ export function FrameTools(props: {
     if (saving || !window.studio?.saveFrame) return
     setSaving(true)
     try {
-      const png = await capture()
-      if (!png) return
+      const png = await capture().catch(() => null)
+      if (!png) {
+        toast.error(t('取不到当前画面，请重试'), { id: 'frame' })
+        return
+      }
       const saved = await window.studio.saveFrame(
         item.platform,
         item.id,
@@ -181,11 +150,16 @@ export function FrameTools(props: {
   const recognize = async (): Promise<Recognition> => {
     if (result.status === 'loading' || !window.studio?.recognizeFrame)
       return result
+    const id = ++latest.current
     setResult({ status: 'loading' })
     let next: Recognition
+    const png = await capture().catch(() => null)
+    if (!png) {
+      next = { status: 'error', message: '取不到当前画面，请重试' }
+      if (id === latest.current) setResult(next)
+      return next
+    }
     try {
-      const png = await capture()
-      if (!png) throw new Error('capture')
       const answer = await window.studio.recognizeFrame(item.platform, png)
       next = answer.imageText
         ? { status: 'done', text: answer.imageText.text }
@@ -201,7 +175,7 @@ export function FrameTools(props: {
     } catch {
       next = { status: 'error', message: '识别失败，请重试' }
     }
-    setResult(next)
+    if (id === latest.current) setResult(next)
     return next
   }
 
@@ -215,10 +189,7 @@ export function FrameTools(props: {
   })
 
   return (
-    <div
-      className={`absolute flex gap-1.5 ${hidden ? 'invisible' : ''}`}
-      style={place}
-    >
+    <div className='absolute flex gap-1.5' style={place}>
       {/* 带文字更好找；保存中只换图标，宽度不变 */}
       <Button
         variant='secondary'
@@ -252,10 +223,7 @@ export function FrameTools(props: {
             {t('识别文字')}
           </Button>
         </PopoverTrigger>
-        <PopoverContent
-          align='end'
-          className={`w-80 ${hidden ? 'invisible' : ''}`}
-        >
+        <PopoverContent align='end' className='w-80'>
           <div className='mb-2 flex min-h-7 items-center justify-between gap-2'>
             <span className='text-caption text-muted-foreground'>
               {t('画面文字')}

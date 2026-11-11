@@ -210,23 +210,6 @@ app
     handle('recognize-images', (platform, id) =>
       service.recognizeImages(platform, id),
     )
-    // 截取播放器所在区域：平台视频跨域，页面里读不到像素，只能由主进程截屏
-    handle('capture-frame', async (rect) => {
-      const area = Object.fromEntries(
-        ['x', 'y', 'width', 'height'].map((key) => [
-          key,
-          Math.round(Number(rect?.[key])),
-        ]),
-      )
-      if (
-        Object.values(area).some((value) => !Number.isFinite(value)) ||
-        area.width < 8 ||
-        area.height < 8
-      )
-        throw new Error('画面区域无效')
-      const image = await mainWindow.webContents.capturePage(area)
-      return image.toPNG()
-    })
     // 只给开发版探针用：截图要窗口可见，后台或收起时浏览器不刷新画面
     if (!app.isPackaged) {
       handle('debug-window', () => ({
