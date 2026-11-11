@@ -2,18 +2,13 @@
 import copy
 
 from desktop.content.media import enrich
-from desktop.pacing import log_only, reporter, visit
+from desktop.pacing import reporter, visit
 
 
 async def refreshed(record, page, runner=None, quality='best', background=False, emit=None):
     if runner is None:
-        from desktop.crawler import DesktopCrawler
-        runner = DesktopCrawler({
-            'platform': record['platform'], 'mode': 'link', 'query': record['url'],
-            'limit': 1, 'action': 'connect', 'reusePage': True, 'background': background,
-        }, page, log_only(emit))
-        await runner.setup()
-        await runner.client.update_cookies(runner.context)
+        from desktop.crawler import on_demand
+        runner = await on_demand(record, page, emit, background=background)
     fresh = copy.deepcopy(record)
     await enrich(runner, fresh, quality)
     return fresh
@@ -21,13 +16,8 @@ async def refreshed(record, page, runner=None, quality='best', background=False,
 
 async def load_feed_detail(record, page, background=False, emit=None):
     """推荐流卡片只有摘要，走单条链接的完整流程拿正文、图片和媒体，保持卡片已有的 ID"""
-    from desktop.crawler import DesktopCrawler
-    runner = DesktopCrawler({
-        'platform': record['platform'], 'mode': 'link', 'query': record['url'],
-        'limit': 1, 'action': 'collect', 'reusePage': True, 'background': background,
-    }, page, log_only(emit))
-    await runner.setup()
-    await runner.client.update_cookies(runner.context)
+    from desktop.crawler import on_demand
+    runner = await on_demand(record, page, emit, 'collect', background)
     await runner.detail()
     full = runner.store.items.get(record['id'])
     if not full:

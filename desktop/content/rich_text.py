@@ -4,13 +4,15 @@ import re
 from bs4 import BeautifulSoup
 from markdownify import MarkdownConverter
 
+from desktop.paging import https_url
+
 BLOCKS = ('p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figcaption', 'tr', 'hr')
 
 
 def real_image(tag):
     # 知乎的 src 常是懒加载占位图，真实地址在 data-* 上
     value = tag.get('data-original') or tag.get('data-actualsrc') or tag.get('src') or ''
-    value = f'https:{value}' if value.startswith('//') else f'https://{value[7:]}' if value.startswith('http://') else value
+    value = https_url(value)
     return value if value.startswith('https://') else ''
 
 

@@ -5,7 +5,7 @@ from playwright.async_api import Error as PlaywrightError
 from urllib.parse import urlparse
 from time import perf_counter
 from desktop.login_flow import open_login, SESSION_COOKIES
-from desktop.pacing import configure_cli, pace_client, reporter, throttle_detail
+from desktop.pacing import configure_cli, log_only, pace_client, reporter, throttle_detail
 from desktop.paging import PAGED_SEARCH_PLATFORMS, CreatorError
 import config
 from desktop.links import resolve_link
@@ -338,3 +338,18 @@ class DesktopCrawler:
             return
         from desktop.creators import collect_search
         await collect_search(self, self.request["query"], self.request.get("cursor"), options)
+
+
+def link_runner(record, page, emit=None, action='connect', background=False):
+    """详情、评论、媒体这类按需任务只针对一条作品，复用已登录的平台页面，不跳转"""
+    return DesktopCrawler({
+        'platform': record['platform'], 'mode': 'link', 'query': record['url'],
+        'limit': 1, 'action': action, 'reusePage': True, 'background': background,
+    }, page, log_only(emit))
+
+
+async def on_demand(record, page, emit=None, action='connect', background=False):
+    runner = link_runner(record, page, emit, action, background)
+    await runner.setup()
+    await runner.client.update_cookies(runner.context)
+    return runner

@@ -4,7 +4,7 @@ from desktop.paging import CreatorError
 from desktop.content.schema import group, number
 from desktop.content.subtitles import load
 from desktop.links import media_referer
-from desktop.media_download import secure_url
+from desktop.paging import https_url
 
 
 def urls(value):
@@ -12,7 +12,7 @@ def urls(value):
         value = value.get('url_list', value.get('urlList', []))
     if isinstance(value, str):
         value = [value]
-    return list(dict.fromkeys(secure_url(u) for u in (value or []) if isinstance(u, str) and u.startswith(('https://', 'http://', '//'))))
+    return list(dict.fromkeys(https_url(u) for u in (value or []) if isinstance(u, str) and u.startswith(('https://', 'http://', '//'))))
 
 
 def pick(data, *keys):

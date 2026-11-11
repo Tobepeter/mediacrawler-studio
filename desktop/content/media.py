@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from desktop.links import media_referer
 from desktop.pacing import reporter, visit
-from desktop.paging import CreatorError
+from desktop.paging import CreatorError, https_url
 from media_downloader.selection import selection, without_silent_duplicates
 
 
@@ -18,8 +18,7 @@ def variants(platform, raw):
         data = data or {}
         if isinstance(urls, str):
             urls = [urls]
-        urls = list(dict.fromkeys('https:' + u if u.startswith('//') else 'https://' + u[7:] if u.startswith('http://') else u for u in (urls or [])
-                                 if isinstance(u, str) and u.startswith(('https://', 'http://', '//'))))
+        urls = list(dict.fromkeys(https_url(u) for u in (urls or []) if isinstance(u, str) and u.startswith(('https://', 'http://', '//'))))
         if not urls:
             return
         if any(v['url'] == urls[0] and v['kind'] == kind for v in result):
@@ -104,6 +103,24 @@ def variants(platform, raw):
     return result
 
 
+def bili_cid(view, url):
+    """链接里的 ?p= 选分 P，超出范围或取不到返回 None"""
+    part = parse_qs(urlparse(url).query).get('p', ['1'])[0]
+    if part.isdigit() and int(part) > 1:
+        pages = view.get('pages') or []
+        return pages[int(part) - 1].get('cid') if int(part) <= len(pages) else None
+    return view.get('cid')
+
+
+async def zvideo_data(client, identity):
+    """知乎视频的数据只在页面的 js-initialData 里"""
+    import json
+    from parsel import Selector
+    html = await client.get(f'/zvideo/{identity}', return_response=True)
+    initial = Selector(text=html).xpath('//script[@id="js-initialData"]/text()').get()
+    return json.loads(initial or '{}').get('initialState', {}).get('entities', {}).get('zvideos', {}).get(identity, {})
+
+
 async def fetch(runner, record):
     platform, client = runner.platform, runner.client
     identity = record['id'].split(':')[-1]
@@ -111,11 +128,7 @@ async def fetch(runner, record):
         from media_platform.bilibili.media import DASH_FNVAL
         detail = runner.bili_details.pop(record['id'], None) or await client.get_video_info(aid=int(identity))
         view = (detail or {}).get('View') or {}
-        part = parse_qs(urlparse(record['url']).query).get('p', ['1'])[0]
-        cid = view.get('cid')
-        if part.isdigit() and int(part) > 1:
-            pages = view.get('pages') or []
-            cid = pages[int(part) - 1]['cid'] if int(part) <= len(pages) else None
+        cid = bili_cid(view, record['url'])
         if not cid:
             raise ValueError('missing cid')
         try:
@@ -150,12 +163,7 @@ async def fetch(runner, record):
     if platform == 'tieba':
         return await client._get_pc_page_data(identity, page=1), None
     if platform == 'zhihu' and '/zvideo/' in record['url']:
-        import json
-        from parsel import Selector
-        html = await client.get(f'/zvideo/{identity}', return_response=True)
-        initial = Selector(text=html).xpath('//script[@id="js-initialData"]/text()').get()
-        raw = json.loads(initial or '{}').get('initialState', {}).get('entities', {}).get('zvideos', {}).get(identity, {})
-        return raw, None
+        return await zvideo_data(client, identity), None
     return {}, None
 
 

@@ -1,6 +1,8 @@
 """当前登录账号的展示信息，不转发完整响应或凭据"""
 from urllib.parse import urlparse
 
+from desktop.paging import https_url
+
 
 def profile_info(platform, payload):
     if not isinstance(payload, dict):
@@ -39,9 +41,8 @@ def profile_info(platform, payload):
         avatar = urls[0] if isinstance(urls, list) and urls else ""
     else:
         return {}
-    avatar = avatar if isinstance(avatar, str) else ""
-    if avatar.startswith("//"):
-        avatar = "https:" + avatar
+    # http 头像升级成 https，其他协议不要
+    avatar = https_url(avatar)
     if urlparse(avatar).scheme != "https":
         avatar = ""
     return {"nickname": name[:100] if isinstance(name, str) else "", "avatar": avatar}

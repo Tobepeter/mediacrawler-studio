@@ -72,6 +72,7 @@ def wants_cards(runner):
 
 
 def https_url(value):
+    """平台常给 // 开头或 http 的地址，统一成 https；不是字符串返回空串"""
     if not isinstance(value, str):
         return ''
     return f'https:{value}' if value.startswith('//') else f'https://{value[7:]}' if value.startswith('http://') else value

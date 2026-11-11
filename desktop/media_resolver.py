@@ -1,12 +1,11 @@
 """按需刷新视频地址，复用原生平台提取器，不保存媒体凭据"""
-from desktop.pacing import log_only, reporter, visit, wait_turn
+from desktop.pacing import reporter, visit, wait_turn
 import asyncio
-import json
 from urllib.parse import parse_qs, urlparse
-from parsel import Selector
 from media_downloader import MediaItem, MediaType
 from media_downloader.ffmpeg import is_available
-from desktop.crawler import DesktopCrawler
+from desktop.crawler import link_runner
+from desktop.content.media import bili_cid, zvideo_data
 
 
 class MediaResolver:
@@ -15,10 +14,7 @@ class MediaResolver:
         self.platform = record['platform']
         self.identity = record['id'].rsplit(':', 1)[-1]
         self.reuse = runner is not None
-        self.runner = runner or DesktopCrawler({
-            'platform': self.platform, 'mode': 'link', 'query': record['url'],
-            'limit': 1, 'action': 'connect', 'reusePage': True,
-        }, page, log_only(emit))
+        self.runner = runner or link_runner(record, page, emit)
 
     async def videos(self):
         if not self.reuse:
@@ -32,13 +28,7 @@ class MediaResolver:
             semaphore = asyncio.Semaphore(1)
             response = await crawler.get_video_info_task(aid=int(identity), bvid='', semaphore=semaphore)
             view = (response or {}).get('View') or {}
-            cid = view.get('cid')
-            part = parse_qs(urlparse(self.record['url']).query).get('p', ['1'])[0]
-            if part.isdigit() and int(part) > 1:
-                pages = view.get('pages') or []
-                if int(part) > len(pages):
-                    raise RuntimeError('unavailable')
-                cid = pages[int(part)-1].get('cid')
+            cid = bili_cid(view, self.record['url'])
             if not cid:
                 raise RuntimeError('unavailable')
             if is_available():
@@ -72,16 +62,11 @@ class MediaResolver:
         else:
             urls = []
             if self.platform == 'zhihu' and '/zvideo/' in self.record['url']:
-                html = await client.get(f'/zvideo/{identity}', return_response=True)
-                initial = Selector(text=html).xpath('//script[@id="js-initialData"]/text()').get()
-                if initial:
-                    data = json.loads(initial).get('initialState', {}).get('entities', {}).get('zvideos', {}).get(identity, {})
-                    video = data.get('video') or {}
-                    playlist = video.get('playlist') or {}
-                    for quality in ('hd', 'sd', 'ld'):
-                        stream = playlist.get(quality) or {}
-                        if stream.get('play_url'):
-                            urls.append(stream['play_url'])
+                playlist = ((await zvideo_data(client, identity)).get('video') or {}).get('playlist') or {}
+                for quality in ('hd', 'sd', 'ld'):
+                    stream = playlist.get(quality) or {}
+                    if stream.get('play_url'):
+                        urls.append(stream['play_url'])
             elif self.platform == 'tieba':
                 data = await client._get_pc_page_data(identity, page=1)
                 video = (data.get('thread') or {}).get('video') or {}
@@ -103,7 +88,8 @@ class MediaResolver:
 async def resolve_playback(record, page, emit=None):
     """只交付当前作品的临时 HTTPS 地址，不落盘或转发 Cookie/请求头"""
     import httpx
-    from desktop.media_download import public_request, secure_url
+    from desktop.media_download import public_request
+    from desktop.paging import https_url
     if record['platform'] not in ('dy', 'xhs'):
         raise RuntimeError('unsupported')
     async with visit(record['platform'], 'detail', reporter(emit)):
@@ -112,7 +98,7 @@ async def resolve_playback(record, page, emit=None):
                 continue
             urls = []
             for value in (item.url, *item.backup_urls):
-                url = secure_url(value)
+                url = https_url(value)
                 if url in urls:
                     continue
                 await public_request(httpx.Request('GET', url))

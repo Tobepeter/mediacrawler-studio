@@ -140,16 +140,10 @@ async def comment_page(collector, record, cursor=None, parent=None):
 
 async def load_comments(request, emit, page):
     """桌面详情页按需取评论；节流错误继续向上，由调用方显示倒计时"""
-    from desktop.crawler import DesktopCrawler
+    from desktop.crawler import on_demand
     from desktop.paging import CreatorError
-    from desktop.pacing import log_only
     record = request['record']
-    runner = DesktopCrawler({
-        'platform': record['platform'], 'mode': 'link', 'query': record['url'],
-        'limit': 1, 'action': 'connect', 'reusePage': True,
-    }, page, log_only(emit))
-    await runner.setup()
-    await runner.client.update_cookies(runner.context)
+    runner = await on_demand(record, page, emit)
     collector = CommentCollector(record['platform'], runner.client, runner.store)
     try:
         result = await comment_page(collector, record, request.get('cursor'), request.get('parent'))

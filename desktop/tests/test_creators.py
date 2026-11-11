@@ -286,7 +286,7 @@ async def test_search_batch_ending_on_page_boundary_continues_from_next_page():
 
 
 @pytest.mark.asyncio
-async def test_search_cursor_bound_to_keyword():
+async def test_post_search_cursor_bound_to_keyword():
     with pytest.raises(CreatorError) as error:
         await collect_search(runner(keyword_client([])), '别的词', encode_cursor('search', q='罗翔', o=10, i='', s=0))
     assert error.value.code == 'INVALID_CURSOR'

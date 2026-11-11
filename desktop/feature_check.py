@@ -5,7 +5,8 @@ import httpx
 
 from desktop.creators import load_feed
 from desktop.links import HOSTS, media_referer
-from desktop.media_download import public_request, secure_url
+from desktop.media_download import public_request
+from desktop.paging import https_url
 from media_downloader.downloader import DEFAULT_USER_AGENT
 from desktop.pacing import wait_turn
 from desktop.paging import CreatorError
@@ -84,7 +85,7 @@ async def probe_media(url, headers, platform):
     # 请求头要和真实下载一致，B站 CDN 不认默认的 python-httpx
     request_headers = {'User-Agent': DEFAULT_USER_AGENT, 'Range': 'bytes=0-1', **({'Referer': media_referer(platform)} if platform in HOSTS else {}), **headers}
     async with httpx.AsyncClient(follow_redirects=True, timeout=15, event_hooks={'request': [public_request]}) as client:
-        async with client.stream('GET', secure_url(url), headers=request_headers) as response:
+        async with client.stream('GET', https_url(url), headers=request_headers) as response:
             kind = response.headers.get('content-type', '').split('/')[0].lower()
             if response.status_code not in (200, 206):
                 raise CreatorError('MEDIA_UNAVAILABLE', f'媒体地址访问失败（HTTP {response.status_code}）')

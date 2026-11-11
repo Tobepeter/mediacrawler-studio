@@ -14,6 +14,7 @@ from media_downloader import MediaDownloader, MediaItem, MediaType
 from media_downloader.types import MediaFatalError
 from desktop.links import HOSTS, media_referer
 from desktop.pacing import reporter, visit
+from desktop.paging import https_url
 
 
 async def public_request(request):
@@ -24,14 +25,6 @@ async def public_request(request):
     addresses = await asyncio.get_running_loop().getaddrinfo(url.host, 443, type=socket.SOCK_STREAM)
     if not addresses or any(not ipaddress.ip_address(row[4][0]).is_global for row in addresses):
         raise RuntimeError('unsupported')
-
-
-def secure_url(value):
-    if value.startswith('//'):
-        value = 'https:' + value
-    if value.startswith('http://'):
-        value = 'https://' + value[7:]
-    return value
 
 
 async def media_response(response):
@@ -169,7 +162,7 @@ async def download_media(request, emit, page=None):
                 nonlocal saved
                 downloader.failure = 'failed'
                 safe_headers = {k: v for k, v in (item.headers or {}).items() if k.lower() in ('referer', 'user-agent') and isinstance(v, str) and '\n' not in v and '\r' not in v}
-                item = replace(item, url=secure_url(item.url), backup_urls=tuple(secure_url(url) for url in item.backup_urls), audio_url=secure_url(item.audio_url) if item.audio_url else None, audio_backup_urls=tuple(secure_url(url) for url in item.audio_backup_urls), headers=safe_headers)
+                item = replace(item, url=https_url(item.url), backup_urls=tuple(https_url(url) for url in item.backup_urls), audio_url=https_url(item.audio_url) if item.audio_url else None, audio_backup_urls=tuple(https_url(url) for url in item.audio_backup_urls), headers=safe_headers)
                 if item.is_dash:
                     from media_downloader.ffmpeg import is_available
                     if not is_available():

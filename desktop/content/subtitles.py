@@ -3,7 +3,8 @@ import asyncio
 import json
 import re
 import httpx
-from desktop.media_download import public_request, secure_url
+from desktop.media_download import public_request
+from desktop.paging import https_url
 from desktop.content.schema import group, number
 
 
@@ -52,7 +53,7 @@ async def load(tracks, referer):
             try:
                 async with semaphore:
                     async with asyncio.timeout(12):
-                        async with client.stream('GET', secure_url(track['url'])) as response:
+                        async with client.stream('GET', https_url(track['url'])) as response:
                             response.raise_for_status()
                             data = bytearray()
                             async for chunk in response.aiter_bytes():

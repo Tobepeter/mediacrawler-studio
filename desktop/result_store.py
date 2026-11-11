@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import urlparse
 
-from desktop.paging import AUTHOR_LIMIT, TITLE_LIMIT
+from desktop.paging import AUTHOR_LIMIT, TITLE_LIMIT, https_url
 
 
 def normalize(item, platform):
@@ -18,10 +18,7 @@ def normalize(item, platform):
     for value in images:
         if not isinstance(value, str):
             continue
-        if value.startswith("//"):
-            value = "https:" + value
-        if value.startswith("http://"):
-            value = "https://" + value[7:]
+        value = https_url(value)
         if urlparse(value).scheme == "https":
             if value not in safe_images:
                 safe_images.append(value)
