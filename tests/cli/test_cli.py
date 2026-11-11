@@ -210,6 +210,20 @@ def test_partial_comments_are_not_success(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)['id'] == 'a'
 
 
+def test_all_items_failing_for_one_reason_report_that_reason(tmp_path, monkeypatch, capsys):
+    fake_worker(monkeypatch, 'import json; print(json.dumps({"type":"warning","code":"ffmpeg_required"})); print(json.dumps({"type":"complete","items":[{"id":"a","code":"ffmpeg_required"}]}))')
+    with pytest.raises(CLIError, match='ffmpeg_required'):
+        run(request(tmp_path))
+    assert json.loads(capsys.readouterr().out)['id'] == 'a'
+
+
+def test_warning_message_reaches_stderr(tmp_path, monkeypatch, capsys):
+    fake_worker(monkeypatch, 'import json; print(json.dumps({"type":"warning","message":"评论没取完"})); print(json.dumps({"type":"complete","items":[{"id":"a"}]}))')
+    with pytest.raises(CLIError, match='PARTIAL_RESULT'):
+        run(request(tmp_path))
+    assert '评论没取完' in capsys.readouterr().err
+
+
 def test_platform_imports_do_not_initialize_wordcloud():
     result = subprocess.run([sys.executable, '-c', '''import sys
 from desktop.native_platforms import create_native
@@ -313,4 +327,4 @@ def test_skill_reports_missing_doc(tmp_path, monkeypatch):
     from mediacrawler_cli import __main__ as cli
     monkeypatch.setattr(cli, 'skill_path', lambda: tmp_path / 'none.md')
     result = CliRunner().invoke(cli.app, ['skill'])
-    assert result.exit_code == 1 and 'SKILL_MISSING' in result.output
+    assert result.exit_code == 5 and 'SKILL_MISSING' in result.output

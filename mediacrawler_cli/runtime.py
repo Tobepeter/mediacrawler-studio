@@ -16,8 +16,10 @@ from mediacrawler_cli.cleanup import clean, prune, KEEP_RUNS
 
 
 class CLIError(Exception):
-    def __init__(self, code, run_id=None, candidates=None, retry_after=None):
+    def __init__(self, code, run_id=None, candidates=None, retry_after=None, detail=None):
         self.code, self.run_id, self.candidates, self.retry_after = code, run_id, candidates or [], retry_after
+        # worker 给的原始说明，比如“没有找到这条作品”，统一错误码说不清时用它
+        self.detail = detail
         super().__init__(code)
 
 
@@ -77,7 +79,7 @@ def run(request):
     page = {'next_cursor': None, 'has_more': None}
     items = {}
     complete = False
-    partial = False
+    warnings = []
     error = None
     destination = request.get('output_dir')
     destination_created = False
@@ -145,7 +147,10 @@ def run(request):
                     items = {str(i): value for i, value in enumerate(event['items'])}
                     complete = True
                 elif event['type'] == 'warning':
-                    partial = True
+                    warnings.append(event.get('code') or '')
+                    # 采集给的提示是给人看的，比如评论没取完要等多久
+                    if event.get('message'):
+                        print(event['message'], file=sys.stderr)
                 elif event['type'] == 'page':
                     page.update(next_cursor=event.get('next_cursor'), has_more=event.get('has_more') is True)
                 elif event['type'] == 'creator':
@@ -158,11 +163,15 @@ def run(request):
                 elif event['type'] == 'state':
                     print(event.get('message', ''), file=sys.stderr)
                 elif event['type'] == 'failure':
-                    raise CLIError(event['code'], run_id, event.get('candidates'), event.get('retry_after'))
+                    raise CLIError(event['code'], run_id, event.get('candidates'), event.get('retry_after'), event.get('message'))
             except queue.Empty:
                 if process.poll() is not None and not reader.is_alive():
                     break
-        if partial:
+        if warnings:
+            # 下载、转写、识别一条都没成功且原因相同时，直接报这个原因，调用方不必逐条看
+            codes = set(warnings)
+            if len(codes) == 1 and '' not in codes and items and all(item.get('code') for item in items.values()):
+                raise CLIError(codes.pop(), run_id)
             raise CLIError('PARTIAL_RESULT', run_id)
         if not complete or process.returncode:
             raise CLIError('WORKER_FAILED', run_id)

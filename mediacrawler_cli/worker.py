@@ -173,5 +173,7 @@ def main(path):
         code = error.code if isinstance(error, CreatorError) else str(error)
         if not code.isupper() or len(code) > 60:
             code = 'PLATFORM_ERROR'
-        emit('failure', code=code, candidates=getattr(error, 'candidates', []), retry_after=getattr(error, 'retry_after', None))
+        # 只透传自己写的说明；第三方异常的文案里可能带签名链接和令牌
+        message = str(error)[:300] if type(error) in (CreatorError, RuntimeError) else None
+        emit('failure', code=code, message=message, candidates=getattr(error, 'candidates', []), retry_after=getattr(error, 'retry_after', None))
         raise SystemExit(1)

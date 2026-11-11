@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -14,7 +15,7 @@ auth = typer.Typer(no_args_is_help=True)
 session = typer.Typer(no_args_is_help=True)
 app.add_typer(auth, name='auth')
 app.add_typer(session, name='session')
-creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品；posts 支持 dy、bili、xhs、zhihu，search 支持 dy、bili')
+creator = typer.Typer(no_args_is_help=True, help='搜索博主并翻页采集其主页作品；posts 支持 dy、bili、xhs、zhihu，search 支持 dy、bili、xhs')
 app.add_typer(creator, name='creator')
 rate = typer.Typer(no_args_is_help=True, help='查看访问额度')
 app.add_typer(rate, name='rate')
@@ -47,7 +48,7 @@ def skill_command(output: Optional[str] = typer.Option(None, '--output', help='�
     source = skill_path()
     if not source.is_file():
         typer.echo(json.dumps({'code': 'SKILL_MISSING', 'message': '找不到技能文档，请从源码仓库或打包版运行', 'retryable': False}, ensure_ascii=False), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(5)
     text = source.read_text(encoding='utf-8')
     if not output:
         typer.echo(text, nl=False)
@@ -65,6 +66,10 @@ MAX_WAIT = typer.Option(DEFAULT_MAX_WAIT, '--max-wait', min=0, max=600,
 NO_THROTTLE = typer.Option(False, '--no-throttle', help='跳过本地节流直接请求，可能触发平台验证，只在排查时手动使用')
 
 
+def valid_quality(quality):
+    return quality in ('best', 'worst') or bool(re.fullmatch(r'[1-9][0-9]{1,4}p', quality))
+
+
 def profile_busy_message(platform, profile):
     return f'{platform}/{profile} 正在使用中，可稍后重试或用 --profile 选择其他配置'
 
@@ -80,6 +85,11 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
     request.update(options)
     if request['max_wait'] > DEFAULT_MAX_WAIT and request['max_wait'] >= request['timeout']:
         raise typer.BadParameter('--timeout 要大于 --max-wait，否则排队途中任务就超时了')
+    if not request['non_interactive']:
+        # 需要扫码时等待算在总时限里，总时限不能比扫码等待还短
+        request['timeout'] = max(request['timeout'], request['login_timeout'] + 60)
+    if request['replies'] and not request['comments']:
+        raise typer.BadParameter('--replies 要和 --comments 一起用')
     if request['no_throttle']:
         typer.echo('已跳过本地节流，这次请求可能触发平台验证', err=True)
     if request['qr'] not in ('terminal', 'image', 'browser') or request['format'] not in ('json', 'jsonl'):
@@ -91,9 +101,11 @@ def invoke(action, platform, profile='default', data_dir=None, **options):
             typer.echo(json.dumps({'type': 'platform', 'platform': platform, 'status': 'failed', 'policy': {**POLICY, 'qr_timeout_ms': options.get('qr_timeout_ms', POLICY['qr_timeout_ms'])},
                                   'error': {'code': 'TIMEOUT' if error.code == 'TASK_TIMEOUT' else 'UNKNOWN',
                                             'stage': 'worker', 'cause': error.code, 'retryable': True}}))
-        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_WAIT_EXCEEDED': '排队时间超过 --max-wait，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，可用 next_cursor 稍后继续', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
-        typer.echo(json.dumps({'code': error.code, 'message': messages.get(error.code, error.code),
-                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'SEARCH_VERIFICATION_REQUIRED', 'RATE_LIMITED', 'RATE_WAIT_EXCEEDED', 'RATE_COOLDOWN'), 'run_id': error.run_id,
+        messages = {'SEARCH_VERIFICATION_REQUIRED': '平台要求验证，访问已暂停，请按 retry_after 秒后再试', 'RATE_WAIT_EXCEEDED': '排队时间超过 --max-wait，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_LIMITED': '操作太频繁，请按 retry_after 秒后再试，或调大 --max-wait', 'RATE_COOLDOWN': '平台要求过验证，冷却中，请按 retry_after 秒后再试', 'INVALID_CURSOR': '翻页游标无效，请从第一页重新开始', 'INVALID_CREATOR': '请使用博主主页链接、sec_uid 或名称', 'CREATOR_NOT_FOUND': '没有完全匹配的博主，可参考 candidates 改用 sec_uid', 'CREATOR_AMBIGUOUS': '有多位同名博主，请从 candidates 选择 sec_uid', 'CREATOR_PRIVATE': '这位博主的作品不公开', 'UNSUPPORTED_PLATFORM': '该平台暂不支持博主能力', 'PARTIAL_RESULT': '只取得部分结果，失败原因见各条的 code；有 next_cursor 时可稍后继续', 'ffmpeg_required': '需要先安装 FFmpeg', 'stt_incomplete': '语音转写模型不完整，运行 transcribe --check 查看缺什么', 'stt_unavailable': '本机没有可用的语音转写服务，运行 transcribe --check 查看', 'stt_busy': '语音转写服务正忙，请稍后再试', 'quality_unavailable': '没有所选画质', 'ocr_unavailable': '当前环境没有 OCR 依赖', 'video': '视频请用 transcribe 转文字', 'no_images': '这条作品没有图片', 'no_text': '图片里没有识别到文字', 'PROFILE_BUSY': profile_busy_message(platform, profile), 'OUTPUT_ERROR': '无法写入输出目录，请检查路径、权限和磁盘空间；已采结果仍输出到 stdout', 'STORAGE_ERROR': '无法写入工作缓存，请检查权限和磁盘空间', 'REMOTE_LOGOUT_UNCONFIRMED': '仅清除了本地登录态，未能确认平台登出', 'RECOVERY_REQUIRED': '请运行 session recover 检查占用', 'QR_DECODE_FAILED': '二维码无法解码，请改用 --login-mode image', 'QR_UNAVAILABLE': '未找到二维码，请显式使用 --login-mode browser 或运行 check', 'AUTH_REQUIRED': '请先运行 auth login，或移除 --non-interactive', 'VERIFICATION_REQUIRED': '平台要求验证，请显式使用 --login-mode browser 完成验证'}
+        message = messages.get(error.code) or error.detail or error.code
+        typer.echo(json.dumps({'code': error.code, 'message': message,
+                               **({'detail': error.detail} if error.detail and error.detail != message else {}),
+                               'retryable': error.code in ('PROFILE_BUSY', 'PLATFORM_ERROR', 'PARTIAL_RESULT', 'stt_busy', 'SEARCH_VERIFICATION_REQUIRED', 'RATE_LIMITED', 'RATE_WAIT_EXCEEDED', 'RATE_COOLDOWN'), 'run_id': error.run_id,
                                **({'candidates': error.candidates} if error.candidates else {}),
                                **({'retry_after': error.retry_after} if error.retry_after else {})}, ensure_ascii=False), err=True)
         raise typer.Exit({'AUTH_REQUIRED': 3, 'PROFILE_BUSY': 4, 'TASK_TIMEOUT': 6, 'CANCELLED': 130}.get(error.code, 5))
@@ -122,14 +134,12 @@ def collect(platform: str = typer.Option(...), query: Optional[str] = None, url:
     默认补查平台字幕、章节、音频资源、预览图、图片规格与分 P；平台特有信息放 extra
     能力统一包含 status/items；未实现为 not_requested，未返回为 not_provided，失败保留正文
     """
-    import re
-    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+    if not valid_quality(quality):
         raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
     if bool(query) == bool(url):
         raise typer.BadParameter('--query 与 --url 必须且只能提供一个')
     options = dict(locals())
     options.pop('url')
-    options.pop('re', None)
     options.update(query=query or url, mode='link' if url else 'search')
     invoke('collect', **options)
 
@@ -177,15 +187,13 @@ def creator_posts(reference: Optional[str] = typer.Option(None, '--creator', hel
     示例：creator posts --creator https://www.douyin.com/user/MS4w... --limit 50
     名称必须唯一且完全匹配，否则返回 CREATOR_AMBIGUOUS / CREATOR_NOT_FOUND 及 candidates
     """
-    import re
     creator_platform(platform, 'posts')
-    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+    if not valid_quality(quality):
         raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
     if not reference and not cursor:
         raise typer.BadParameter('需要 --creator 或 --cursor')
     options = dict(locals())
     options.pop('reference')
-    options.pop('re', None)
     invoke('collect', mode='creator', query=reference or '', **options)
 
 
@@ -207,14 +215,12 @@ def search_command(query: Optional[str] = typer.Option(None, help='关键词；�
     示例：search --query 罗翔；search --cursor <next_cursor> --limit 50
     需要一次拿固定条数、不关心翻页时用 collect
     """
-    import re
     creator_platform(platform, 'search')
-    if quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality):
+    if not valid_quality(quality):
         raise typer.BadParameter('--quality 使用 best、worst 或如 720p')
     if not (query or '').strip() and not cursor:
         raise typer.BadParameter('需要 --query 或 --cursor')
     options = dict(locals())
-    options.pop('re', None)
     options['query'] = (query or '').strip()
     invoke('collect', mode='search', paged=True, **options)
 
@@ -299,7 +305,6 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
     transcribe --source '作品链接'
     """
     import asyncio
-    import tempfile
     from desktop.links import allowed
     from desktop.transcribe import SttError, check, transcribe_file
     if check_only:
@@ -316,7 +321,7 @@ def transcribe_command(file: Optional[str] = typer.Option(None, '--file', help='
         except SttError as error:
             typer.echo(json.dumps({'code': error.code, 'message': str(error), 'retryable': error.code == 'stt_busy',
                                    **({'retry_after': error.retry_after} if error.retry_after else {})}, ensure_ascii=False), err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(5)
         return
     records = None
     if source:
@@ -355,7 +360,6 @@ def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地�
     ocr --input results.json --auto
     """
     import asyncio
-    import tempfile
     from desktop.links import allowed
     from desktop.ocr import OcrError, check, needs_ocr, ocr_file
     if check_only:
@@ -373,11 +377,11 @@ def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地�
             typer.echo(json.dumps(asyncio.run(ocr_file(file)), ensure_ascii=False))
         except OcrError as error:
             typer.echo(json.dumps({'code': error.code, 'message': str(error), 'retryable': False}, ensure_ascii=False), err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(5)
         return
     if check()['state'] != 'ready':
         typer.echo(json.dumps({'code': 'ocr_unavailable', 'message': '当前环境没有 OCR 依赖，开发环境运行 uv sync 安装', 'retryable': False}, ensure_ascii=False), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(5)
     records = None
     if source:
         platform = platform or next((p for p in PLATFORMS if allowed(source, p)), None)
@@ -424,11 +428,10 @@ def download_command(source: Optional[str] = typer.Option(None, help='作品页�
     已有媒体信息不会重新登录或刷新地址，过期后重新 collect/source 解析
     stdout 返回路径及错误 JSON；失败或部分成功退出非零
     """
-    import re
     from desktop.links import allowed
     if sum(bool(v) for v in (source, input, media_url)) != 1:
         raise typer.BadParameter('--source、--input、--media-url 必须且只能选一个')
-    if kind not in ('auto', 'video', 'images') or (quality not in ('best', 'worst') and not re.fullmatch(r'[1-9][0-9]{1,4}p', quality)):
+    if kind not in ('auto', 'video', 'images') or not valid_quality(quality):
         raise typer.BadParameter('kind 使用 auto/video/images；quality 使用 best/worst/720p 等')
     if (audio_url or referer) and not media_url:
         raise typer.BadParameter('--audio-url/--referer 仅用于 --media-url')
@@ -480,15 +483,17 @@ def auth_logout(platform: str = typer.Option(...), profile: str = 'default', dat
 
 @session.command('recover')
 def session_recover(platform: str = typer.Option(...), profile: str = 'default', data_dir: Optional[str] = None):
+    if platform not in PLATFORMS or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', profile):
+        raise typer.BadParameter('平台或 profile 无效')
     try:
         recover(data_dir, platform, profile)
         typer.echo(json.dumps({'recovered': True}))
     except (CLIError, RuntimeError) as error:
-        detail = {'code': str(error)}
-        if str(error) == 'PROFILE_BUSY':
-            detail.update(message=profile_busy_message(platform, profile), retryable=True)
+        busy = str(error) == 'PROFILE_BUSY'
+        detail = {'code': str(error), 'message': profile_busy_message(platform, profile) if busy else '仍有残留进程或锁无法清理，请检查后重试', 'retryable': busy}
         typer.echo(json.dumps(detail, ensure_ascii=False), err=True)
-        raise typer.Exit(4)
+        # 退出码和其他命令一致：4 是 profile 占用，其余是 5
+        raise typer.Exit(4 if busy else 5)
 
 
 @app.command('clean')
@@ -533,14 +538,19 @@ def check(platform: Optional[str] = typer.Option(None, help='检查单个平台'
             try:
                 invoke('network-check', targets[0], data_dir=directory, timeout=40,
                        probe_urls=[URLS[p] for p in targets], speed=speed)
-            except typer.Exit:
+            except typer.Exit as error:
+                # Ctrl+C 要停下整个检查，不当成这一项失败继续往下
+                if error.exit_code == 130:
+                    raise
                 typer.echo(json.dumps({'type': 'network', 'status': 'failed',
                                       'error': {'code': 'UNKNOWN', 'stage': 'network'}, 'policy': POLICY}))
         for selected in targets:
             try:
                 invoke('check', selected, data_dir=directory, timeout=qr_timeout + 45,
                        qr_timeout_ms=qr_timeout * 1000)
-            except typer.Exit:
+            except typer.Exit as error:
+                if error.exit_code == 130:
+                    raise
                 failed = True
     if failed:
         raise typer.Exit(5)

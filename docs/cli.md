@@ -34,7 +34,7 @@ uv run mediacrawler search --cursor <上次的 next_cursor> --limit 50
 
 `--limit` 是本次要多少条，默认一页 20 条；`--cursor` 是从哪继续，两者独立。输出格式和 `creator posts` 相同，末行给出 `next_cursor`，`has_more=false` 表示已到末尾。只想一次取固定条数时用 `collect`，它的输出不变
 
-## 博主（`posts` 支持 dy、xhs、bili、zhihu，`search` 支持 dy、bili）
+## 博主（`posts` 支持 dy、xhs、bili、zhihu，`search` 支持 dy、bili、xhs）
 
 ```sh
 uv run mediacrawler creator search --query 罗翔 --limit 10
@@ -124,7 +124,7 @@ mediacrawler transcribe --source '作品链接'
 mediacrawler transcribe --input results.json
 ```
 
-有平台字幕时直接用字幕，否则下载最低画质的视频转写，完成后删除临时文件。结果含 `text`、`segments[{start,end,text}]`、`source`（`subtitle` 或 `stt`）。`stt` 正忙时返回 `stt_busy` 和 `retry_after`，不排队。
+有平台字幕时直接用字幕，否则下载最低画质的视频转写，完成后删除临时文件。`--file` 直接输出结果；`--source` / `--input` 每条一行，结果在 `transcript` 里，失败看该条的 `code`。结果含 `text`、`segments[{start,end,text}]`、`source`（`subtitle` 或 `stt`）。`stt` 正忙时该条返回 `stt_busy` 和 `retryAfter`，不排队。所有条目都因同一原因失败时，顶层错误就是这个原因，比如 `stt_incomplete`，否则是 `PARTIAL_RESULT`
 
 ## 图片转文字
 
@@ -182,7 +182,7 @@ uv run mediacrawler session recover --platform xhs --profile default
 
 每次保存包含 `results.jsonl` 与 `run.json`。失败保留已采集内容，标记 `complete: false` 并以非零状态退出。JSONL 是任务结束后输出最终内容，包含评论更新，不是实时事件流。保存正文不会隐式下载全部媒体
 
-退出码：2 参数错误、3 需要登录、4 profile 占用、5 平台/运行错误、6 总任务超时、130 取消。错误包含 code、message、retryable、run_id
+退出码：2 参数错误、3 需要登录、4 profile 占用、5 平台/运行错误、6 总任务超时、130 取消。错误包含 code、message、retryable、run_id，worker 给了更具体的说明时另带 `detail`。需要扫码时总时限至少是 `--login-timeout` 加 60 秒
 
 ## 巡检与测试
 
@@ -346,7 +346,7 @@ mediacrawler auth login --platform xhs --login-mode browser
 mediacrawler collect --platform xhs --query 桌面整理 --login-mode image
 ```
 
-登录方式只决定需要登录时如何展示扫码，不决定采集是否有界面。图片模式仅调用系统预览显示 PNG，不显示浏览器；浏览器模式不再额外打开图片。`--non-interactive` 优先，登录态缺失直接报错，不展示任何扫码界面。后台加载失败不会自动改为可见浏览器
+登录方式只决定需要登录时如何展示扫码，不决定采集是否有界面。图片模式只把 PNG 路径打到 stderr，不弹系统预览，也不显示浏览器；浏览器模式不再额外打开图片。`--non-interactive` 优先，登录态缺失直接报错，不展示任何扫码界面。后台加载失败不会自动改为可见浏览器
 
 ## 登录巡检与网络诊断
 
