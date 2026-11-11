@@ -168,31 +168,24 @@ export function NativeVideo({ item }: { item: ContentItem }) {
       <TabsContent value='video' className='mt-0'>
         <div className='relative aspect-square max-h-[calc(90dvh-8rem)] w-full overflow-hidden rounded-lg bg-muted/40'>
           {status === 'playing' ? (
-            <>
-              <video
-                key={urls[index]}
-                src={urls[index]}
-                poster={item.images[0]}
-                className='absolute inset-0 size-full object-contain'
-                controls
-                autoPlay
-                muted={muted}
-                playsInline
-                preload='metadata'
-                controlsList='nodownload'
-                aria-label={`${item.title} · ${t('视频播放器')}`}
-                onError={failed}
-                onWaiting={() => setBuffering(true)}
-                onCanPlay={() => setBuffering(false)}
-                onPlaying={() => setBuffering(false)}
-              />
-              {buffering && (
-                <Loader2
-                  aria-label={t('正在加载视频')}
-                  className='pointer-events-none absolute left-1/2 top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 animate-spin text-primary'
-                />
-              )}
-            </>
+            // 缓冲时原生控件自带转圈，这里不再叠一个；buffering 只用来做超时
+            <video
+              key={urls[index]}
+              src={urls[index]}
+              poster={item.images[0]}
+              className='absolute inset-0 size-full object-contain'
+              controls
+              autoPlay
+              muted={muted}
+              playsInline
+              preload='metadata'
+              controlsList='nodownload'
+              aria-label={`${item.title} · ${t('视频播放器')}`}
+              onError={failed}
+              onWaiting={() => setBuffering(true)}
+              onCanPlay={() => setBuffering(false)}
+              onPlaying={() => setBuffering(false)}
+            />
           ) : (
             <>
               {item.images[0] && (
