@@ -316,7 +316,7 @@ def ocr_command(file: Optional[str] = typer.Option(None, '--file', help='本地�
                 timeout: int = typer.Option(900, min=1), max_wait: float = MAX_WAIT, no_throttle: bool = NO_THROTTLE, verbose: bool = False):
     """识别图文帖图片里的文字，干货写在图里、正文只有一句“见图”时用
 
-    在项目环境里直接调用 rapidocr，模型每次运行只加载一次；安装版暂不带 OCR；视频请用 transcribe
+    直接调用 rapidocr 库，模型每次运行只加载一次，打包版已内置；视频请用 transcribe
 
     ocr --check
 

@@ -51,14 +51,15 @@ def test_engine_is_created_once_per_process(monkeypatch):
     created = []
 
     class Engine:
-        def __init__(self):
-            created.append(1)
+        def __init__(self, params=None):
+            created.append(params)
 
     monkeypatch.setitem(sys.modules, 'rapidocr', SimpleNamespace(RapidOCR=Engine))
     ocr.engine.cache_clear()
     try:
         assert ocr.engine() is ocr.engine()
-        assert created == [1]
+        # 只建一次，并关掉它自己的日志
+        assert created == [{'Global.log_level': 'error'}]
     finally:
         ocr.engine.cache_clear()
 

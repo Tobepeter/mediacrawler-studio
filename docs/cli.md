@@ -126,7 +126,7 @@ mediacrawler transcribe --input results.json
 
 ## 图片转文字
 
-图文帖的干货常写在图里，正文只有一句“见图”，这时用 OCR 把图里的字提出来。在项目环境里直接调用 `rapidocr` 库（`ocr` 依赖组，`uv sync` 默认安装），模型每次运行只加载一次，同一次命令里的所有图片和作品共用。安装版打包时排除了 OCR 依赖，体积不变，打包后的 `ocr` 返回 `ocr_unavailable`。
+图文帖的干货常写在图里，正文只有一句“见图”，这时用 OCR 把图里的字提出来。在项目环境里直接调用 `rapidocr` 库（`ocr` 依赖组，`uv sync` 默认安装），模型每次运行只加载一次，同一次命令里的所有图片和作品共用。打包版（CLI 和桌面端后端）都带上了 rapidocr、onnxruntime 和模型，各增加约 136MB，离线可用，不会首次联网下载模型。
 
 ```bash
 mediacrawler ocr --check

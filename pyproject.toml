@@ -63,7 +63,7 @@ ocr = [
 ]
 
 [tool.uv]
-# 图片转文字直接在项目环境里调用 rapidocr；打包时排除，安装版体积不变
+# 图片转文字直接在项目环境里调用 rapidocr，打包时一起带上
 default-groups = ["ocr"]
 
 [project.scripts]

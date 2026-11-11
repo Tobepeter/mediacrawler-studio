@@ -3,7 +3,6 @@
 import asyncio
 import functools
 import importlib.util
-import logging
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -11,7 +10,7 @@ from pathlib import Path
 
 from desktop.paging import CreatorError
 
-UNAVAILABLE = '当前环境没有 OCR 依赖，开发环境运行 uv sync 安装；安装版暂不带 OCR'
+UNAVAILABLE = '当前环境没有 OCR 依赖，开发环境运行 uv sync 安装'
 # 正文短于这个字数、又有多张图时，干货多半在图里
 SHORT_TEXT = 100
 MIN_SCORE = 0.5
@@ -37,9 +36,8 @@ def check():
 def engine():
     """第一次识别时加载模型，同一进程之后都复用"""
     from rapidocr import RapidOCR
-    # 空图会打“没检测到文字”的警告，对调用方没用
-    logging.getLogger('RapidOCR').setLevel(logging.ERROR)
-    return RapidOCR()
+    # 初始化时它会按自己的配置重设日志级别，模型校验和“没检测到文字”这类日志对调用方没用
+    return RapidOCR(params={'Global.log_level': 'error'})
 
 
 def is_gallery(record):
