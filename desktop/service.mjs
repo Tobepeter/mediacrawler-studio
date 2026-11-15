@@ -232,6 +232,9 @@ export class StudioService {
           })
         }),
       )
+      // 每个平台的退出结果和原因写进日志；桌面端平台注销多半确认不了，原因见 desktop/logout.py
+      for (const item of outcomes)
+        this.logger?.write('info', 'account', 'logout', item)
       // 保留 Cookie 直到平台退出操作完成，随后再关闭页面并清理分区
       await this.windows.clearSessions(platform)
       for (const id of targets) {

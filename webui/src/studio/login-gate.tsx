@@ -96,10 +96,11 @@ export function LoginGate() {
       attempted: { ...state.attempted, [platform]: true },
     })
     try {
-      const result = await window.studio.logout(platform)
-      if (result.localOnly)
-        toast.warning(t('仅清除了本地登录态，未能确认平台登出'))
-      else toast.success(t('已退出登录'))
+      // 本机的 Cookie 和网站数据一定会清掉，这台电脑就是已退出；
+      // 平台那边的注销多半确认不了（见 desktop/logout.py），只记日志不提示，
+      // 平台的登录会话会自己过期，和用户清浏览器数据的效果一样
+      await window.studio.logout(platform)
+      toast.success(t('已退出登录'))
     } catch {
       toast.error(t('退出失败，请重试'))
     } finally {

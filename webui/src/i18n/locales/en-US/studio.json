@@ -220,8 +220,6 @@
   "偏好设置": "Preferences",
   "打开日志目录": "Open log folder",
   "打开日志目录失败": "Unable to open log folder",
-  "仅清除了本地登录态，未能确认平台登出": "Local session cleared; platform sign-out could not be confirmed",
-  "部分平台未确认登出，本地登录态已清除": "Local sessions cleared; some platform sign-outs could not be confirmed",
   "此视频需要 FFmpeg，请安装后重试": "This video requires FFmpeg. Install it and try again",
   "暂不支持直播或加密的 M3U8 内容": "Live or encrypted M3U8 content is not supported",
   "M3U8 合并失败，请稍后重试": "Failed to merge M3U8 media. Please try again",

@@ -117,10 +117,9 @@ export function StudioSettings() {
     })
     setClearing(true)
     try {
-      const result = await window.studio.clearSessions()
-      if (result.localOnly)
-        toast.warning(t('部分平台未确认登出，本地登录态已清除'))
-      else toast.success(t('登录态已清除'))
+      // 同单个退出：本机一定清掉，平台注销确认不了也不提示，原因见 desktop/logout.py
+      await window.studio.clearSessions()
+      toast.success(t('登录态已清除'))
     } catch {
       toast.error(t('清除失败，请重试'))
     } finally {
